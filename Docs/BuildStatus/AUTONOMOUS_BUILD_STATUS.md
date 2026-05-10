@@ -4,11 +4,11 @@ Updated: 2026-05-10 01:34 CDT
 
 ## Current milestone
 
-M7 — native Mac integrations is now the active milestone after verified M6 completion.
+M7 — native Mac integrations is active.
 
 ## Completed this run
 
-Claude Code's prior M6 builder had finished; no active Claude process was found for `/Users/perlantir/Projects/HermesDesktop`.
+Claude Code's prior M6 builder had finished; no active Claude process was found for `/Users/perlantir/Projects/HermesDesktop` at the start of this run.
 
 Verified and committed the M6 increment:
 
@@ -19,8 +19,9 @@ Verified and committed the M6 increment:
 - Added M6 model decoding, view-model, and URLSession endpoint tests.
 - Fixed a deterministic test-build break by updating `RestartOnlyConfigClient` test double with M6 protocol stubs.
 
-Prepared M7 milestone context:
+Prepared and committed M7 milestone context:
 
+- Commit: `51bc368 Prepare M7 native Mac milestone`
 - Updated `CLAUDE.md` to mark M0–M6 complete and M7 active.
 - Created `Docs/Prompts/CLAUDE_CODE_M7_NATIVE_MAC_KICKOFF.md`.
 
@@ -51,8 +52,14 @@ Results:
 
 ## Builder status
 
-No Claude Code M7 builder had been started at the moment this status was written. Next step in this cron run is to commit M7 prep and launch exactly one bounded Claude Code print-mode builder with `Docs/Prompts/CLAUDE_CODE_M7_NATIVE_MAC_KICKOFF.md`.
+Started exactly one Claude Code print-mode builder for M7.
+
+- Hermes process session: `proc_db64985a41aa`
+- Shell PID: `38825`
+- Claude child PID observed by `pgrep -P 38825`: `38830`
+- Prompt: `Docs/Prompts/CLAUDE_CODE_M7_NATIVE_MAC_KICKOFF.md`
+- Process state at update: running.
 
 ## Next action
 
-Start M7 Claude Code builder if no duplicate Claude process appears, then allow the next cron run to inspect/verify the result.
+Next cron run should not start a duplicate builder while the above Claude process is active. If it has finished, inspect repo state, run XcodeGen/build/tests, fix deterministic failures if safe, and commit only a verified M7 increment.
