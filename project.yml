@@ -1,0 +1,85 @@
+name: HermesDesktop
+options:
+  bundleIdPrefix: com.uberkiwi.hermes
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+  groupSortPosition: top
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: "Automatic"
+    CODE_SIGN_IDENTITY: "-"
+    ENABLE_HARDENED_RUNTIME: YES
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: NO
+
+targets:
+  HermesDesktop:
+    type: application
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - path: HermesDesktop
+        excludes:
+          - "Resources/Info.plist"
+          - "Resources/HermesDesktop.entitlements"
+    resources:
+      - HermesDesktop/Resources/Assets.xcassets
+    info:
+      path: HermesDesktop/Resources/Info.plist
+      properties:
+        CFBundleName: $(PRODUCT_NAME)
+        CFBundleDisplayName: Hermes Desktop
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSMinimumSystemVersion: "13.0"
+        LSApplicationCategoryType: public.app-category.productivity
+        NSHumanReadableCopyright: "© 2026 Hermes"
+        NSHighResolutionCapable: true
+    entitlements:
+      path: HermesDesktop/Resources/HermesDesktop.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.files.user-selected.read-only: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.uberkiwi.hermes.desktop
+        PRODUCT_NAME: HermesDesktop
+        GENERATE_INFOPLIST_FILE: NO
+        COMBINE_HIDPI_IMAGES: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_PREVIEWS: YES
+
+  HermesDesktopTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - HermesDesktopTests
+    dependencies:
+      - target: HermesDesktop
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.uberkiwi.hermes.desktop.tests
+        GENERATE_INFOPLIST_FILE: YES
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/HermesDesktop.app/Contents/MacOS/HermesDesktop"
+
+schemes:
+  HermesDesktop:
+    build:
+      targets:
+        HermesDesktop: all
+        HermesDesktopTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - HermesDesktopTests
+    archive:
+      config: Release

@@ -1,0 +1,9 @@
+{
+  "name": "Hermes Desktop Design Importer",
+  "id": "hermes-desktop-design-importer-local",
+  "api": "1.0.0",
+  "main": "code.js",
+  "editorType": [
+    "figma"
+  ]
+}

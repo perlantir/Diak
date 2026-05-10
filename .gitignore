@@ -1,0 +1,28 @@
+# Xcode build artifacts
+build/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# XcodeGen-generated project (re-generate with `xcodegen generate`)
+HermesDesktop.xcodeproj/
+
+# Swift Package Manager
+.build/
+Packages/
+Package.pins
+Package.resolved
+*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+
+# macOS
+.DS_Store
+
+# Logs and test artifacts
+*.log
+*.xcresult
+TestResults/
+
+# IDE
+.idea/
+.vscode/

@@ -1,0 +1,115 @@
+{
+  "product": "Hermes Desktop",
+  "styleDirection": "Original Notion-inspired Mac-native UI: warm neutral surfaces, restrained typography, small-radius cards, strong text hierarchy, visible trust/safety states.",
+  "fontStack": [
+    "SF Pro Text / SF Pro Display for SwiftUI",
+    "Inter fallback for Figma/SVG previews"
+  ],
+  "spacing": {
+    "base": 4,
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "xxl": 32
+  },
+  "radius": {
+    "control": 7,
+    "card": 10,
+    "panel": 14,
+    "window": 18,
+    "sheet": 18
+  },
+  "colors": {
+    "light": {
+      "name": "light",
+      "bg": "#F7F6F3",
+      "canvas": "#EFEEEA",
+      "surface": "#FFFFFF",
+      "card": "#FFFFFF",
+      "sidebar": "#F1F0EC",
+      "field": "#F7F6F2",
+      "selected": "#E9E7E3",
+      "hover": "#F5F4F0",
+      "border": "#E2DFD8",
+      "text": "#2F2F2D",
+      "muted": "#787774",
+      "subtle": "#A7A49E",
+      "invert": "#FFFFFF",
+      "accent": "#2F2F2D",
+      "success": "#2E7D55",
+      "success_bg": "#EDF7F1",
+      "warning": "#A15C00",
+      "warning_bg": "#FFF3E1",
+      "danger": "#C33A3A",
+      "danger_bg": "#FDECEC",
+      "info": "#4E6791",
+      "info_bg": "#EEF3F8",
+      "shadow": "#000000"
+    },
+    "dark": {
+      "name": "dark",
+      "bg": "#171717",
+      "canvas": "#111111",
+      "surface": "#202020",
+      "card": "#242424",
+      "sidebar": "#1D1D1D",
+      "field": "#262626",
+      "selected": "#2E2D2A",
+      "hover": "#292929",
+      "border": "#363636",
+      "text": "#EDEDEB",
+      "muted": "#A7A39E",
+      "subtle": "#77736E",
+      "invert": "#111111",
+      "accent": "#F4F4F2",
+      "success": "#6EC28F",
+      "success_bg": "#1F3329",
+      "warning": "#E5A64A",
+      "warning_bg": "#3A2D1C",
+      "danger": "#F07878",
+      "danger_bg": "#3A2323",
+      "info": "#94A9C9",
+      "info_bg": "#1F2C3A",
+      "shadow": "#000000"
+    }
+  },
+  "typeScale": {
+    "caption": {
+      "size": 11,
+      "line": 14,
+      "weight": 500
+    },
+    "body": {
+      "size": 13,
+      "line": 18,
+      "weight": 400
+    },
+    "bodyStrong": {
+      "size": 13,
+      "line": 18,
+      "weight": 600
+    },
+    "section": {
+      "size": 14,
+      "line": 20,
+      "weight": 650
+    },
+    "title": {
+      "size": 22,
+      "line": 28,
+      "weight": 700
+    },
+    "display": {
+      "size": 30,
+      "line": 38,
+      "weight": 750
+    }
+  },
+  "swiftUINotes": {
+    "window": "Use NavigationSplitView for sidebar/content/inspector, NSWindow toolbar/titlebar accessory controls, and .ultraThinMaterial only where native blur is available.",
+    "approvals": "Use sheet-style modals with explicit risk taxonomy, target path/command, preview/diff, reason, and Deny/Modify/Approve Once actions.",
+    "controls": "Prefer compact SwiftUI Form/List styling, small capsules for badges, and monospaced text for commands/diffs/logs."
+  }
+}
