@@ -1,0 +1,10 @@
+Executable=/Users/perlantir/Projects/HermesDesktop/qa/diak-m9-dogfood-20260510-054048/InstallTarget/Diak.app/Contents/MacOS/Diak
+Identifier=com.uberkiwi.diak
+Format=app bundle with Mach-O universal (x86_64 arm64)
+CodeDirectory v=20500 size=5778 flags=0x10002(adhoc,runtime) hashes=170+7 location=embedded
+Signature=adhoc
+Info.plist entries=23
+TeamIdentifier=not set
+Runtime Version=26.4.0
+Sealed Resources version=2 rules=13 files=0
+Internal requirements count=0 size=12

@@ -1,0 +1,23 @@
+# Diak live daemon endpoint probe
+Sun May 10 05:47:05 CDT 2026
+--- http://127.0.0.1:8765/health
+
+--- http://127.0.0.1:8765/version
+
+--- http://127.0.0.1:8765/sessions
+
+--- http://127.0.0.1:8765/automations
+
+--- http://127.0.0.1:8765/connectors
+
+--- http://127.0.0.1:8765/skills
+
+--- http://127.0.0.1:8765/memory
+
+# listeners
+# relevant processes
+perlantir        82682   4.9  0.2 442755488 291856   ??  S     4:43AM   2:24.98 /Users/perlantir/.hermes/hermes-agent/venv/bin/python -m hermes_cli.main gateway run --replace
+perlantir        96413   0.0  0.0 442196416   2128   ??  S     5:47AM   0:00.01 bash /tmp/diak_probe.sh
+perlantir        96412   0.0  0.0 442197184   2144   ??  Ss    5:47AM   0:00.01 /bin/bash -c source /var/folders/b2/cl2rv8q13bg48zl073ctm_fc0000gq/T/hermes-snap-50c061c067fe.sh >/dev/null 2>&1 || true\012builtin cd -- /Users/perlantir/Projects/HermesDesktop || exit 126\012eval 'bash /tmp/diak_probe.sh'\012__hermes_ec=$?\012export -p > /var/folders/b2/cl2rv8q13bg48zl073ctm_fc0000gq/T/hermes-snap-50c061c067fe.sh 2>/dev/null || true\012pwd -P > /var/folders/b2/cl2rv8q13bg48zl073ctm_fc0000gq/T/hermes-cwd-50c061c067fe.txt 2>/dev/null || true\012printf '\n__HERMES_CWD_50c061c067fe__%s__HERMES_CWD_50c061c067fe__\n' "$(pwd -P)"\012exit $__hermes_ec
+perlantir        95318   0.0  0.1 442567280  96464   ??  S     5:40AM   0:00.24 /Users/perlantir/Projects/HermesDesktop/qa/diak-m9-dogfood-20260510-054048/InstallTarget/Diak.app/Contents/MacOS/Diak
+perlantir        85875   0.0  0.1 442584528 101584   ??  S     4:55AM   0:00.40 /Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Build/Products/Debug/Diak.app/Contents/MacOS/Diak

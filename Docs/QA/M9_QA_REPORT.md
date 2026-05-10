@@ -53,8 +53,8 @@ Evidence:
 
 - Automated build/test/package: **PASS** by `Scripts/m9_release_gate.sh`.
 - Product branding: **PASS** — app brand is Diak; runtime brand remains Hermes Agent / Hermes Engine.
-- First-run visual QA: **PARTIAL** — needs clean account/VM screenshot pass before public distribution.
-- Live Hermes daemon E2E: **PARTIAL** — app/API boundaries are tested, but full live chat/stream/session persistence must be dogfooded against a running Hermes Agent daemon.
+- First-run visual QA: **PARTIAL / ENV BLOCKED** — DMG copy launched and onboarding rendered, but local desktop modals obstructed clean verification; needs clean account/VM screenshot pass before public distribution. Evidence: `qa/diak-m9-dogfood-20260510-054048/M9_DOGFOOD_EVIDENCE_REPORT.md`.
+- Live Hermes daemon E2E: **BLOCKED** — app/API boundaries are tested, but no Diak-compatible daemon is listening on `127.0.0.1:8765`; full live chat/stream/session persistence cannot pass until that service contract is available.
 - Safe connector writes: **BLOCKED** — requires Nick-approved safe destinations and explicit approval before any real send/post.
 - External signing/notarization: **BLOCKED** — requires Apple Developer ID/notary credentials outside git.
 

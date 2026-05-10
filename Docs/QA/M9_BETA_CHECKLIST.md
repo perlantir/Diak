@@ -48,7 +48,7 @@ Required outcomes:
 - [x] Window/app bundle/menu surfaces say `Diak`.
 - [x] Runtime references say `Hermes Agent` / `Hermes Engine` where appropriate.
 - [x] No product-facing `Hermes Desktop` remains in app source.
-- [ ] First-run onboarding is visually clean on a clean macOS account or VM.
+- [ ] First-run onboarding is visually clean on a clean macOS account or VM. Latest local DMG-copy launch rendered onboarding but was obstructed by unrelated macOS dialogs; evidence: `qa/diak-m9-dogfood-20260510-054048/M9_DOGFOOD_EVIDENCE_REPORT.md`.
 
 ## Live dogfood gates
 
@@ -57,7 +57,7 @@ These are required before calling beta fully green:
 - [ ] Fresh install from DMG.
 - [ ] First launch onboarding complete/skip persists across relaunch.
 - [ ] Offline Hermes Agent state is truthful and non-crashing.
-- [ ] Live Hermes Agent chat task completes or returns a truthful user-visible failure.
+- [ ] Live Hermes Agent chat task completes or returns a truthful user-visible failure. Latest probe: BLOCKED because no Diak-compatible daemon listens on `127.0.0.1:8765`; Hermes API Server currently exposes a different `/v1/...` contract if enabled.
 - [ ] Session created by live chat appears in session history.
 - [ ] Approval preview appears before any risky action.
 - [ ] Skill list/detail works; true skill execution classified with artifact evidence or marked PARTIAL/BLOCKED.
