@@ -21,7 +21,7 @@ Acceptance criteria:
 **Phase 2 — deeper daemon/runtime integration**
 
 Acceptance criteria:
-- Replace mock stream canvas events with real daemon SSE/WebSocket events.
+- Replace mock stream canvas events with real daemon SSE/WebSocket events. **Status:** first SSE boundary implemented locally in `URLSessionHermesAPIClient.streamEvents(sessionID:)` for message/tool/canvas/session events; production daemon contract/live execution still needs end-to-end proof.
 - Add persisted canvas artifacts/documents per session.
 - Add true browser/code/design previews sourced from daemon artifacts and file/browser tools.
 - Add daemon-side implementation for automation `model_override` and config provider writes if missing from the Python compatibility daemon.

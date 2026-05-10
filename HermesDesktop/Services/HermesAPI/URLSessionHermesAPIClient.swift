@@ -47,13 +47,73 @@ public final class URLSessionHermesAPIClient: HermesAPIClient, @unchecked Sendab
         return try await post("/sessions", body: Body(prompt: prompt, project_id: projectID))
     }
 
-    /// M1: streaming over the wire isn't implemented yet. The chat view
-    /// model uses the mock client for stream playback. When a session is
-    /// asked to stream from the real daemon we surface `.notReachable`
-    /// so the UI shows the offline path rather than spinning forever.
     public func streamEvents(sessionID: String) -> AsyncThrowingStream<HermesStreamEvent, Error> {
-        AsyncThrowingStream { continuation in
-            continuation.finish(throwing: HermesAPIError.notReachable)
+        let session = self.session
+        let decoder = self.decoder
+        let baseURL = self.baseURL
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    guard let url = URL(string: "/sessions/\(sessionID)/stream", relativeTo: baseURL) else {
+                        throw HermesAPIError.invalidURL
+                    }
+                    var request = URLRequest(url: url)
+                    request.httpMethod = "GET"
+                    request.timeoutInterval = 30
+                    request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+
+                    let bytes: URLSession.AsyncBytes
+                    let response: URLResponse
+                    do {
+                        (bytes, response) = try await session.bytes(for: request)
+                    } catch let error as URLError where Self.offlineCodes.contains(error.code) {
+                        throw HermesAPIError.notReachable
+                    } catch {
+                        throw HermesAPIError.transport(error.localizedDescription)
+                    }
+
+                    guard let http = response as? HTTPURLResponse else {
+                        throw HermesAPIError.transport("Non-HTTP response")
+                    }
+                    guard (200..<300).contains(http.statusCode) else {
+                        var body = Data()
+                        for try await byte in bytes { body.append(byte) }
+                        throw HermesAPIError.http(status: http.statusCode,
+                                                  body: String(data: body, encoding: .utf8))
+                    }
+
+                    var currentDataLines: [String] = []
+                    func flushCurrentEvent() throws {
+                        guard !currentDataLines.isEmpty else { return }
+                        let payload = currentDataLines.joined(separator: "\n")
+                        currentDataLines.removeAll()
+                        guard let data = payload.data(using: .utf8) else { return }
+                        continuation.yield(try Self.decodeStreamEvent(from: data, decoder: decoder))
+                    }
+
+                    for try await rawLine in bytes.lines {
+                        let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if line.isEmpty {
+                            try flushCurrentEvent()
+                        } else if line.hasPrefix("event:") {
+                            try flushCurrentEvent()
+                        } else if line.hasPrefix("data:") {
+                            let dataLine = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                            if !currentDataLines.isEmpty, dataLine.first == "{" {
+                                try flushCurrentEvent()
+                            }
+                            currentDataLines.append(dataLine)
+                        } else if line.first == "{" {
+                            continuation.yield(try Self.decodeStreamEvent(from: Data(line.utf8), decoder: decoder))
+                        }
+                    }
+                    try flushCurrentEvent()
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 
@@ -306,6 +366,109 @@ public final class URLSessionHermesAPIClient: HermesAPIClient, @unchecked Sendab
             return try decoder.decode(T.self, from: data)
         } catch {
             throw HermesAPIError.decoding(error.localizedDescription)
+        }
+    }
+
+    private static func decodeStreamEvent(from data: Data, decoder: JSONDecoder) throws -> HermesStreamEvent {
+        do {
+            let event = try decoder.decode(StreamEventEnvelope.self, from: data)
+            return try event.toStreamEvent()
+        } catch {
+            let payload = String(data: data, encoding: .utf8) ?? "<non-utf8>"
+            throw HermesAPIError.decoding("\(error.localizedDescription) payload=\(payload)")
+        }
+    }
+
+    private struct StreamEventEnvelope: Decodable {
+        let type: String
+        let messageID: String?
+        let sessionID: String?
+        let role: HermesRole?
+        let textDelta: String?
+        let activity: HermesToolActivity?
+        let update: CanvasUpdateEnvelope?
+        let status: HermesSessionStatus?
+
+        enum CodingKeys: String, CodingKey {
+            case type
+            case messageID = "message_id"
+            case sessionID = "session_id"
+            case role
+            case textDelta = "text_delta"
+            case activity
+            case update
+            case status
+        }
+
+        func toStreamEvent() throws -> HermesStreamEvent {
+            switch type {
+            case "message_started":
+                return .messageStarted(messageID: try require(messageID, "message_id"),
+                                       sessionID: try require(sessionID, "session_id"),
+                                       role: role ?? .assistant)
+            case "message_delta":
+                return .messageDelta(messageID: try require(messageID, "message_id"),
+                                     textDelta: textDelta ?? "")
+            case "message_completed":
+                return .messageCompleted(messageID: try require(messageID, "message_id"))
+            case "tool_started":
+                return .toolStarted(messageID: try require(messageID, "message_id"),
+                                    activity: try require(activity, "activity"))
+            case "tool_updated":
+                return .toolUpdated(messageID: try require(messageID, "message_id"),
+                                    activity: try require(activity, "activity"))
+            case "canvas_updated":
+                return .canvasUpdated(try require(update, "update").toCanvasUpdate())
+            case "session_ended":
+                return .sessionEnded(sessionID: try require(sessionID, "session_id"),
+                                     status: status ?? .completed)
+            default:
+                throw HermesAPIError.decoding("Unknown stream event type: \(type)")
+            }
+        }
+
+        private func require<T>(_ value: T?, _ field: String) throws -> T {
+            guard let value else { throw HermesAPIError.decoding("Missing required stream event field: \(field)") }
+            return value
+        }
+    }
+
+    private struct CanvasUpdateEnvelope: Decodable {
+        let type: String
+        let tab: HermesCanvasTab?
+        let title: String?
+        let bullets: [String]?
+        let status: HermesCanvasTaskStatus?
+        let assignee: String?
+        let dueLabel: String?
+        let detail: String?
+
+        enum CodingKeys: String, CodingKey {
+            case type, tab, title, bullets, status, assignee, detail
+            case dueLabel = "due_label"
+        }
+
+        func toCanvasUpdate() throws -> HermesCanvasUpdate {
+            switch type {
+            case "select_tab":
+                return .selectTab(try require(tab, "tab"))
+            case "document_section_updated":
+                return .documentSectionUpdated(title: try require(title, "title"), bullets: bullets ?? [])
+            case "task_updated":
+                return .taskUpdated(title: try require(title, "title"),
+                                    status: status ?? .todo,
+                                    assignee: assignee,
+                                    dueLabel: dueLabel)
+            case "activity_added":
+                return .activityAdded(title: try require(title, "title"), detail: detail ?? "")
+            default:
+                throw HermesAPIError.decoding("Unknown canvas update type: \(type)")
+            }
+        }
+
+        private func require<T>(_ value: T?, _ field: String) throws -> T {
+            guard let value else { throw HermesAPIError.decoding("Missing required canvas update field: \(field)") }
+            return value
         }
     }
 
