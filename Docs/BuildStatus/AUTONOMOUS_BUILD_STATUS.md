@@ -1,23 +1,22 @@
 # Hermes Desktop / Diak Autonomous Build Status
 
-Updated: 2026-05-10 05:51 CDT
+Updated: 2026-05-10 06:23 CDT
 
 ## Current milestone
 
-M9 — beta hardening, readiness transparency, repeatable release-gate evidence, and final product-polish pass is implemented and verified locally.
+M9 — beta hardening, readiness transparency, repeatable release-gate evidence, final product-polish pass, and local Diak-compatible daemon fixture are implemented and verified locally.
 
-M0–M9 are implemented through typed SwiftUI/local API boundaries.
+M0–M9 are implemented through typed SwiftUI/local API boundaries. No next code milestone was started because the remaining gates are distribution/environment/human-approval gates, not safe autonomous implementation work.
 
 ## Completed / confirmed this run
 
 - Confirmed no Claude Code builder is active for `/Users/perlantir/Projects/HermesDesktop`; no duplicate builder was started.
-- Inspected repo state and found a completed M9 dogfood evidence pass staged as local docs/evidence changes:
-  - `Docs/QA/M9_BETA_CHECKLIST.md`
-  - `Docs/QA/M9_QA_REPORT.md`
-  - `qa/diak-m9-dogfood-20260510-054048/`
+- Confirmed repo discovery: `project.yml` and `HermesDesktop.xcodeproj` are present.
 - Re-generated the Xcode project with `xcodegen generate`.
-- Re-ran the macOS build/test gate after the QA evidence refresh.
-- Re-checked port `127.0.0.1:8765`; no Diak-compatible daemon listener is available.
+- Re-ran project discovery, Debug macOS build, and full macOS XCTest gate.
+- Re-checked local daemon port `127.0.0.1:8765`; a Python `DiakDevDaemon/0.1` compatibility daemon is listening.
+- Probed the Diak-shaped daemon contract at `/health`, `/version`, `/sessions`, `/automations`, `/connectors`, `/skills`, and `/memory`; all returned HTTP 200 via the local compatibility daemon.
+- Did not start Claude Code because the codebase is already past M0–M9 and current verification is green.
 
 ## Verification evidence
 
@@ -30,57 +29,67 @@ xcodegen generate
 xcodebuild -list
 git diff --check
 lsof -nP -iTCP:8765 -sTCP:LISTEN || true
+for path in /health /version /sessions /automations /connectors /skills /memory; do curl -sS -m 2 -i "http://127.0.0.1:8765$path"; done
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -configuration Debug build
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' test
+Scripts/diak_live_probe.sh build/m9
+git status -sb
+git log --oneline -5
 ```
 
 Results:
 
 - Claude Code project builder: **not running**.
-- Project discovery: `project.yml`, `HermesDesktop.xcodeproj`, and `HermesDesktop.xcodeproj/project.xcworkspace` present.
+- Project discovery: `project.yml`, `HermesDesktop.xcodeproj`, and scheme `HermesDesktop` present.
 - `xcodegen generate`: succeeded.
 - `xcodebuild -list`: succeeded; project `HermesDesktop`, scheme `HermesDesktop`, targets `HermesDesktop` and `HermesDesktopTests`.
 - `git diff --check`: succeeded.
 - Debug macOS build: succeeded.
 - Full macOS test suite: succeeded — **132 tests, 0 failures**.
-- Latest direct passing test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_05-50-54--0500.xcresult`.
+- Latest direct passing test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_06-23-14--0500.xcresult`.
+- Local daemon listener: `Python` process on `127.0.0.1:8765`.
+- Diak-shaped local daemon contract: **PASS WITH COMPATIBILITY DAEMON** for `/health`, `/version`, `/sessions`, `/automations`, `/connectors`, `/skills`, and `/memory`.
+- Latest local live daemon probe: `build/m9/DIAK_LIVE_DAEMON_PROBE_20260510-062343.md`.
+- Latest durable QA evidence: `qa/diak-m9-dogfood-20260510-054048/`.
 - M9 release gate from prior verified pass: `build/m9/M9_RELEASE_GATE_20260510-051715.md`.
 - DMG from prior verified pass: `build/dist/Diak-0.1.0.dmg`.
 - DMG SHA-256 from prior verified pass: `fbca978ee96e2c18042ce1cea60850229167d96cf3c6c204096246d13ed13521`.
 
 ## Dogfood evidence status
 
-Latest local dogfood evidence: `qa/diak-m9-dogfood-20260510-054048/M9_DOGFOOD_EVIDENCE_REPORT.md`.
+Latest durable dogfood evidence: `qa/diak-m9-dogfood-20260510-054048/M9_DOGFOOD_EVIDENCE_REPORT.md`.
 
-Observed/recorded there:
+Observed/recorded there and re-confirmed this run where applicable:
 
-- DMG mounted successfully.
-- `Diak.app` copied from the DMG to a temporary QA install target.
-- Copied app launched and rendered first-run onboarding text (`Welcome to Diak`, `Step 1 of 4`, `Skip`, `Get started`).
+- DMG mounted successfully in the prior dogfood pass.
+- `Diak.app` copied from the DMG to a temporary QA install target in the prior dogfood pass.
+- Copied app launched and rendered first-run onboarding text (`Welcome to Diak`, `Step 1 of 4`, `Skip`, `Get started`) in the prior dogfood pass.
 - Built app identity remained `Diak` / `com.uberkiwi.diak` / executable `Diak`.
 - Current package signing is ad-hoc/local only.
-- Visual QA remains **PARTIAL / environment-blocked** because unrelated macOS modals (Weather location prompt, Python problem report) obstructed clean first-launch screenshots and local automation lacked Accessibility permission.
-- Live daemon E2E remains **BLOCKED** because no Diak-compatible daemon listens on `127.0.0.1:8765`; current Hermes Gateway process is not the `/sessions`/`/connectors`/`/memory` contract expected by Diak.
+- Local Diak-shaped daemon contract is currently reachable through `Scripts/diak_dev_daemon.py`; this is a QA compatibility fixture, not production Hermes Agent execution.
+- Visual QA remains **PARTIAL / environment-blocked** because unrelated macOS modals previously obstructed clean first-launch screenshots and local automation lacked Accessibility permission.
+- Production/live Hermes daemon E2E remains **PARTIAL / NOT PROVEN** because the compatibility daemon proves the app contract only; it does not prove real Hermes model/session execution or third-party connector execution.
 - Safe connector writes remain **BLOCKED** pending explicit safe-target/action approval.
 
 ## Readiness verdict
 
-- Internal dogfood/private beta: **PARTIAL PASS** — app builds/tests/packages and launches, but clean-account visual QA and live daemon E2E are still blocked.
-- External/public distribution: **BLOCKED** — requires Developer ID signing, notarization, stapling, Gatekeeper validation, and clean manual UI QA.
+- Internal dogfood/private beta: **PARTIAL PASS** — app builds/tests/packages and launches; Diak-shaped local API contract passes with the compatibility daemon; clean-account visual QA and production Hermes daemon E2E remain unresolved.
+- External/public distribution: **BLOCKED** — requires Developer ID signing, notarization, stapling, Gatekeeper validation, clean manual UI QA, and real Hermes Agent daemon contract evidence.
 
 ## Builder status
 
-No Claude Code builder started this run. The next unresolved items are environmental/human-approval gates, not a code milestone that should be handed to Claude Code blindly.
+No Claude Code builder started this run. Starting another coding agent would be counterproductive until a specific new code milestone or bug is identified.
 
-## Commit status
+## Commit / branch status
 
-- M9 dogfood evidence/status refresh is committed locally at `7a106d7` (`Update M9 dogfood evidence`).
-- Working tree was clean immediately after that commit.
+- Current commit: `52163cb` (`Add Diak M9 live daemon QA fixture`).
+- Branch: `main...origin/main [ahead 4]`.
 - This cron run did not push.
+- Working tree status before this status-file refresh was clean.
 
 ## Next action
 
 1. For clean first-run visual QA: run Diak from the DMG in a clean macOS account/VM or grant controlled Accessibility automation permission and dismiss unrelated system dialogs.
-2. For live E2E: start/provide a Diak-compatible Hermes Agent daemon implementing the app contract on `127.0.0.1:8765` (`/health`, `/version`, `/sessions`, `/automations`, `/connectors`, `/skills`, `/memory`).
+2. For production live E2E: start/provide a real Diak-compatible Hermes Agent daemon implementing the app contract on `127.0.0.1:8765` (`/health`, `/version`, `/sessions`, `/automations`, `/connectors`, `/skills`, `/memory`) with real session/model execution evidence.
 3. For connector-write QA: Nick must approve exact safe destination(s), allowed action(s), and cleanup rules before any real external write.
 4. Push to `https://github.com/perlantir/Diak.git` only from an approved non-cron context.
