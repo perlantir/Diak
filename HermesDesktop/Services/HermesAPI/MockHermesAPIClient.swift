@@ -8,7 +8,7 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
         case unhealthy
     }
 
-    public private(set) var outcome: Outcome
+    public var outcome: Outcome
     public private(set) var healthCallCount = 0
     public private(set) var versionCallCount = 0
     public private(set) var sessionsCallCount = 0
@@ -118,6 +118,14 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     /// global fixture.
     public var sessionsOverride: [HermesSession]?
 
+    /// Optional delay before create/continue returns. Lets chat tests assert
+    /// optimistic UI state while the daemon request is still in flight.
+    public var sessionMutationDelayNanos: UInt64 = 0
+
+    /// Optional delay before daemon lifecycle requests return. Lets settings
+    /// tests assert restart/reconnect progress state while the request is in flight.
+    public var daemonLifecycleDelayNanos: UInt64 = 0
+
     /// Streaming cadence (in nanoseconds) between mock events. Set to
     /// 0 in tests for instant playback.
     public var streamingDelayNanos: UInt64 = 30_000_000
@@ -179,6 +187,7 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
 
     public func createSession(prompt: String, projectID: String?) async throws -> HermesSession {
         createSessionCallCount += 1
+        if sessionMutationDelayNanos > 0 { try? await Task.sleep(nanoseconds: sessionMutationDelayNanos) }
         if case .offline = outcome { throw HermesAPIError.notReachable }
         if let pinned = nextCreatedSession { return pinned }
         let now = Date()
@@ -198,6 +207,7 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
 
     public func continueSession(sessionID: String, prompt: String, projectID: String?) async throws -> HermesSession {
         continueSessionCallCount += 1
+        if sessionMutationDelayNanos > 0 { try? await Task.sleep(nanoseconds: sessionMutationDelayNanos) }
         if case .offline = outcome { throw HermesAPIError.notReachable }
         if let override = sessionsOverride?.first(where: { $0.id == sessionID }) { return override }
         if let existing = MockHermesData.sessions.first(where: { $0.id == sessionID }) {
@@ -376,6 +386,7 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
 
     public func restartDaemon() async throws -> HermesDaemonLifecycleResult {
         restartDaemonCallCount += 1
+        if daemonLifecycleDelayNanos > 0 { try? await Task.sleep(nanoseconds: daemonLifecycleDelayNanos) }
         if case .offline = outcome { throw HermesAPIError.notReachable }
         // Restart clears any restart-required bits on the snapshot.
         configSnapshot = MockHermesData.applyRestart(to: configSnapshot)
@@ -385,6 +396,7 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
 
     public func reconnectDaemon() async throws -> HermesDaemonLifecycleResult {
         reconnectDaemonCallCount += 1
+        if daemonLifecycleDelayNanos > 0 { try? await Task.sleep(nanoseconds: daemonLifecycleDelayNanos) }
         if case .offline = outcome { throw HermesAPIError.notReachable }
         return HermesDaemonLifecycleResult(accepted: true,
                                            note: "Reconnect attempted.")

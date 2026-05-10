@@ -92,6 +92,15 @@ public final class ChatViewModel: ObservableObject {
         draft = ""
         phase = .starting
 
+        let optimisticMessage = HermesMessage(
+            id: "user-\(UUID().uuidString.prefix(8))",
+            sessionID: session?.id ?? "pending-\(UUID().uuidString.prefix(8))",
+            role: .user,
+            content: prompt,
+            createdAt: Date()
+        )
+        messages.append(optimisticMessage)
+
         let projectID = session?.project?.id
 
         let activeSession: HermesSession
@@ -115,28 +124,24 @@ public final class ChatViewModel: ObservableObject {
                 recoveredFromMissingSession = false
             }
         } catch let error as HermesAPIError {
+            messages.removeAll { $0.id == optimisticMessage.id }
+            draft = prompt
             phase = .failed(error.userFacingMessage)
             return
         } catch {
+            messages.removeAll { $0.id == optimisticMessage.id }
+            draft = prompt
             phase = .failed(error.localizedDescription)
             return
         }
         let isContinuingExistingSession = !recoveredFromMissingSession && session?.id == activeSession.id
         self.session = activeSession
         if !isContinuingExistingSession {
-            messages = []
+            messages = [optimisticMessage]
             self.canvas = HermesCanvasState.bootstrap(sessionTitle: activeSession.title)
             await loadArtifacts(for: activeSession.id)
         }
 
-        let userMessage = HermesMessage(
-            id: "user-\(UUID().uuidString.prefix(8))",
-            sessionID: activeSession.id,
-            role: .user,
-            content: prompt,
-            createdAt: Date()
-        )
-        messages.append(userMessage)
         phase = .streaming
 
         streamTask?.cancel()

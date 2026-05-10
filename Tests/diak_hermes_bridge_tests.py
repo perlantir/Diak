@@ -367,6 +367,69 @@ class DiakHermesBridgeTests(unittest.TestCase):
                 else:
                     os.environ[key] = prior
 
+    def test_composio_api_key_enables_dynamic_toolkit_catalog_and_oauth_handoff_without_template(self):
+        fake_toolkits = [
+            {
+                "slug": f"toolkit-{idx:03d}",
+                "name": f"Toolkit {idx:03d}",
+                "description": f"Dynamic Composio toolkit {idx:03d}",
+                "categories": ["productivity"],
+                "auth_schemes": ["OAUTH2"],
+            }
+            for idx in range(805)
+        ]
+        env_to_set = {
+            "COMPOSIO_API_KEY": "comp_live_dynamic_catalog_DO_NOT_LEAK",
+            "DIAK_CONNECTOR_ENTITY_ID": "diak-dynamic-unit-user",
+        }
+        previous: dict[str, str | None] = {k: os.environ.get(k) for k in env_to_set}
+        previous_template = os.environ.get("DIAK_CONNECTOR_SETUP_URL_TEMPLATE")
+        old_fetch = getattr(bridge.ConnectorRegistry, "_fetch_composio_toolkits", None)
+        old_setup = getattr(bridge.ConnectorRegistry, "_create_composio_setup_url", None)
+        bridge.ConnectorRegistry._fetch_composio_toolkits = lambda self: fake_toolkits
+        bridge.ConnectorRegistry._create_composio_setup_url = lambda self, connector: f"https://composio.test/connect/{connector['metadata']['toolkit_slug']}?entity={self.config.connector_entity_id}"
+        for key, value in env_to_set.items():
+            os.environ[key] = value
+        os.environ.pop("DIAK_CONNECTOR_SETUP_URL_TEMPLATE", None)
+        try:
+            self.harness.close()
+            self.harness = BridgeHTTPHarness()
+            status, _, body = self.harness.request("GET", "/connectors")
+            self.assertEqual(status, 200)
+            catalog = json.loads(body)
+            dynamic = [c for c in catalog["connectors"] if c["id"].startswith("conn-composio-")]
+            self.assertGreaterEqual(len(dynamic), 800)
+            self.assertNotIn("not configured", catalog["boundary_note"])
+            self.assertIn("dynamic Composio", catalog["boundary_note"])
+            first = next(c for c in dynamic if c["id"] == "conn-composio-toolkit-000")
+            self.assertEqual(first["display_name"], "Toolkit 000")
+            self.assertEqual(first["setup_kind"], "oauth")
+            self.assertEqual(first["metadata"]["toolkit_slug"], "toolkit-000")
+
+            status, _, body = self.harness.request("POST", "/connectors/conn-composio-toolkit-000/setup", {"acknowledged_daemon_handoff": True})
+            self.assertEqual(status, 200)
+            challenge = json.loads(body)
+            self.assertEqual(challenge["state"], "awaiting_oauth")
+            self.assertEqual(challenge["setup_url"], "https://composio.test/connect/toolkit-000?entity=diak-dynamic-unit-user")
+        finally:
+            for key, prior in previous.items():
+                if prior is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = prior
+            if previous_template is None:
+                os.environ.pop("DIAK_CONNECTOR_SETUP_URL_TEMPLATE", None)
+            else:
+                os.environ["DIAK_CONNECTOR_SETUP_URL_TEMPLATE"] = previous_template
+            if old_fetch is None:
+                delattr(bridge.ConnectorRegistry, "_fetch_composio_toolkits")
+            else:
+                bridge.ConnectorRegistry._fetch_composio_toolkits = old_fetch
+            if old_setup is None:
+                delattr(bridge.ConnectorRegistry, "_create_composio_setup_url")
+            else:
+                bridge.ConnectorRegistry._create_composio_setup_url = old_setup
+
     def test_connector_setup_uses_configured_oauth_template(self):
         template = "https://connect.example.test/oauth?toolkit={toolkit}&entity={entity_id}&connector={connector_id}"
         old_template = os.environ.get("DIAK_CONNECTOR_SETUP_URL_TEMPLATE")
@@ -388,6 +451,30 @@ class DiakHermesBridgeTests(unittest.TestCase):
                 os.environ.pop("DIAK_CONNECTOR_SETUP_URL_TEMPLATE", None)
             else:
                 os.environ["DIAK_CONNECTOR_SETUP_URL_TEMPLATE"] = old_template
+
+    def test_config_update_persists_and_restart_clears_restart_required_bits(self):
+        status, _, body = self.harness.request("GET", "/config")
+        self.assertEqual(status, 200)
+        config = json.loads(body)
+        tools = config["tools"]
+        tools[0]["is_enabled"] = not tools[0]["is_enabled"]
+        tools[0]["restart_required"] = True
+
+        status, _, body = self.harness.request("POST", "/config", {"tools": tools})
+        self.assertEqual(status, 200)
+        saved = json.loads(body)
+        self.assertTrue(saved["requires_restart"])
+        self.assertTrue(saved["snapshot"]["tools"][0]["restart_required"])
+
+        status, _, body = self.harness.request("POST", "/daemon/restart", {})
+        self.assertEqual(status, 200)
+        restarted = json.loads(body)
+        self.assertTrue(restarted["accepted"])
+
+        status, _, body = self.harness.request("GET", "/config")
+        self.assertEqual(status, 200)
+        after = json.loads(body)
+        self.assertFalse(any(tool.get("restart_required") for tool in after["tools"]))
 
     def test_session_messages_and_canvas_survive_bridge_restart(self):
         tmp = tempfile.TemporaryDirectory()

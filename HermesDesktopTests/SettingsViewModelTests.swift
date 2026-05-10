@@ -106,6 +106,59 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.saveState, .savedRequiresRestart("Daemon restart queued"))
     }
 
+    func testSaveCanRetryAfterFailureAndCanSaveAdditionalEditsWhileRestartPending() async throws {
+        let client = MockHermesAPIClient()
+        let viewModel = SettingsViewModel(client: client)
+        await viewModel.refresh()
+
+        var draft = try XCTUnwrap(viewModel.draft)
+        draft.tools[0].isEnabled.toggle()
+        draft.tools[0].restartRequired = true
+        viewModel.draft = draft
+
+        client.outcome = .offline
+        await viewModel.save()
+        XCTAssertEqual(viewModel.saveState, .failed(HermesAPIError.notReachable.userFacingMessage))
+
+        client.outcome = .success
+        await viewModel.save()
+        XCTAssertEqual(client.updateConfigCallCount, 2)
+        XCTAssertTrue(viewModel.savedRequiresRestart)
+
+        var secondDraft = try XCTUnwrap(viewModel.draft)
+        secondDraft.profiles[0].displayName = "Second edit before restart"
+        viewModel.draft = secondDraft
+        await viewModel.save()
+
+        XCTAssertEqual(client.updateConfigCallCount, 3)
+        XCTAssertTrue(viewModel.savedRequiresRestart,
+                      "A second non-restart edit must not clear a prior pending daemon restart")
+        XCTAssertEqual(viewModel.saved?.profiles[0].displayName, "Second edit before restart")
+    }
+
+    func testRestartDaemonShowsProgressThenSuccessAndClearsRestartRequirement() async throws {
+        let client = MockHermesAPIClient()
+        client.daemonLifecycleDelayNanos = 250_000_000
+        let viewModel = SettingsViewModel(client: client)
+        await viewModel.refresh()
+
+        var draft = try XCTUnwrap(viewModel.draft)
+        draft.tools[0].isEnabled.toggle()
+        draft.tools[0].restartRequired = true
+        viewModel.draft = draft
+        await viewModel.save()
+        XCTAssertTrue(viewModel.savedRequiresRestart)
+
+        let restartTask = Task { await viewModel.restartDaemon() }
+        try? await Task.sleep(nanoseconds: 30_000_000)
+        XCTAssertEqual(viewModel.saveState, .restartingDaemon)
+
+        await restartTask.value
+        XCTAssertEqual(client.restartDaemonCallCount, 1)
+        XCTAssertEqual(viewModel.saveState, .daemonRestarted("Restart scheduled."))
+        XCTAssertFalse(viewModel.savedRequiresRestart)
+    }
+
     func testProviderDiffDoesNotMutateDaemonOwnedAPIKeyPresence() throws {
         let saved = MockHermesData.configSnapshot
         var draft = saved

@@ -29,6 +29,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Iterable
 from urllib.parse import urlencode, urlparse
+from urllib import request as urlrequest
+from urllib.error import HTTPError, URLError
 
 BRIDGE_VERSION = "diak-hermes-bridge-1.0.0"
 BRIDGE_CONTRACT_VERSION = "m12-slice6"
@@ -293,6 +295,17 @@ def connector_toolkit(connector_id: str) -> str:
     return connector_id.removeprefix("conn-").upper().replace("-", "_")
 
 
+def _slugify_connector_id(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug or "toolkit"
+
+
+def _extract_composio_toolkit_slug(connector: dict[str, Any]) -> str:
+    metadata = connector.get("metadata") if isinstance(connector.get("metadata"), dict) else {}
+    raw = metadata.get("toolkit_slug") or metadata.get("toolkit") or connector.get("kind") or connector.get("id", "")
+    return str(raw).removeprefix("conn-composio-")
+
+
 def _parse_hermes_cron_list(output: str) -> list[dict[str, Any]]:
     jobs: list[dict[str, Any]] = []
     current: dict[str, Any] | None = None
@@ -334,14 +347,137 @@ def _extract_frontmatter_field(text: str, field: str, default: str = "") -> str:
 class ConnectorRegistry:
     def __init__(self, state: BridgeState, config: BridgeConfig):
         self.state = state
+        env_entity_id = os.getenv("DIAK_CONNECTOR_ENTITY_ID")
+        env_redirect_url = os.getenv("DIAK_CONNECTOR_REDIRECT_URL")
+        env_base_url = os.getenv("COMPOSIO_API_BASE_URL")
+        if env_entity_id or env_redirect_url or env_base_url:
+            config = dataclasses.replace(
+                config,
+                connector_entity_id=env_entity_id or config.connector_entity_id,
+                connector_redirect_url=env_redirect_url or config.connector_redirect_url,
+                composio_api_base_url=env_base_url or config.composio_api_base_url,
+            )
         self.config = config
+        self._base_connectors_cache: list[dict[str, Any]] | None = None
+        self._base_connectors_cache_key: tuple[str | None, str] | None = None
 
     def _overlay(self) -> dict[str, dict[str, Any]]:
         with self.state._lock:
             return self.state._data.setdefault("connectors", {})
 
+    @property
+    def _composio_api_key(self) -> str | None:
+        return self.config.composio_api_key or os.getenv("COMPOSIO_API_KEY") or None
+
+    @property
+    def _composio_base_url(self) -> str:
+        return (self.config.composio_api_base_url or os.getenv("COMPOSIO_API_BASE_URL") or "https://backend.composio.dev/api/v1").rstrip("/")
+
+    def _all_base_connectors(self) -> list[dict[str, Any]]:
+        cache_key = (self._composio_api_key, self._composio_base_url)
+        if self._base_connectors_cache is not None and self._base_connectors_cache_key == cache_key:
+            return [dict(c) for c in self._base_connectors_cache]
+        connectors = [dict(c) for c in CONNECTOR_CATALOG]
+        if self._composio_api_key:
+            try:
+                dynamic = self._connectors_from_composio_toolkits(self._fetch_composio_toolkits())
+                connectors.extend(dynamic)
+            except Exception as exc:
+                with self.state._lock:
+                    self.state._data.setdefault("connectors", {}).setdefault("conn-composio-catalog", {}).update({
+                        "status": "error",
+                        "sync_status": "error",
+                        "last_error": f"Could not fetch Composio connector catalog: {exc}",
+                    })
+                    self.state._save_locked()
+        self._base_connectors_cache = [dict(c) for c in connectors]
+        self._base_connectors_cache_key = cache_key
+        return connectors
+
+    def _connectors_from_composio_toolkits(self, toolkits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        connectors: list[dict[str, Any]] = []
+        seen: set[str] = {c["id"] for c in CONNECTOR_CATALOG}
+        for toolkit in toolkits:
+            if not isinstance(toolkit, dict):
+                continue
+            raw_slug = toolkit.get("slug") or toolkit.get("key") or toolkit.get("appName") or toolkit.get("name") or toolkit.get("id")
+            slug = str(raw_slug or "").strip()
+            if not slug:
+                continue
+            normalized = _slugify_connector_id(slug)
+            connector_id = f"conn-composio-{normalized}"
+            if connector_id in seen:
+                continue
+            seen.add(connector_id)
+            name = str(toolkit.get("display_name") or toolkit.get("displayName") or toolkit.get("name") or slug).strip() or slug
+            description = str(toolkit.get("description") or toolkit.get("summary") or f"Connect {name} through Composio OAuth.").strip()
+            auth_schemes = toolkit.get("auth_schemes") or toolkit.get("authSchemes") or toolkit.get("auth_config") or toolkit.get("authConfig") or []
+            if isinstance(auth_schemes, str):
+                auth_schemes = [auth_schemes]
+            elif isinstance(auth_schemes, dict):
+                auth_schemes = list(auth_schemes.keys()) or list(auth_schemes.values())
+            categories = toolkit.get("categories") or toolkit.get("category") or []
+            if isinstance(categories, str):
+                categories = [categories]
+            setup_kind = "oauth" if not auth_schemes or any("oauth" in str(s).lower() for s in auth_schemes) else "api_key"
+            connectors.append({
+                "id": connector_id,
+                "kind": normalized,
+                "display_name": name,
+                "summary": description,
+                "status": "not_connected",
+                "sync_status": "never_synced",
+                "write_policy": "always_ask",
+                "capabilities": ["read", "write"],
+                "setup_kind": setup_kind,
+                "scopes": [
+                    {"id": f"{normalized}.read", "display_name": "Read data", "detail": f"Read {name} data after Composio authorization.", "is_granted": False, "is_required": True},
+                    {"id": f"{normalized}.write", "display_name": "Write actions", "detail": f"Run {name} actions only after explicit Diak approval.", "is_granted": False, "is_required": False},
+                ],
+                "metadata": {
+                    "provider": "composio",
+                    "toolkit_slug": slug,
+                    "categories": categories,
+                    "auth_schemes": auth_schemes,
+                },
+            })
+        return connectors
+
+    def _fetch_composio_toolkits(self) -> list[dict[str, Any]]:
+        api_key = self._composio_api_key
+        if not api_key:
+            return []
+        errors: list[str] = []
+        for path in ("/toolkits", "/toolkits/list", "/apps"):
+            url = f"{self._composio_base_url}{path}"
+            try:
+                req = urlrequest.Request(url, headers={"x-api-key": api_key, "Authorization": f"Bearer {api_key}", "Accept": "application/json"})
+                with urlrequest.urlopen(req, timeout=20) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                toolkits = self._normalize_composio_list_payload(payload)
+                if toolkits:
+                    return toolkits
+            except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+                errors.append(f"{path}: {exc}")
+        raise RuntimeError("; ".join(errors) or "empty Composio toolkit response")
+
+    def _normalize_composio_list_payload(self, payload: Any) -> list[dict[str, Any]]:
+        if isinstance(payload, list):
+            return [item for item in payload if isinstance(item, dict)]
+        if not isinstance(payload, dict):
+            return []
+        for key in ("items", "toolkits", "apps", "data", "results"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [item for item in value if isinstance(item, dict)]
+            if isinstance(value, dict):
+                nested = self._normalize_composio_list_payload(value)
+                if nested:
+                    return nested
+        return []
+
     def _merged(self, connector_id: str) -> dict[str, Any] | None:
-        base = next((dict(c) for c in CONNECTOR_CATALOG if c["id"] == connector_id), None)
+        base = next((dict(c) for c in self._all_base_connectors() if c["id"] == connector_id), None)
         if not base:
             return None
         with self.state._lock:
@@ -350,11 +486,15 @@ class ConnectorRegistry:
         return base
 
     def list(self) -> dict[str, Any]:
-        connectors = [self._merged(c["id"]) for c in CONNECTOR_CATALOG]
+        base_connectors = self._all_base_connectors()
+        connectors = [self._merged(c["id"]) for c in base_connectors]
         connectors = [c for c in connectors if c]
         connectors.sort(key=lambda c: (0 if c.get("status") == "connected" else 1, c.get("display_name", "")))
-        configured = bool(self.config.composio_api_key or os.getenv("DIAK_CONNECTOR_SETUP_URL_TEMPLATE"))
+        dynamic_count = len([c for c in base_connectors if c.get("metadata", {}).get("provider") == "composio"])
+        configured = bool(self._composio_api_key or os.getenv("DIAK_CONNECTOR_SETUP_URL_TEMPLATE"))
         note = "Connectors are wired to the production Diak bridge. Click Connect to open provider OAuth; tokens never enter the desktop app."
+        if dynamic_count:
+            note += f" Loaded {dynamic_count} dynamic Composio connectors from the API-key-backed toolkit catalog."
         if not configured:
             note += " Provider credentials are not configured yet, so setup will report configuration-required instead of faking success."
         return {"connectors": connectors, "boundary_note": note}
@@ -394,7 +534,7 @@ class ConnectorRegistry:
             with self.state._lock:
                 self.state._data.setdefault("connectors", {}).setdefault(connector_id, {}).update({
                     "status": "error", "sync_status": "error",
-                    "last_error": "Connector provider not configured. Set COMPOSIO_API_KEY plus a Composio setup URL/template, or DIAK_CONNECTOR_SETUP_URL_TEMPLATE.",
+                    "last_error": "Connector provider not configured. Set COMPOSIO_API_KEY, or configure DIAK_CONNECTOR_SETUP_URL_TEMPLATE as an advanced override.",
                     "pending_approval_id": approval_id,
                 })
                 self.state._save_locked()
@@ -433,9 +573,59 @@ class ConnectorRegistry:
                 entity_id=self.config.connector_entity_id,
                 redirect_url=self.config.connector_redirect_url or "",
             )
-        # Composio's hosted-connect URL format varies by account/API version. Keep
-        # this explicit instead of guessing a fake OAuth URL when no template has
-        # been provided by release configuration.
+        if self._composio_api_key:
+            return self._create_composio_setup_url(connector)
+        return None
+
+    def _create_composio_setup_url(self, connector: dict[str, Any]) -> str | None:
+        api_key = self._composio_api_key
+        if not api_key:
+            return None
+        toolkit_slug = _extract_composio_toolkit_slug(connector)
+        payload = {
+            "toolkit": toolkit_slug,
+            "toolkit_slug": toolkit_slug,
+            "entity_id": self.config.connector_entity_id,
+            "redirect_url": self.config.connector_redirect_url,
+        }
+        payload = {k: v for k, v in payload.items() if v is not None}
+        errors: list[str] = []
+        for path in ("/connected_accounts", "/connectedAccounts", "/connections", "/oauth/connect"):
+            url = f"{self._composio_base_url}{path}"
+            try:
+                req = urlrequest.Request(
+                    url,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={
+                        "x-api-key": api_key,
+                        "Authorization": f"Bearer {api_key}",
+                        "Accept": "application/json",
+                        "Content-Type": "application/json",
+                    },
+                    method="POST",
+                )
+                with urlrequest.urlopen(req, timeout=20) as response:
+                    body = json.loads(response.read().decode("utf-8"))
+                setup_url = self._extract_setup_url(body)
+                if setup_url:
+                    return setup_url
+            except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+                errors.append(f"{path}: {exc}")
+        raise RuntimeError("Could not create Composio OAuth setup URL: " + ("; ".join(errors) or "empty provider response"))
+
+    def _extract_setup_url(self, payload: Any) -> str | None:
+        if isinstance(payload, str):
+            return payload if payload.startswith(("http://", "https://")) else None
+        if not isinstance(payload, dict):
+            return None
+        for key in ("redirect_url", "redirectUrl", "setup_url", "setupUrl", "url", "auth_url", "authUrl", "connection_url", "connectionUrl"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.startswith(("http://", "https://")):
+                return value
+        for key in ("data", "item", "result", "connection"):
+            nested = self._extract_setup_url(payload.get(key))
+            if nested:
+                return nested
         return None
 
 
@@ -638,7 +828,7 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
             if path == "/config":
                 return self._update_config(body)
             if path in ("/daemon/restart", "/daemon/reconnect"):
-                return self._send_json(200, {"accepted": True, "note": "Diak production bridge accepted the lifecycle request. Restart/reconnect is managed by the macOS app launcher."})
+                return self._daemon_lifecycle(path)
             if path == "/sessions":
                 return self._create_session(body)
             match = re.fullmatch(r"/sessions/([^/]+)/messages", path)
@@ -991,6 +1181,24 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
             "requires_restart": requires_restart,
             "note": "Config saved in Diak bridge overlay; Hermes runtime remains daemon-owned.",
         })
+
+    def _daemon_lifecycle(self, path: str) -> None:
+        if path == "/daemon/restart":
+            with self.server.state._lock:
+                config = self.server.state._data.setdefault("config", {})
+                if not config:
+                    config.update(self._default_config_snapshot())
+                for section in ("providers", "tools"):
+                    for item in config.get(section, []) or []:
+                        if isinstance(item, dict):
+                            item["restart_required"] = False
+                security = config.get("security")
+                if isinstance(security, dict):
+                    security["restart_required"] = False
+                config["daemon"] = self._daemon_summary()
+                self.server.state._save_locked()
+            return self._send_json(200, {"accepted": True, "note": "Restart scheduled."})
+        return self._send_json(200, {"accepted": True, "note": "Reconnect attempted."})
 
     def _list_automations(self) -> list[dict[str, Any]]:
         with self.server.state._lock:

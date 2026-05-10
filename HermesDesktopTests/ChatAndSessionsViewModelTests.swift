@@ -69,6 +69,47 @@ final class ChatAndSessionsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.messages.first?.role, .user)
         XCTAssertTrue(viewModel.messages.contains { $0.role == .assistant && $0.content.contains("release notes") })
     }
+    func testStartStreamingOptimisticallyEchoesUserMessageBeforeDaemonResponds() async {
+        let client = MockHermesAPIClient()
+        client.sessionMutationDelayNanos = 250_000_000
+        client.streamingDelayNanos = 0
+        let viewModel = ChatViewModel(client: client)
+        viewModel.draft = "Show this immediately"
+
+        let sendTask = Task { await viewModel.startStreaming() }
+        try? await Task.sleep(nanoseconds: 30_000_000)
+
+        XCTAssertEqual(viewModel.phase, .starting)
+        XCTAssertEqual(viewModel.draft, "")
+        XCTAssertTrue(viewModel.messages.contains { $0.role == .user && $0.content == "Show this immediately" },
+                      "User message must appear locally while create/continue is still in flight")
+        XCTAssertEqual(client.streamCallCount, 0,
+                       "Optimistic echo should not wait for streaming to begin")
+
+        await sendTask.value
+        for _ in 0..<20 where viewModel.phase != .completed {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertEqual(viewModel.phase, .completed)
+    }
+
+    func testStartStreamingRestoresDraftAndRemovesOptimisticEchoWhenFirstRequestFails() async {
+        let client = MockHermesAPIClient(outcome: .offline)
+        let viewModel = ChatViewModel(client: client)
+        viewModel.draft = "Do not lose this"
+
+        await viewModel.startStreaming()
+
+        XCTAssertEqual(viewModel.draft, "Do not lose this")
+        XCTAssertFalse(viewModel.messages.contains { $0.content == "Do not lose this" },
+                       "Failed first send should not leave a local echo that daemon never persisted")
+        if case .failed(let message) = viewModel.phase {
+            XCTAssertTrue(message.localizedCaseInsensitiveContains("reach") ||
+                          message.localizedCaseInsensitiveContains("offline"))
+        } else {
+            XCTFail("Expected failed phase, got \(viewModel.phase)")
+        }
+    }
 
 
     func testFollowUpOnSavedSessionContinuesExistingSessionInsteadOfCreatingNewOne() async {

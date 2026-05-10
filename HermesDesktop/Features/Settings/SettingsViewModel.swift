@@ -20,6 +20,8 @@ public final class SettingsViewModel: ObservableObject {
         case saving
         case savedRequiresRestart(String?)
         case savedClean
+        case restartingDaemon
+        case daemonRestarted(String?)
         case failed(String)
     }
 
@@ -122,7 +124,7 @@ public final class SettingsViewModel: ObservableObject {
     public func save() async {
         guard let draft, let saved else { return }
         guard hasUnsavedChanges else { return }
-        guard case .ready = saveState else { return }
+        guard saveState != .saving && saveState != .restartingDaemon else { return }
         let update = Self.diff(saved: saved, draft: draft)
         guard !update.isEmpty else {
             saveState = .savedClean
@@ -131,11 +133,11 @@ public final class SettingsViewModel: ObservableObject {
         saveState = .saving
         do {
             let result = try await client.updateConfig(update)
-            restartRequiredFromLastSave = result.requiresRestart
+            restartRequiredFromLastSave = restartRequiredFromLastSave || result.requiresRestart
             self.saved = result.snapshot
             self.draft = result.snapshot
-            saveState = result.requiresRestart
-                ? .savedRequiresRestart(result.note)
+            saveState = restartRequiredFromLastSave
+                ? .savedRequiresRestart(result.note ?? "A daemon restart is still required for saved changes to take effect.")
                 : .savedClean
         } catch let error as HermesAPIError {
             saveState = .failed(error.userFacingMessage)
@@ -198,12 +200,14 @@ public final class SettingsViewModel: ObservableObject {
     // MARK: - Daemon lifecycle (M3 surface)
 
     public func restartDaemon() async {
+        saveState = .restartingDaemon
         do {
-            _ = try await client.restartDaemon()
+            let result = try await client.restartDaemon()
             restartRequiredFromLastSave = false
             // Pull the post-restart snapshot back so restart-required
             // bits clear in the UI without an extra user click.
             await refresh()
+            saveState = .daemonRestarted(result.note)
         } catch let error as HermesAPIError {
             saveState = .failed(error.userFacingMessage)
         } catch {

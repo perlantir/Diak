@@ -59,6 +59,31 @@ struct SettingsContainerView<Content: View>: View {
                     )
                 }
 
+                if viewModel.saveState == .restartingDaemon {
+                    HermesCard {
+                        HStack(spacing: HermesSpacing.sm) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Restarting daemon…")
+                                .font(HermesTypography.caption)
+                                .foregroundStyle(HermesColors.muted)
+                        }
+                    }
+                }
+
+                if case .daemonRestarted(let note) = viewModel.saveState {
+                    HermesCard {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Daemon restarted")
+                                .font(HermesTypography.bodyStrong)
+                                .foregroundStyle(HermesColors.success)
+                            Text(note ?? "Saved settings are now active.")
+                                .font(HermesTypography.caption)
+                                .foregroundStyle(HermesColors.muted)
+                        }
+                    }
+                }
+
                 if case .failed(let reason) = viewModel.saveState {
                     ErrorStateView(title: "Couldn't save settings",
                                    message: reason,
