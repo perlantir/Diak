@@ -157,4 +157,14 @@ public protocol HermesAPIClient: Sendable {
     /// Delete a memory item. The daemon performs the actual removal;
     /// the desktop app simply requests the change.
     func deleteMemoryItem(id: String) async throws -> HermesMemoryDeleteResult
+
+    // MARK: Canvas artifacts (M10 Phase 2)
+
+    /// Persisted canvas artifacts/documents for a session. The desktop
+    /// app reads typed references through this boundary and pins them
+    /// into the canvas tabs/activity surfaces. The daemon owns
+    /// production execution (browser/code/design generation), storage,
+    /// and any side-effecting writes — the desktop app never produces
+    /// real artifacts itself.
+    func canvasArtifacts(sessionID: String) async throws -> HermesCanvasArtifactList
 }

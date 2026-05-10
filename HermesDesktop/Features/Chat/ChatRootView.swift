@@ -16,7 +16,9 @@ struct ChatRootView: View {
                                    approvals: approvals,
                                    title: viewModel.session?.title ?? "New chat")
                     .frame(minWidth: 460, idealWidth: 640)
-                ChatCanvasView(canvas: viewModel.canvas)
+                ChatCanvasView(canvas: viewModel.canvas,
+                               artifactLoadError: viewModel.artifactLoadError,
+                               isLoadingArtifacts: viewModel.isLoadingArtifacts)
                     .frame(minWidth: 360, idealWidth: 460)
             }
         }

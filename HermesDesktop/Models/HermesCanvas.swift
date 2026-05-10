@@ -114,19 +114,46 @@ public struct HermesCanvasState: Equatable, Sendable {
     public var sections: [HermesCanvasSection]
     public var tasks: [HermesCanvasTask]
     public var activities: [HermesCanvasActivity]
+    /// Persisted canvas artifacts/documents for this session. Populated
+    /// from the `GET /sessions/{id}/canvas/artifacts` boundary, not from
+    /// hardcoded UI content.
+    public var artifacts: [HermesCanvasArtifact]
+    /// Boundary handoff copy supplied alongside the artifact list. Empty
+    /// when the daemon did not include one.
+    public var artifactBoundaryNote: String?
 
     public init(documentTitle: String,
                 activeTab: HermesCanvasTab = .document,
                 lastUpdated: Date = Date(),
                 sections: [HermesCanvasSection],
                 tasks: [HermesCanvasTask],
-                activities: [HermesCanvasActivity]) {
+                activities: [HermesCanvasActivity],
+                artifacts: [HermesCanvasArtifact] = [],
+                artifactBoundaryNote: String? = nil) {
         self.documentTitle = documentTitle
         self.activeTab = activeTab
         self.lastUpdated = lastUpdated
         self.sections = sections
         self.tasks = tasks
         self.activities = activities
+        self.artifacts = artifacts
+        self.artifactBoundaryNote = artifactBoundaryNote
+    }
+
+    /// Replace the persisted artifact list and refresh the boundary
+    /// note. Used after `canvasArtifacts(sessionID:)` returns.
+    public mutating func setArtifacts(_ artifacts: [HermesCanvasArtifact],
+                                      boundaryNote: String?) {
+        self.artifacts = artifacts
+        self.artifactBoundaryNote = boundaryNote
+        self.lastUpdated = Date()
+    }
+
+    /// Filter helper for the canvas tabs. Document, other, and unknown
+    /// kinds all surface under the document tab so unfamiliar daemon
+    /// vocabulary is still visible.
+    public func artifacts(for tab: HermesCanvasTab) -> [HermesCanvasArtifact] {
+        artifacts.filter { $0.kind.canvasTab == tab }
     }
 
     public static func bootstrap(sessionTitle: String) -> HermesCanvasState {

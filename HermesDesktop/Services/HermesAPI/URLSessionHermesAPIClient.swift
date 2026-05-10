@@ -310,6 +310,17 @@ public final class URLSessionHermesAPIClient: HermesAPIClient, @unchecked Sendab
         return try await delete("/memory/\(trimmed)")
     }
 
+    // MARK: Canvas artifacts (M10 Phase 2)
+
+    /// `GET /sessions/{id}/canvas/artifacts` — read-only typed boundary
+    /// for persisted canvas artifacts/documents. The path is centralized
+    /// here so callers don't hand-build URLs.
+    public func canvasArtifacts(sessionID: String) async throws -> HermesCanvasArtifactList {
+        let trimmed = sessionID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw HermesAPIError.invalidURL }
+        return try await get("/sessions/\(trimmed)/canvas/artifacts")
+    }
+
     // MARK: Internals
 
     private func get<T: Decodable>(_ path: String) async throws -> T {

@@ -60,6 +60,64 @@ final class URLSessionHermesAPIClientM10Tests: XCTestCase {
         }
     }
 
+    func testCanvasArtifactsHitsTypedEndpointAndDecodes() async throws {
+        let client = makeClient { request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.url?.path, "/sessions/sess-live/canvas/artifacts")
+            let payload = #"""
+            {
+                "session_id": "sess-live",
+                "boundary_note": "Daemon owns execution.",
+                "artifacts": [
+                    {
+                        "id": "art-1",
+                        "session_id": "sess-live",
+                        "kind": "code",
+                        "title": "Generated patch",
+                        "summary": "ToolRouter.swift refactor",
+                        "preview": "diff --git a/ToolRouter.swift",
+                        "created_at": "2026-05-09T10:00:00Z"
+                    },
+                    {
+                        "id": "art-2",
+                        "session_id": "sess-live",
+                        "kind": "lightning_bolt",
+                        "title": "Future kind",
+                        "created_at": "2026-05-09T10:05:00Z"
+                    }
+                ]
+            }
+            """#
+            return (200, Data(payload.utf8), "application/json")
+        }
+
+        let payload = try await client.canvasArtifacts(sessionID: "sess-live")
+        XCTAssertEqual(payload.sessionID, "sess-live")
+        XCTAssertEqual(payload.boundaryNote, "Daemon owns execution.")
+        XCTAssertEqual(payload.artifacts.count, 2)
+        XCTAssertEqual(payload.artifacts[0].kind, .code)
+        XCTAssertEqual(payload.artifacts[0].kind.canvasTab, .code)
+        // Unknown kind tolerated; falls back to document tab so it stays visible.
+        XCTAssertEqual(payload.artifacts[1].kind, .unknown)
+        XCTAssertEqual(payload.artifacts[1].kind.canvasTab, .document)
+    }
+
+    func testCanvasArtifactsRejectsBlankSessionLocally() async {
+        let client = makeClient { _ in
+            XCTFail("Should not hit the network for blank session id")
+            return (200, Data(), "application/json")
+        }
+
+        do {
+            _ = try await client.canvasArtifacts(sessionID: "   ")
+            XCTFail("Expected invalidURL")
+        } catch let error as HermesAPIError {
+            XCTAssertEqual(error, .invalidURL)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     private func makeClient(handler: @escaping @Sendable (URLRequest) throws -> (Int, Data, String)) -> URLSessionHermesAPIClient {
         URLProtocolStreamStub.reset()
         URLProtocolStreamStub.handler = handler

@@ -19,10 +19,16 @@ public final class ChatViewModel: ObservableObject {
     @Published public private(set) var messages: [HermesMessage] = []
     @Published public private(set) var canvas: HermesCanvasState
     @Published public private(set) var phase: Phase = .idle
+    /// Non-blocking error from the most recent canvas artifact load.
+    /// Surfaced in the UI as a soft empty-state hint so chat streaming
+    /// is never gated on artifact availability.
+    @Published public private(set) var artifactLoadError: String?
+    @Published public private(set) var isLoadingArtifacts: Bool = false
     @Published public var draft: String = ""
 
     private let client: HermesAPIClient
     private var streamTask: Task<Void, Never>?
+    private var artifactLoadTask: Task<Void, Never>?
 
     public init(client: HermesAPIClient,
                 session: HermesSession? = nil,
@@ -43,13 +49,39 @@ public final class ChatViewModel: ObservableObject {
         return false
     }
 
-    /// Load a session and its prior messages from the API client.
+    /// Load a session and its prior messages from the API client. Also
+    /// reloads persisted canvas artifacts so reopening a session in
+    /// chat does not show stale or hardcoded screenshot-only content.
     public func load(session: HermesSession) async {
         self.session = session
+        self.canvas = HermesCanvasState.bootstrap(sessionTitle: session.title)
         do {
             self.messages = try await client.messages(sessionID: session.id)
         } catch {
             self.messages = []
+        }
+        await loadArtifacts(for: session.id)
+    }
+
+    /// Pull persisted canvas artifacts for `sessionID` and merge them
+    /// into the canvas state. Failures are surfaced through
+    /// `artifactLoadError` and never propagate — chat streaming must
+    /// remain available even when the artifact endpoint is offline or
+    /// degraded.
+    public func loadArtifacts(for sessionID: String) async {
+        artifactLoadTask?.cancel()
+        artifactLoadError = nil
+        isLoadingArtifacts = true
+        defer { isLoadingArtifacts = false }
+        do {
+            let payload = try await client.canvasArtifacts(sessionID: sessionID)
+            canvas.setArtifacts(payload.artifacts, boundaryNote: payload.boundaryNote)
+        } catch let error as HermesAPIError {
+            artifactLoadError = error.userFacingMessage
+        } catch is CancellationError {
+            // Cancellation is benign — another load is in flight.
+        } catch {
+            artifactLoadError = error.localizedDescription
         }
     }
 
@@ -74,6 +106,7 @@ public final class ChatViewModel: ObservableObject {
         }
         self.session = createdSession
         self.canvas = HermesCanvasState.bootstrap(sessionTitle: createdSession.title)
+        await loadArtifacts(for: createdSession.id)
 
         let userMessage = HermesMessage(
             id: "user-\(UUID().uuidString.prefix(8))",

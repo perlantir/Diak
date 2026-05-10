@@ -79,4 +79,57 @@ final class MockHermesAPIClientTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
     }
+
+    func testCanvasArtifactsReturnsSessionScopedFixtures() async throws {
+        let client = MockHermesAPIClient()
+        let triage = try await client.canvasArtifacts(sessionID: "sess-001")
+        XCTAssertEqual(triage.sessionID, "sess-001")
+        XCTAssertTrue(triage.artifacts.allSatisfy { $0.sessionID == "sess-001" })
+        XCTAssertGreaterThan(triage.artifacts.count, 0)
+        XCTAssertNotNil(triage.boundaryNote)
+        XCTAssertEqual(client.canvasArtifactsCallCount, 1)
+
+        let unknown = try await client.canvasArtifacts(sessionID: "sess-no-history")
+        XCTAssertEqual(unknown.sessionID, "sess-no-history")
+        XCTAssertTrue(unknown.artifacts.isEmpty)
+        XCTAssertEqual(client.canvasArtifactsCallCount, 2)
+    }
+
+    func testCanvasArtifactsRejectsBlankSessionID() async {
+        let client = MockHermesAPIClient()
+        do {
+            _ = try await client.canvasArtifacts(sessionID: " ")
+            XCTFail("Expected invalidURL")
+        } catch let error as HermesAPIError {
+            XCTAssertEqual(error, .invalidURL)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testCanvasArtifactsThrowsWhenOffline() async {
+        let client = MockHermesAPIClient(outcome: .offline)
+        do {
+            _ = try await client.canvasArtifacts(sessionID: "sess-001")
+            XCTFail("Expected notReachable")
+        } catch let error as HermesAPIError {
+            XCTAssertEqual(error, .notReachable)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testSetCanvasArtifactsOverridesFixtures() async throws {
+        let client = MockHermesAPIClient()
+        let custom = HermesCanvasArtifact(
+            id: "custom-1",
+            sessionID: "sess-test",
+            kind: .design,
+            title: "Custom design",
+            createdAt: Date()
+        )
+        client.setCanvasArtifacts([custom], for: "sess-test")
+        let payload = try await client.canvasArtifacts(sessionID: "sess-test")
+        XCTAssertEqual(payload.artifacts.map(\.id), ["custom-1"])
+    }
 }

@@ -45,4 +45,88 @@ final class ChatCanvasWorkspaceTests: XCTestCase {
         XCTAssertEqual(viewModel.canvas.sections.first(where: { $0.title == "Decisions" })?.bullets.first, "Use Chat + Canvas as the primary active-chat surface")
         XCTAssertTrue(viewModel.canvas.activities.contains { $0.title == "Updating document" })
     }
+
+    func testCanvasStateSetArtifactsReplacesAndKeepsTabFilter() {
+        var state = HermesCanvasState.bootstrap(sessionTitle: "Triage")
+        XCTAssertTrue(state.artifacts.isEmpty)
+
+        let now = Date()
+        state.setArtifacts([
+            HermesCanvasArtifact(id: "a-doc", sessionID: "s", kind: .document, title: "Doc", createdAt: now),
+            HermesCanvasArtifact(id: "a-code", sessionID: "s", kind: .code, title: "Code", createdAt: now),
+            HermesCanvasArtifact(id: "a-mystery", sessionID: "s", kind: .unknown, title: "?", createdAt: now)
+        ], boundaryNote: "Daemon owns execution.")
+
+        XCTAssertEqual(state.artifactBoundaryNote, "Daemon owns execution.")
+        XCTAssertEqual(state.artifacts.count, 3)
+        XCTAssertEqual(state.artifacts(for: .document).map(\.id).sorted(), ["a-doc", "a-mystery"])
+        XCTAssertEqual(state.artifacts(for: .code).map(\.id), ["a-code"])
+        XCTAssertTrue(state.artifacts(for: .design).isEmpty)
+    }
+
+    func testLoadArtifactsPopulatesCanvasArtifacts() async {
+        let client = MockHermesAPIClient()
+        let viewModel = ChatViewModel(
+            client: client,
+            session: HermesSession(
+                id: "sess-001",
+                title: "Project triage",
+                summary: nil,
+                status: .completed,
+                createdAt: Date(),
+                updatedAt: Date(),
+                model: "Claude Sonnet",
+                project: nil,
+                hasArtifacts: true,
+                pendingApprovalsCount: 0
+            )
+        )
+
+        await viewModel.loadArtifacts(for: "sess-001")
+
+        XCTAssertGreaterThan(viewModel.canvas.artifacts.count, 0)
+        XCTAssertTrue(viewModel.canvas.artifacts.allSatisfy { $0.sessionID == "sess-001" })
+        XCTAssertNotNil(viewModel.canvas.artifactBoundaryNote)
+        XCTAssertNil(viewModel.artifactLoadError)
+        XCTAssertFalse(viewModel.isLoadingArtifacts)
+        XCTAssertEqual(client.canvasArtifactsCallCount, 1)
+    }
+
+    func testLoadArtifactsSurfacesNonBlockingErrorWhenOffline() async {
+        let client = MockHermesAPIClient(outcome: .offline)
+        let viewModel = ChatViewModel(client: client)
+
+        await viewModel.loadArtifacts(for: "sess-001")
+
+        XCTAssertNotNil(viewModel.artifactLoadError)
+        XCTAssertTrue(viewModel.canvas.artifacts.isEmpty)
+        XCTAssertFalse(viewModel.isLoadingArtifacts)
+        // Phase must remain idle — chat streaming must not be gated on
+        // artifact loading.
+        XCTAssertEqual(viewModel.phase, .idle)
+    }
+
+    func testLoadHydratesMessagesAndArtifactsTogether() async {
+        let client = MockHermesAPIClient()
+        let viewModel = ChatViewModel(client: client)
+
+        let session = HermesSession(
+            id: "sess-001",
+            title: "Project triage",
+            summary: nil,
+            status: .completed,
+            createdAt: Date(),
+            updatedAt: Date(),
+            model: "Claude Sonnet",
+            project: nil,
+            hasArtifacts: true,
+            pendingApprovalsCount: 0
+        )
+        await viewModel.load(session: session)
+
+        XCTAssertEqual(viewModel.session?.id, "sess-001")
+        XCTAssertFalse(viewModel.messages.isEmpty)
+        XCTAssertGreaterThan(viewModel.canvas.artifacts.count, 0)
+        XCTAssertEqual(viewModel.canvas.documentTitle, "Project triage")
+    }
 }

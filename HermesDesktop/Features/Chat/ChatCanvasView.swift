@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ChatCanvasView: View {
     let canvas: HermesCanvasState
+    var artifactLoadError: String? = nil
+    var isLoadingArtifacts: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -16,11 +18,17 @@ struct ChatCanvasView: View {
                     case .board:
                         taskBoard
                     case .browser:
-                        placeholder(icon: "globe", title: "Browser workspace", message: "Daemon browser events will attach page state, screenshots, and network evidence here.")
+                        tabContent(icon: "globe",
+                                   title: "Browser workspace",
+                                   message: "Daemon browser events will attach page state, screenshots, and network evidence here.")
                     case .code:
-                        placeholder(icon: "chevron.left.forwardslash.chevron.right", title: "Code workspace", message: "Code diffs, file reads, tests, and command output will pin into this pane.")
+                        tabContent(icon: "chevron.left.forwardslash.chevron.right",
+                                   title: "Code workspace",
+                                   message: "Code diffs, file reads, tests, and command output will pin into this pane.")
                     case .design:
-                        placeholder(icon: "sparkles.rectangle.stack", title: "Design workspace", message: "Design references, image outputs, and review notes will land here as typed artifacts.")
+                        tabContent(icon: "sparkles.rectangle.stack",
+                                   title: "Design workspace",
+                                   message: "Design references, image outputs, and review notes will land here as typed artifacts.")
                     }
                     activityFeed
                 }
@@ -84,6 +92,51 @@ struct ChatCanvasView: View {
                     }
                 }
             }
+            artifactList(for: .document)
+        }
+    }
+
+    private func artifactList(for tab: HermesCanvasTab) -> some View {
+        let artifacts = canvas.artifacts(for: tab)
+        return Group {
+            if !artifacts.isEmpty {
+                VStack(alignment: .leading, spacing: HermesSpacing.sm) {
+                    SectionHeader("Pinned artifacts",
+                                  subtitle: canvas.artifactBoundaryNote ?? "Persisted by the Hermes daemon for this session.")
+                    ForEach(artifacts) { artifact in
+                        HermesCard {
+                            VStack(alignment: .leading, spacing: HermesSpacing.xs) {
+                                HStack {
+                                    Label(artifact.title, systemImage: tab.iconName)
+                                        .font(HermesTypography.bodyStrong)
+                                        .foregroundStyle(HermesColors.text)
+                                    Spacer()
+                                    StatusBadge(artifact.kind.rawValue.capitalized, tone: .info)
+                                }
+                                if let summary = artifact.summary {
+                                    Text(summary)
+                                        .font(HermesTypography.caption)
+                                        .foregroundStyle(HermesColors.muted)
+                                }
+                                if let preview = artifact.preview {
+                                    Text(preview)
+                                        .font(HermesTypography.caption)
+                                        .foregroundStyle(HermesColors.muted)
+                                        .lineLimit(3)
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if let error = artifactLoadError {
+                EmptyStateView(icon: "exclamationmark.triangle",
+                               title: "Couldn’t load artifacts",
+                               message: error)
+            } else if isLoadingArtifacts {
+                EmptyStateView(icon: "hourglass",
+                               title: "Loading artifacts",
+                               message: "Reading persisted canvas references from the Hermes daemon.")
+            }
         }
     }
 
@@ -143,8 +196,15 @@ struct ChatCanvasView: View {
         }
     }
 
-    private func placeholder(icon: String, title: String, message: String) -> some View {
-        EmptyStateView(icon: icon, title: title, message: message)
-            .padding(.vertical, HermesSpacing.xl)
+    @ViewBuilder
+    private func tabContent(icon: String, title: String, message: String) -> some View {
+        let artifacts = canvas.artifacts(for: canvas.activeTab)
+        if !artifacts.isEmpty {
+            artifactList(for: canvas.activeTab)
+        } else {
+            EmptyStateView(icon: icon, title: title, message: message)
+                .padding(.vertical, HermesSpacing.xl)
+            artifactList(for: canvas.activeTab)
+        }
     }
 }

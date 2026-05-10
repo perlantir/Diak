@@ -46,6 +46,7 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     public private(set) var memoryItemCallCount = 0
     public private(set) var updateMemoryItemCallCount = 0
     public private(set) var deleteMemoryItemCallCount = 0
+    public private(set) var canvasArtifactsCallCount = 0
 
     /// In-memory approval/evidence stores. Mutating them through
     /// `decideApproval` keeps state visible across reads inside a single
@@ -78,6 +79,13 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     /// — the mock never indexes/embeds anything.
     private var memoryIndex: [String: HermesMemoryItem] = MockHermesData.memoryIndex
     private var memoryBoundaryNote: String = MockHermesData.memoryBoundaryNote
+
+    /// In-memory canvas artifact store, keyed by session id. The mock
+    /// never executes a real browser/code/design preview; it just keeps
+    /// per-session typed references so previews/tests can render the
+    /// canvas without live daemon stream events.
+    private var canvasArtifactStore: [String: [HermesCanvasArtifact]] = MockHermesData.canvasArtifactStore
+    private var canvasArtifactBoundaryNote: String = MockHermesData.canvasArtifactBoundaryNote
 
     /// Optional override: force a specific session to be returned by
     /// `createSession` so tests/previews can pin the id.
@@ -837,6 +845,34 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
             id: id,
             note: "Memory removed from the daemon store."
         )
+    }
+
+    // MARK: Canvas artifacts (M10 Phase 2)
+
+    public func canvasArtifacts(sessionID: String) async throws -> HermesCanvasArtifactList {
+        canvasArtifactsCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        let trimmed = sessionID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw HermesAPIError.invalidURL }
+        let artifacts = (canvasArtifactStore[trimmed] ?? []).sorted { lhs, rhs in
+            lhs.createdAt < rhs.createdAt
+        }
+        return HermesCanvasArtifactList(
+            sessionID: trimmed,
+            artifacts: artifacts,
+            boundaryNote: canvasArtifactBoundaryNote
+        )
+    }
+
+    /// Test affordance: install a session-scoped artifact list so view
+    /// model tests can simulate "session has prior canvas artifacts"
+    /// without rewriting the global fixture.
+    public func setCanvasArtifacts(_ artifacts: [HermesCanvasArtifact], for sessionID: String) {
+        canvasArtifactStore[sessionID] = artifacts
+    }
+
+    public func resetCanvasArtifactState() {
+        canvasArtifactStore = MockHermesData.canvasArtifactStore
     }
 
     private static func riskWeight(_ risk: HermesApprovalRisk) -> Int {
@@ -1828,5 +1864,72 @@ public enum MockHermesData {
 
     public static var memoryIndex: [String: HermesMemoryItem] {
         Dictionary(uniqueKeysWithValues: memoryItems.map { ($0.id, $0) })
+    }
+
+    // MARK: Canvas artifacts (M10 Phase 2 fixtures)
+
+    public static let canvasArtifactBoundaryNote =
+        "Diak reads canvas artifacts through the Hermes Agent boundary. Real browser, code, and design execution stay in the daemon."
+
+    public static let canvasArtifacts: [HermesCanvasArtifact] = [
+        HermesCanvasArtifact(
+            id: "canvas-art-001",
+            sessionID: "sess-001",
+            kind: .document,
+            title: "Architecture summary",
+            summary: "Module-by-module read of the Hermes repo with risk callouts.",
+            preview: "Hermes Agent owns daemon-side tool execution. The desktop app is a typed UI/control surface that talks to it over HTTP.",
+            createdAt: referenceDate.addingTimeInterval(-3_400),
+            updatedAt: referenceDate.addingTimeInterval(-1_800),
+            ref: HermesArtifactRef(id: "file-arch-md", kind: .file, title: "architecture.md", detail: "Docs/architecture.md")
+        ),
+        HermesCanvasArtifact(
+            id: "canvas-art-002",
+            sessionID: "sess-001",
+            kind: .code,
+            title: "Risky modules diff",
+            summary: "Suggested patches for Approvals.swift and ToolRouter.swift.",
+            preview: "diff --git a/src/Agent/Approvals.swift\n+ guard request.acknowledgedDaemonHandoff else { ... }",
+            createdAt: referenceDate.addingTimeInterval(-3_200),
+            updatedAt: nil,
+            ref: HermesArtifactRef(id: "file-approvals-diff", kind: .file, title: "Approvals.swift.diff")
+        ),
+        HermesCanvasArtifact(
+            id: "canvas-art-003",
+            sessionID: "sess-002",
+            kind: .browser,
+            title: "Migration release notes",
+            summary: "Pinned vendor docs reviewed before running the migration.",
+            preview: "https://example.com/migrations/v3-release-notes",
+            createdAt: referenceDate.addingTimeInterval(-2_300),
+            updatedAt: referenceDate.addingTimeInterval(-600),
+            ref: HermesArtifactRef(id: "link-migrate-v3", kind: .link, title: "v3 release notes", detail: "example.com")
+        ),
+        HermesCanvasArtifact(
+            id: "canvas-art-004",
+            sessionID: "sess-003",
+            kind: .design,
+            title: "PR review board snapshot",
+            summary: "Annotated screenshot of the PR review queue.",
+            preview: "11 open PRs · 2 require review · 0 blocked",
+            createdAt: referenceDate.addingTimeInterval(-83_500),
+            updatedAt: nil,
+            ref: nil
+        ),
+        HermesCanvasArtifact(
+            id: "canvas-art-005",
+            sessionID: "sess-streaming",
+            kind: .document,
+            title: "Launch notes draft",
+            summary: "Working draft pinned by the canvas reducer.",
+            preview: "Diak permissions overhaul — user-scoped trust, per-tool risk, redacted approval payloads.",
+            createdAt: referenceDate.addingTimeInterval(-25),
+            updatedAt: referenceDate,
+            ref: nil
+        )
+    ]
+
+    public static var canvasArtifactStore: [String: [HermesCanvasArtifact]] {
+        Dictionary(grouping: canvasArtifacts, by: { $0.sessionID })
     }
 }

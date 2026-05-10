@@ -139,4 +139,8 @@ final class RestartOnlyConfigClient: HermesAPIClient, @unchecked Sendable {
     func deleteMemoryItem(id: String) async throws -> HermesMemoryDeleteResult {
         throw HermesAPIError.http(status: 501, body: nil)
     }
+
+    func canvasArtifacts(sessionID: String) async throws -> HermesCanvasArtifactList {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
 }
