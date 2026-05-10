@@ -1,6 +1,6 @@
 # Hermes Desktop Autonomous Build Status
 
-Updated: 2026-05-10 04:13 CDT
+Updated: 2026-05-10 04:45 CDT
 
 ## Current milestone
 
@@ -18,7 +18,7 @@ Commands run from `/Users/perlantir/Projects/HermesDesktop`:
 
 ```bash
 git status --short
-ps aux | grep -i '[c]laude' | grep -i 'HermesDesktop' || true
+ps aux | grep -i '[c]laude' | grep -i HermesDesktop || true
 xcodebuild -list
 xcodegen generate
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -configuration Debug build
@@ -30,11 +30,12 @@ Results:
 
 - `git status --short`: clean at start; only this status file changed after the run.
 - Claude Code process check: no active Claude Code process for this project.
+- Project file discovery: `project.yml` present; generated `HermesDesktop.xcodeproj` present.
 - `xcodebuild -list`: succeeded; project `HermesDesktop`, scheme `HermesDesktop`, targets `HermesDesktop` and `HermesDesktopTests`.
 - `xcodegen generate`: succeeded.
 - Debug macOS build: succeeded.
 - Full macOS test suite: succeeded — 125 tests, 0 failures.
-- Latest passing test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_04-13-59--0500.xcresult`.
+- Latest passing test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_04-45-38--0500.xcresult`.
 - `git diff --check`: succeeded.
 
 ## Builder status
@@ -49,9 +50,9 @@ Latest milestone implementation remains:
 
 Latest status-only commits before this run:
 
+- `ef349a3 Update autonomous status after M7 health check`
 - `938a3cf Update autonomous status after M7 health check`
 - `f9f8cbc Update autonomous status after M7 recheck`
-- `b94da5d Update autonomous status after M7 health check`
 
 ## Next action
 
