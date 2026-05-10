@@ -74,14 +74,13 @@ No Claude Code builder started this run. The next unresolved items are environme
 
 ## Commit status
 
-- Current HEAD: `3fd2343` (`Update M9 autonomous build evidence`).
-- Uncommitted local changes remain: M9 QA docs plus `qa/diak-m9-dogfood-20260510-054048/` evidence artifacts.
-- This cron run updated `Docs/BuildStatus/AUTONOMOUS_BUILD_STATUS.md` with fresh verification evidence and did not push.
+- M9 dogfood evidence/status refresh is committed locally at `7a106d7` (`Update M9 dogfood evidence`).
+- Working tree was clean immediately after that commit.
+- This cron run did not push.
 
 ## Next action
 
-1. Commit the M9 dogfood evidence/status refresh locally if the changed artifact set is acceptable.
-2. For clean first-run visual QA: run Diak from the DMG in a clean macOS account/VM or grant controlled Accessibility automation permission and dismiss unrelated system dialogs.
-3. For live E2E: start/provide a Diak-compatible Hermes Agent daemon implementing the app contract on `127.0.0.1:8765` (`/health`, `/version`, `/sessions`, `/automations`, `/connectors`, `/skills`, `/memory`).
-4. For connector-write QA: Nick must approve exact safe destination(s), allowed action(s), and cleanup rules before any real external write.
-5. Push to `https://github.com/perlantir/Diak.git` only from an approved non-cron context.
+1. For clean first-run visual QA: run Diak from the DMG in a clean macOS account/VM or grant controlled Accessibility automation permission and dismiss unrelated system dialogs.
+2. For live E2E: start/provide a Diak-compatible Hermes Agent daemon implementing the app contract on `127.0.0.1:8765` (`/health`, `/version`, `/sessions`, `/automations`, `/connectors`, `/skills`, `/memory`).
+3. For connector-write QA: Nick must approve exact safe destination(s), allowed action(s), and cleanup rules before any real external write.
+4. Push to `https://github.com/perlantir/Diak.git` only from an approved non-cron context.
