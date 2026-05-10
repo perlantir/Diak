@@ -60,4 +60,24 @@ final class RestartOnlyConfigClient: HermesAPIClient, @unchecked Sendable {
     func daemonLogs() async throws -> HermesDaemonLogSummary {
         snapshot.daemon
     }
+
+    func automations() async throws -> [HermesAutomationJob] { [] }
+    func createAutomation(_ request: HermesAutomationCreateRequest) async throws -> HermesAutomationMutationResult {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
+    func updateAutomation(id: String, update: HermesAutomationUpdateRequest) async throws -> HermesAutomationMutationResult {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
+    func testRunAutomation(id: String) async throws -> HermesAutomationRun {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
+    func pauseAutomation(id: String) async throws -> HermesAutomationMutationResult {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
+    func resumeAutomation(id: String) async throws -> HermesAutomationMutationResult {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
+    func deleteAutomation(id: String) async throws -> HermesAutomationDeleteResult {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
 }

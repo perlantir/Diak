@@ -9,6 +9,7 @@ struct ContentRouter: View {
     @StateObject private var chat: ChatViewModel
     @StateObject private var sessions: SessionsViewModel
     @StateObject private var settings: SettingsViewModel
+    @StateObject private var automations: AutomationsViewModel
 
     init(section: SidebarNavSection,
          daemon: DaemonStatusViewModel,
@@ -23,6 +24,7 @@ struct ContentRouter: View {
         _chat = StateObject(wrappedValue: ChatViewModel(client: client))
         _sessions = StateObject(wrappedValue: SessionsViewModel(client: client))
         _settings = StateObject(wrappedValue: SettingsViewModel(client: client))
+        _automations = StateObject(wrappedValue: AutomationsViewModel(client: client))
     }
 
     var body: some View {
@@ -37,9 +39,7 @@ struct ContentRouter: View {
                                      approvals: approvals,
                                      client: client)
                 case .automations:
-                    EmptyStateView(icon: "clock.arrow.circlepath",
-                                   title: "Automations",
-                                   message: "Conversational automations and run history. Coming in M4.")
+                    AutomationsView(viewModel: automations)
                 case .connectors:
                     EmptyStateView(icon: "link",
                                    title: "Connectors",

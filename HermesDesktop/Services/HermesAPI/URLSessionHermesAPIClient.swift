@@ -114,6 +114,45 @@ public final class URLSessionHermesAPIClient: HermesAPIClient, @unchecked Sendab
         try await get("/daemon/logs")
     }
 
+    // MARK: Automations (M4)
+
+    public func automations() async throws -> [HermesAutomationJob] {
+        try await get("/automations")
+    }
+
+    public func createAutomation(_ request: HermesAutomationCreateRequest) async throws -> HermesAutomationMutationResult {
+        guard !request.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !request.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !request.schedule.cron.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw HermesAPIError.invalidURL
+        }
+        return try await post("/automations", body: request)
+    }
+
+    public func updateAutomation(id: String, update: HermesAutomationUpdateRequest) async throws -> HermesAutomationMutationResult {
+        guard !update.isEmpty else { throw HermesAPIError.invalidURL }
+        return try await patch("/automations/\(id)", body: update)
+    }
+
+    public func testRunAutomation(id: String) async throws -> HermesAutomationRun {
+        struct Empty: Encodable {}
+        return try await post("/automations/\(id)/test-run", body: Empty())
+    }
+
+    public func pauseAutomation(id: String) async throws -> HermesAutomationMutationResult {
+        struct Empty: Encodable {}
+        return try await post("/automations/\(id)/pause", body: Empty())
+    }
+
+    public func resumeAutomation(id: String) async throws -> HermesAutomationMutationResult {
+        struct Empty: Encodable {}
+        return try await post("/automations/\(id)/resume", body: Empty())
+    }
+
+    public func deleteAutomation(id: String) async throws -> HermesAutomationDeleteResult {
+        try await delete("/automations/\(id)")
+    }
+
     // MARK: Internals
 
     private func get<T: Decodable>(_ path: String) async throws -> T {
@@ -123,6 +162,15 @@ public final class URLSessionHermesAPIClient: HermesAPIClient, @unchecked Sendab
     private func post<B: Encodable, T: Decodable>(_ path: String, body: B) async throws -> T {
         let data = try encoder.encode(body)
         return try await send(path, method: "POST", body: data)
+    }
+
+    private func patch<B: Encodable, T: Decodable>(_ path: String, body: B) async throws -> T {
+        let data = try encoder.encode(body)
+        return try await send(path, method: "PATCH", body: data)
+    }
+
+    private func delete<T: Decodable>(_ path: String) async throws -> T {
+        try await send(path, method: "DELETE", body: nil as Data?)
     }
 
     private func send<T: Decodable>(_ path: String,

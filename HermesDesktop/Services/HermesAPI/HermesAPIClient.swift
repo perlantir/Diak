@@ -68,4 +68,16 @@ public protocol HermesAPIClient: Sendable {
     /// Truthful: implementations must surface offline/error explicitly
     /// rather than fabricating logs.
     func daemonLogs() async throws -> HermesDaemonLogSummary
+
+    // MARK: Automations (M4)
+
+    /// Natural-language cron automations managed by the daemon. The
+    /// desktop app owns only UI state; the daemon owns real scheduling.
+    func automations() async throws -> [HermesAutomationJob]
+    func createAutomation(_ request: HermesAutomationCreateRequest) async throws -> HermesAutomationMutationResult
+    func updateAutomation(id: String, update: HermesAutomationUpdateRequest) async throws -> HermesAutomationMutationResult
+    func testRunAutomation(id: String) async throws -> HermesAutomationRun
+    func pauseAutomation(id: String) async throws -> HermesAutomationMutationResult
+    func resumeAutomation(id: String) async throws -> HermesAutomationMutationResult
+    func deleteAutomation(id: String) async throws -> HermesAutomationDeleteResult
 }

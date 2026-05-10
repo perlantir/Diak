@@ -25,6 +25,13 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     public private(set) var restartDaemonCallCount = 0
     public private(set) var reconnectDaemonCallCount = 0
     public private(set) var daemonLogsCallCount = 0
+    public private(set) var automationsCallCount = 0
+    public private(set) var createAutomationCallCount = 0
+    public private(set) var updateAutomationCallCount = 0
+    public private(set) var testRunAutomationCallCount = 0
+    public private(set) var pauseAutomationCallCount = 0
+    public private(set) var resumeAutomationCallCount = 0
+    public private(set) var deleteAutomationCallCount = 0
 
     /// In-memory approval/evidence stores. Mutating them through
     /// `decideApproval` keeps state visible across reads inside a single
@@ -35,6 +42,10 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     /// In-memory config snapshot. Saves replace fields field-by-field
     /// so partial updates don't clobber unrelated state.
     private var configSnapshot: HermesConfigSnapshot = MockHermesData.configSnapshot
+
+    /// In-memory automation store. This remains a truthful local mock:
+    /// it mutates UI-visible state only and never schedules real cron work.
+    private var automationJobs: [String: HermesAutomationJob] = MockHermesData.automationIndex
 
     /// Optional override: force a specific session to be returned by
     /// `createSession` so tests/previews can pin the id.
@@ -288,9 +299,141 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
         return configSnapshot.daemon
     }
 
+    // MARK: Automations (M4)
+
+    public func automations() async throws -> [HermesAutomationJob] {
+        automationsCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        return automationJobs.values.sorted { lhs, rhs in
+            let l = lhs.nextRunAt ?? lhs.updatedAt
+            let r = rhs.nextRunAt ?? rhs.updatedAt
+            return l < r
+        }
+    }
+
+    public func createAutomation(_ request: HermesAutomationCreateRequest) async throws -> HermesAutomationMutationResult {
+        createAutomationCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        let title = request.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prompt = request.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, !prompt.isEmpty, !request.schedule.cron.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw HermesAPIError.invalidURL
+        }
+        let now = Date()
+        let id = "auto-\(Int(now.timeIntervalSince1970))"
+        let project = request.projectID.map { HermesProjectRef(id: $0, name: "Selected project") }
+        let job = HermesAutomationJob(
+            id: id,
+            title: title,
+            prompt: prompt,
+            schedule: request.schedule,
+            status: .active,
+            project: project,
+            createdAt: now,
+            updatedAt: now,
+            nextRunAt: Self.mockNextRun(after: now),
+            notificationStatus: request.notificationsEnabled ? .daemonUnsupported : .disabled,
+            notificationSummary: request.notificationsEnabled
+                ? "In-app status only: real desktop notifications require daemon/permission support."
+                : "Notifications disabled for this automation."
+        )
+        automationJobs[id] = job
+        return HermesAutomationMutationResult(job: job, note: "Automation saved locally in mock daemon boundary.")
+    }
+
+    public func updateAutomation(id: String, update: HermesAutomationUpdateRequest) async throws -> HermesAutomationMutationResult {
+        updateAutomationCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        guard !update.isEmpty else { throw HermesAPIError.invalidURL }
+        var job = try automationOr404(id)
+        if let title = update.title { job.title = title }
+        if let prompt = update.prompt { job.prompt = prompt }
+        if let schedule = update.schedule { job.schedule = schedule; job.nextRunAt = Self.mockNextRun(after: Date()) }
+        if let notificationsEnabled = update.notificationsEnabled {
+            job.notificationStatus = notificationsEnabled ? .daemonUnsupported : .disabled
+            job.notificationSummary = notificationsEnabled
+                ? "In-app status only: real desktop notifications require daemon/permission support."
+                : "Notifications disabled for this automation."
+        }
+        job.updatedAt = Date()
+        automationJobs[id] = job
+        return HermesAutomationMutationResult(job: job, note: "Automation updated.")
+    }
+
+    public func testRunAutomation(id: String) async throws -> HermesAutomationRun {
+        testRunAutomationCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        var job = try automationOr404(id)
+        let now = Date()
+        let run = HermesAutomationRun(
+            id: "run-\(Int(now.timeIntervalSince1970))",
+            automationID: id,
+            status: .succeeded,
+            startedAt: now.addingTimeInterval(-8),
+            finishedAt: now,
+            summary: "Test run completed in mock mode. No external actions were executed.",
+            logPreview: [
+                "Loaded automation prompt",
+                "Validated cron schedule: \(job.schedule.cron)",
+                "Mock boundary: skipped real daemon side effects"
+            ]
+        )
+        job.lastRun = run
+        job.runHistory.insert(run, at: 0)
+        job.updatedAt = now
+        automationJobs[id] = job
+        return run
+    }
+
+    public func pauseAutomation(id: String) async throws -> HermesAutomationMutationResult {
+        pauseAutomationCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        var job = try automationOr404(id)
+        job.status = .paused
+        job.nextRunAt = nil
+        job.updatedAt = Date()
+        automationJobs[id] = job
+        return HermesAutomationMutationResult(job: job, note: "Automation paused. Cron execution remains daemon-owned.")
+    }
+
+    public func resumeAutomation(id: String) async throws -> HermesAutomationMutationResult {
+        resumeAutomationCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        var job = try automationOr404(id)
+        job.status = .active
+        job.nextRunAt = Self.mockNextRun(after: Date())
+        job.updatedAt = Date()
+        automationJobs[id] = job
+        return HermesAutomationMutationResult(job: job, note: "Automation resumed.")
+    }
+
+    public func deleteAutomation(id: String) async throws -> HermesAutomationDeleteResult {
+        deleteAutomationCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        guard automationJobs.removeValue(forKey: id) != nil else {
+            throw HermesAPIError.http(status: 404, body: "no automation \(id)")
+        }
+        return HermesAutomationDeleteResult(deleted: true, id: id, note: "Automation deleted from mock state.")
+    }
+
+    private func automationOr404(_ id: String) throws -> HermesAutomationJob {
+        guard let job = automationJobs[id] else {
+            throw HermesAPIError.http(status: 404, body: "no automation \(id)")
+        }
+        return job
+    }
+
+    private static func mockNextRun(after date: Date) -> Date {
+        date.addingTimeInterval(3_600)
+    }
+
     /// Test affordance: reset the in-memory config back to fixtures.
     public func resetConfigState() {
         configSnapshot = MockHermesData.configSnapshot
+    }
+
+    public func resetAutomationState() {
+        automationJobs = MockHermesData.automationIndex
     }
 
     private static func riskWeight(_ risk: HermesApprovalRisk) -> Int {
@@ -852,6 +995,64 @@ public enum MockHermesData {
         tools: tools,
         security: security,
         daemon: daemonLogs
+    )
+
+    public static let automationRuns: [HermesAutomationRun] = [
+        HermesAutomationRun(
+            id: "run-digest-001",
+            automationID: "auto-digest",
+            status: .succeeded,
+            startedAt: referenceDate.addingTimeInterval(-7_200),
+            finishedAt: referenceDate.addingTimeInterval(-7_180),
+            summary: "Summarized overnight issues and posted an in-app delivery status.",
+            logPreview: ["Fetched latest sessions", "Built digest", "Notification marked delivered in UI"]
+        ),
+        HermesAutomationRun(
+            id: "run-pr-001",
+            automationID: "auto-pr-review",
+            status: .failed,
+            startedAt: referenceDate.addingTimeInterval(-86_400),
+            finishedAt: referenceDate.addingTimeInterval(-86_360),
+            summary: "Mock run failed because connector delivery is not configured.",
+            logPreview: ["Loaded schedule", "Connector write unavailable in M4 mock"]
+        )
+    ]
+
+    public static let automations: [HermesAutomationJob] = [
+        HermesAutomationJob(
+            id: "auto-digest",
+            title: "Morning project digest",
+            prompt: "Every weekday morning, summarize overnight Hermes project activity and flag anything that needs approval.",
+            schedule: HermesAutomationSchedule(cron: "0 9 * * 1-5", humanDescription: "Weekdays at 9:00 AM", timezone: "America/Los_Angeles"),
+            status: .active,
+            project: projectHermes,
+            createdAt: referenceDate.addingTimeInterval(-10 * 86_400),
+            updatedAt: referenceDate.addingTimeInterval(-600),
+            nextRunAt: referenceDate.addingTimeInterval(3_600),
+            lastRun: automationRuns[0],
+            runHistory: [automationRuns[0]],
+            notificationStatus: .daemonUnsupported,
+            notificationSummary: "Shown in-app only. Desktop notification delivery needs daemon support and system permission."
+        ),
+        HermesAutomationJob(
+            id: "auto-pr-review",
+            title: "Friday PR review",
+            prompt: "Review open pull requests every Friday afternoon and draft a concise status summary.",
+            schedule: HermesAutomationSchedule(cron: "0 15 * * 5", humanDescription: "Fridays at 3:00 PM", timezone: "America/Los_Angeles"),
+            status: .paused,
+            project: projectHermes,
+            createdAt: referenceDate.addingTimeInterval(-20 * 86_400),
+            updatedAt: referenceDate.addingTimeInterval(-86_000),
+            nextRunAt: nil,
+            lastRun: automationRuns[1],
+            runHistory: [automationRuns[1]],
+            notificationStatus: .disabled,
+            notificationSummary: "Notifications disabled while paused."
+        )
+    ]
+
+    public static let automationIndex: [String: HermesAutomationJob] = Dictionary(
+        uniqueKeysWithValues: automations.map { ($0.id, $0) }
     )
 
     /// Clear restart-required bits across the snapshot — the mock uses
