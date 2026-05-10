@@ -17,11 +17,41 @@ public final class ConnectorsViewModel: ObservableObject {
         case failed(String)
     }
 
+    public enum SafetyConfirmation: Equatable, Identifiable {
+        case disconnect(connectorID: String, name: String)
+        case policy(connectorID: String, name: String, policy: HermesConnectorWritePolicy)
+
+        public var id: String {
+            switch self {
+            case .disconnect(let connectorID, _): return "disconnect-\(connectorID)"
+            case .policy(let connectorID, _, let policy): return "policy-\(connectorID)-\(policy.rawValue)"
+            }
+        }
+
+        public var title: String {
+            switch self {
+            case .disconnect(_, let name): return "Disconnect \(name)?"
+            case .policy(_, let name, let policy): return "Change \(name) to \(policy.displayName)?"
+            }
+        }
+
+        public var message: String {
+            switch self {
+            case .disconnect:
+                return "The daemon will revoke credentials and clear local sync state. This cannot be undone from the desktop app."
+            case .policy(_, _, let policy):
+                return policy == .autoApprove ? "Auto-approve all allows connector writes without prompting. Only use this for trusted, low-stakes services." : "This changes how connector writes are approval-gated by the daemon."
+            }
+        }
+    }
+
     @Published public private(set) var state: LoadState = .idle
     @Published public private(set) var actionState: ActionState = .idle
     @Published public private(set) var connectors: [HermesConnector] = []
     @Published public private(set) var boundaryNote: String = ""
     @Published public var selectedConnectorID: String?
+    @Published public var searchText: String = ""
+    @Published public var pendingSafetyConfirmation: SafetyConfirmation?
 
     /// Latest setup challenge returned from `beginConnectorSetup`. Drives
     /// the setup sheet — it intentionally never carries credentials.
@@ -39,9 +69,21 @@ public final class ConnectorsViewModel: ObservableObject {
         self.client = client
     }
 
+    public var filteredConnectors: [HermesConnector] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return connectors }
+        return connectors.filter { connector in
+            connector.displayName.localizedCaseInsensitiveContains(query) ||
+            connector.kind.displayName.localizedCaseInsensitiveContains(query) ||
+            connector.summary.localizedCaseInsensitiveContains(query) ||
+            connector.capabilities.contains { $0.displayName.localizedCaseInsensitiveContains(query) } ||
+            connector.scopes.contains { $0.displayName.localizedCaseInsensitiveContains(query) || $0.id.localizedCaseInsensitiveContains(query) }
+        }
+    }
+
     public var selectedConnector: HermesConnector? {
-        guard let id = selectedConnectorID else { return connectors.first }
-        return connectors.first { $0.id == id } ?? connectors.first
+        guard let id = selectedConnectorID else { return filteredConnectors.first ?? connectors.first }
+        return connectors.first { $0.id == id } ?? filteredConnectors.first ?? connectors.first
     }
 
     public var isSetupSheetPresented: Bool { setupConnector != nil }
@@ -103,6 +145,15 @@ public final class ConnectorsViewModel: ObservableObject {
         }
     }
 
+    public func requestPolicyUpdate(for connector: HermesConnector,
+                                    to policy: HermesConnectorWritePolicy) {
+        if policy == .autoApproveLowRisk || policy == .autoApprove {
+            pendingSafetyConfirmation = .policy(connectorID: connector.id, name: connector.displayName, policy: policy)
+        } else {
+            Task { await updatePolicy(for: connector, to: policy) }
+        }
+    }
+
     public func updatePolicy(for connector: HermesConnector,
                              to policy: HermesConnectorWritePolicy) async {
         actionState = .working("Updating write policy…")
@@ -117,6 +168,27 @@ public final class ConnectorsViewModel: ObservableObject {
         } catch {
             actionState = .failed(error.localizedDescription)
         }
+    }
+
+    public func requestDisconnect(_ connector: HermesConnector) {
+        pendingSafetyConfirmation = .disconnect(connectorID: connector.id, name: connector.displayName)
+    }
+
+    public func confirmPendingSafetyAction() async {
+        guard let confirmation = pendingSafetyConfirmation else { return }
+        pendingSafetyConfirmation = nil
+        switch confirmation {
+        case .disconnect(let connectorID, _):
+            guard let connector = connectors.first(where: { $0.id == connectorID }) else { return }
+            await disconnect(connector)
+        case .policy(let connectorID, _, let policy):
+            guard let connector = connectors.first(where: { $0.id == connectorID }) else { return }
+            await updatePolicy(for: connector, to: policy)
+        }
+    }
+
+    public func cancelPendingSafetyAction() {
+        pendingSafetyConfirmation = nil
     }
 
     public func disconnect(_ connector: HermesConnector) async {

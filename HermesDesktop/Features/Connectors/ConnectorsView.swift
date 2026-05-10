@@ -19,6 +19,21 @@ struct ConnectorsView: View {
         )) {
             ConnectorSetupSheet(viewModel: viewModel)
         }
+        .confirmationDialog(
+            viewModel.pendingSafetyConfirmation?.title ?? "Confirm connector action",
+            isPresented: Binding(
+                get: { viewModel.pendingSafetyConfirmation != nil },
+                set: { isPresented in if !isPresented { viewModel.cancelPendingSafetyAction() } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Confirm", role: .destructive) {
+                Task { await viewModel.confirmPendingSafetyAction() }
+            }
+            Button("Cancel", role: .cancel) { viewModel.cancelPendingSafetyAction() }
+        } message: {
+            Text(viewModel.pendingSafetyConfirmation?.message ?? "")
+        }
     }
 
     private var connectorList: some View {
@@ -35,6 +50,24 @@ struct ConnectorsView: View {
             .padding(.horizontal, HermesSpacing.lg)
             .padding(.top, HermesSpacing.lg)
 
+            HStack(spacing: HermesSpacing.sm) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(HermesColors.muted)
+                TextField("Search connectors", text: $viewModel.searchText)
+                    .textFieldStyle(.plain)
+                if !viewModel.searchText.isEmpty {
+                    Button { viewModel.searchText = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(HermesColors.muted)
+                }
+            }
+            .padding(HermesSpacing.sm)
+            .background(HermesColors.field)
+            .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
+            .padding(.horizontal, HermesSpacing.lg)
+
             switch viewModel.state {
             case .idle, .loading:
                 ProgressView("Loading connectors…")
@@ -50,10 +83,15 @@ struct ConnectorsView: View {
                                    title: "No connectors configured",
                                    message: "The daemon does not expose any connectors yet. Configure one server-side to surface it here.")
                         .padding(HermesSpacing.lg)
+                } else if viewModel.filteredConnectors.isEmpty {
+                    EmptyStateView(icon: "magnifyingglass",
+                                   title: "No connectors match",
+                                   message: "Try another search or clear the filter to see the full catalog.")
+                        .padding(HermesSpacing.lg)
                 } else {
                     ScrollView {
                         LazyVStack(spacing: HermesSpacing.sm) {
-                            ForEach(viewModel.connectors) { connector in
+                            ForEach(viewModel.filteredConnectors) { connector in
                                 ConnectorRow(connector: connector,
                                              isSelected: viewModel.selectedConnector?.id == connector.id)
                                     .onTapGesture { viewModel.selectedConnectorID = connector.id }
@@ -102,6 +140,11 @@ struct ConnectorsView: View {
                         .foregroundStyle(HermesColors.muted)
                 }
                 Spacer()
+                if let connector = viewModel.selectedConnector, !connector.status.isUsable {
+                    HermesButton("Add / Connect", kind: .primary) {
+                        viewModel.presentSetup(for: connector)
+                    }
+                }
                 StatusBadge("M5 mock/local", tone: .info)
             }
             ConnectorActionStateBanner(state: viewModel.actionState) {
@@ -224,7 +267,7 @@ private struct ConnectorDetailCard: View {
                             viewModel.presentSetup(for: connector)
                         }
                         HermesButton("Disconnect", kind: .destructive) {
-                            Task { await viewModel.disconnect(connector) }
+                            viewModel.requestDisconnect(connector)
                         }
                     } else {
                         HermesButton(connector.status == .pending ? "Continue setup" : "Set up connector",
@@ -253,7 +296,7 @@ private struct ConnectorPolicyCard: View {
                     PolicyOptionRow(policy: policy,
                                     isSelected: connector.writePolicy == policy,
                                     enabled: connector.status.isUsable) {
-                        Task { await viewModel.updatePolicy(for: connector, to: policy) }
+                        viewModel.requestPolicyUpdate(for: connector, to: policy)
                     }
                 }
                 if !connector.status.isUsable {
