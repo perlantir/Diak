@@ -10,6 +10,7 @@ struct ContentRouter: View {
     @StateObject private var sessions: SessionsViewModel
     @StateObject private var settings: SettingsViewModel
     @StateObject private var automations: AutomationsViewModel
+    @StateObject private var connectors: ConnectorsViewModel
 
     init(section: SidebarNavSection,
          daemon: DaemonStatusViewModel,
@@ -25,6 +26,7 @@ struct ContentRouter: View {
         _sessions = StateObject(wrappedValue: SessionsViewModel(client: client))
         _settings = StateObject(wrappedValue: SettingsViewModel(client: client))
         _automations = StateObject(wrappedValue: AutomationsViewModel(client: client))
+        _connectors = StateObject(wrappedValue: ConnectorsViewModel(client: client))
     }
 
     var body: some View {
@@ -41,9 +43,7 @@ struct ContentRouter: View {
                 case .automations:
                     AutomationsView(viewModel: automations)
                 case .connectors:
-                    EmptyStateView(icon: "link",
-                                   title: "Connectors",
-                                   message: "Manage external services Hermes can read and write to. Coming in M5.")
+                    ConnectorsView(viewModel: connectors)
                 case .skills:
                     EmptyStateView(icon: "wand.and.stars",
                                    title: "Skills",

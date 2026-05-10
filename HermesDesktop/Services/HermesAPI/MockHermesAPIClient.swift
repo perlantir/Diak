@@ -32,6 +32,11 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     public private(set) var pauseAutomationCallCount = 0
     public private(set) var resumeAutomationCallCount = 0
     public private(set) var deleteAutomationCallCount = 0
+    public private(set) var connectorsCallCount = 0
+    public private(set) var connectorCallCount = 0
+    public private(set) var beginConnectorSetupCallCount = 0
+    public private(set) var updateConnectorPolicyCallCount = 0
+    public private(set) var disconnectConnectorCallCount = 0
 
     /// In-memory approval/evidence stores. Mutating them through
     /// `decideApproval` keeps state visible across reads inside a single
@@ -46,6 +51,13 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     /// In-memory automation store. This remains a truthful local mock:
     /// it mutates UI-visible state only and never schedules real cron work.
     private var automationJobs: [String: HermesAutomationJob] = MockHermesData.automationIndex
+
+    /// In-memory connector catalog. The mock never reaches out to real
+    /// providers; setup transitions only flip the local auth/sync flags
+    /// and surface an in-app approval id so the UI can describe the
+    /// daemon handoff truthfully.
+    private var connectorIndex: [String: HermesConnector] = MockHermesData.connectorIndex
+    private var connectorBoundaryNote: String = MockHermesData.connectorBoundaryNote
 
     /// Optional override: force a specific session to be returned by
     /// `createSession` so tests/previews can pin the id.
@@ -434,6 +446,127 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
 
     public func resetAutomationState() {
         automationJobs = MockHermesData.automationIndex
+    }
+
+    public func resetConnectorState() {
+        connectorIndex = MockHermesData.connectorIndex
+        connectorBoundaryNote = MockHermesData.connectorBoundaryNote
+    }
+
+    // MARK: Connectors (M5)
+
+    public func connectors() async throws -> HermesConnectorCatalog {
+        connectorsCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        let ordered = connectorIndex.values.sorted { lhs, rhs in
+            // Connected/usable connectors float to the top so the UI
+            // surfaces actionable state first; ties broken by name.
+            if lhs.status.isUsable != rhs.status.isUsable {
+                return lhs.status.isUsable && !rhs.status.isUsable
+            }
+            return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+        }
+        return HermesConnectorCatalog(connectors: ordered, boundaryNote: connectorBoundaryNote)
+    }
+
+    public func connector(id: String) async throws -> HermesConnector {
+        connectorCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        guard let connector = connectorIndex[id] else {
+            throw HermesAPIError.http(status: 404, body: "no connector \(id)")
+        }
+        return connector
+    }
+
+    public func beginConnectorSetup(_ request: HermesConnectorSetupRequest) async throws -> HermesConnectorSetupChallenge {
+        beginConnectorSetupCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        guard request.acknowledgedDaemonHandoff else { throw HermesAPIError.invalidURL }
+        guard var connector = connectorIndex[request.connectorID] else {
+            throw HermesAPIError.http(status: 404, body: "no connector \(request.connectorID)")
+        }
+
+        // Generate a deterministic-ish approval id for the audit trail.
+        let approvalID = "appr-conn-setup-\(connector.id)"
+        let challenge: HermesConnectorSetupChallenge
+
+        switch connector.setupKind {
+        case .oauth, .deviceCode:
+            challenge = HermesConnectorSetupChallenge(
+                connectorID: connector.id,
+                setupKind: connector.setupKind,
+                state: .pendingDaemonHandoff,
+                message: "The daemon will perform the \(connector.setupKind.displayName) handoff. The Mac app does not open a browser or store tokens.",
+                approvalID: approvalID
+            )
+            connector.status = .pending
+            connector.pendingApprovalID = approvalID
+            connector.lastError = nil
+        case .apiKey:
+            challenge = HermesConnectorSetupChallenge(
+                connectorID: connector.id,
+                setupKind: .apiKey,
+                state: .awaitingApproval,
+                message: "API key entry is performed in the daemon configuration. The Mac app only shows the daemon-owned presence flag.",
+                approvalID: approvalID
+            )
+            connector.status = .pending
+            connector.pendingApprovalID = approvalID
+        case .manual:
+            challenge = HermesConnectorSetupChallenge(
+                connectorID: connector.id,
+                setupKind: .manual,
+                state: .awaitingApproval,
+                message: "Manual setup is daemon-side only. Follow the daemon documentation to provision this connector.",
+                approvalID: approvalID
+            )
+            connector.status = .pending
+            connector.pendingApprovalID = approvalID
+        case .unknown:
+            challenge = HermesConnectorSetupChallenge(
+                connectorID: connector.id,
+                setupKind: .unknown,
+                state: .unsupportedInDesktop,
+                message: "The desktop app does not know how to begin this setup. The daemon may still expose a CLI path.",
+                approvalID: nil
+            )
+        }
+
+        connectorIndex[request.connectorID] = connector
+        return challenge
+    }
+
+    public func updateConnectorPolicy(_ update: HermesConnectorPolicyUpdate) async throws -> HermesConnectorMutationResult {
+        updateConnectorPolicyCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        guard var connector = connectorIndex[update.connectorID] else {
+            throw HermesAPIError.http(status: 404, body: "no connector \(update.connectorID)")
+        }
+        connector.writePolicy = update.writePolicy
+        connectorIndex[update.connectorID] = connector
+        return HermesConnectorMutationResult(
+            connector: connector,
+            note: "Write policy set to \(update.writePolicy.displayName). Writes still surface through the approval system unless auto-approve is selected."
+        )
+    }
+
+    public func disconnectConnector(id: String) async throws -> HermesConnectorDisconnectResult {
+        disconnectConnectorCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        guard var connector = connectorIndex[id] else {
+            throw HermesAPIError.http(status: 404, body: "no connector \(id)")
+        }
+        connector.status = .notConnected
+        connector.syncStatus = .neverSynced
+        connector.lastSyncedAt = nil
+        connector.lastError = nil
+        connector.pendingApprovalID = nil
+        connectorIndex[id] = connector
+        return HermesConnectorDisconnectResult(
+            disconnected: true,
+            id: id,
+            note: "Daemon revoked credentials and cleared local sync state."
+        )
     }
 
     private static func riskWeight(_ risk: HermesApprovalRisk) -> Int {
@@ -1054,6 +1187,116 @@ public enum MockHermesData {
     public static let automationIndex: [String: HermesAutomationJob] = Dictionary(
         uniqueKeysWithValues: automations.map { ($0.id, $0) }
     )
+
+    // MARK: Connectors (M5 fixtures)
+
+    public static let connectorBoundaryNote: String = "Hermes Desktop only manages connector records through the daemon API boundary. Real OAuth, credential storage, and outbound writes remain daemon-owned and audited through the approval system."
+
+    public static let connectors: [HermesConnector] = [
+        HermesConnector(
+            id: "conn-slack",
+            kind: .slack,
+            displayName: "Slack",
+            summary: "Read channels, write to threads, and post on your behalf with approvals.",
+            status: .connected,
+            syncStatus: .ok,
+            writePolicy: .alwaysAsk,
+            capabilities: [.read, .write, .send],
+            scopes: [
+                HermesConnectorScope(id: "channels:read", displayName: "Read channels", isGranted: true, isRequired: true),
+                HermesConnectorScope(id: "chat:write", displayName: "Send messages", isGranted: true, isRequired: true),
+                HermesConnectorScope(id: "files:read", displayName: "Read files", isGranted: false, isRequired: false)
+            ],
+            setupKind: .oauth,
+            accountLabel: "uberkiwi.slack.com",
+            lastSyncedAt: referenceDate.addingTimeInterval(-600)
+        ),
+        HermesConnector(
+            id: "conn-github",
+            kind: .github,
+            displayName: "GitHub",
+            summary: "Read repositories, comment on issues and PRs. Writes always require approval.",
+            status: .connected,
+            syncStatus: .degraded,
+            writePolicy: .autoApproveLowRisk,
+            capabilities: [.read, .write],
+            scopes: [
+                HermesConnectorScope(id: "repo:read", displayName: "Read repositories", isGranted: true, isRequired: true),
+                HermesConnectorScope(id: "issues:write", displayName: "Comment on issues", isGranted: true, isRequired: false),
+                HermesConnectorScope(id: "pull_requests:write", displayName: "Open pull requests", detail: "Required to file PRs from session output.", isGranted: false, isRequired: true)
+            ],
+            setupKind: .oauth,
+            accountLabel: "uberkiwi",
+            lastSyncedAt: referenceDate.addingTimeInterval(-3_600),
+            lastError: "Webhook delivery delayed; backfilling."
+        ),
+        HermesConnector(
+            id: "conn-gmail",
+            kind: .gmail,
+            displayName: "Gmail",
+            summary: "Search recent threads and draft replies. Sending is policy-gated.",
+            status: .expired,
+            syncStatus: .error,
+            writePolicy: .alwaysAsk,
+            capabilities: [.read, .send],
+            scopes: [
+                HermesConnectorScope(id: "gmail.readonly", displayName: "Read mail", isGranted: true, isRequired: true),
+                HermesConnectorScope(id: "gmail.send", displayName: "Send mail", isGranted: false, isRequired: true)
+            ],
+            setupKind: .oauth,
+            accountLabel: "nick@uberkiwi.com",
+            lastSyncedAt: referenceDate.addingTimeInterval(-86_400),
+            lastError: "Token expired. Reauthorise to resume sync."
+        ),
+        HermesConnector(
+            id: "conn-notion",
+            kind: .notion,
+            displayName: "Notion",
+            summary: "Read shared workspace pages. Writes are blocked by default.",
+            status: .notConnected,
+            syncStatus: .neverSynced,
+            writePolicy: .blocked,
+            capabilities: [.read, .write],
+            scopes: [
+                HermesConnectorScope(id: "workspace:read", displayName: "Read workspace", isGranted: false, isRequired: true),
+                HermesConnectorScope(id: "page:write", displayName: "Update pages", isGranted: false, isRequired: false)
+            ],
+            setupKind: .oauth
+        ),
+        HermesConnector(
+            id: "conn-linear",
+            kind: .linear,
+            displayName: "Linear",
+            summary: "Read issues, projects, and cycles. Connected via daemon API key.",
+            status: .connected,
+            syncStatus: .ok,
+            writePolicy: .alwaysAsk,
+            capabilities: [.read, .write],
+            scopes: [
+                HermesConnectorScope(id: "issues:read", displayName: "Read issues", isGranted: true, isRequired: true),
+                HermesConnectorScope(id: "issues:write", displayName: "Update issues", isGranted: true, isRequired: false)
+            ],
+            setupKind: .apiKey,
+            accountLabel: "Workspace token (daemon-owned)",
+            lastSyncedAt: referenceDate.addingTimeInterval(-1_200)
+        ),
+        HermesConnector(
+            id: "conn-http",
+            kind: .http,
+            displayName: "Custom HTTP webhook",
+            summary: "Generic outbound webhook. Configured manually in the daemon config file.",
+            status: .notConnected,
+            syncStatus: .neverSynced,
+            writePolicy: .blocked,
+            capabilities: [.send],
+            scopes: [],
+            setupKind: .manual
+        )
+    ]
+
+    public static var connectorIndex: [String: HermesConnector] {
+        Dictionary(uniqueKeysWithValues: connectors.map { ($0.id, $0) })
+    }
 
     /// Clear restart-required bits across the snapshot — the mock uses
     /// this when the user "restarts" the daemon so the UI can verify

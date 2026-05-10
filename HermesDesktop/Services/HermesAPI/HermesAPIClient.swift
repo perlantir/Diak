@@ -80,4 +80,33 @@ public protocol HermesAPIClient: Sendable {
     func pauseAutomation(id: String) async throws -> HermesAutomationMutationResult
     func resumeAutomation(id: String) async throws -> HermesAutomationMutationResult
     func deleteAutomation(id: String) async throws -> HermesAutomationDeleteResult
+
+    // MARK: Connectors (M5)
+
+    /// Catalog of every connector the daemon knows about plus a
+    /// boundary note explaining what the desktop app does and does not do.
+    /// The desktop app never touches real provider APIs; setup/OAuth
+    /// remain daemon-owned, and writes always flow through the existing
+    /// approval system.
+    func connectors() async throws -> HermesConnectorCatalog
+
+    /// Fetch one connector by id. Mirrors the approval/automation
+    /// pattern so the detail panel can refresh after policy or setup
+    /// changes without reloading the whole catalog.
+    func connector(id: String) async throws -> HermesConnector
+
+    /// Begin a setup flow for the given connector. The desktop boundary
+    /// is intentionally narrow: implementations must not contact provider
+    /// APIs themselves, must not store tokens, and should return a
+    /// mock/pending/approval-oriented `HermesConnectorSetupChallenge`
+    /// describing what the daemon will (and will not) do next.
+    func beginConnectorSetup(_ request: HermesConnectorSetupRequest) async throws -> HermesConnectorSetupChallenge
+
+    /// Update the connector's safe-write policy. The only mutable field
+    /// from the desktop boundary; everything else is daemon-owned.
+    func updateConnectorPolicy(_ update: HermesConnectorPolicyUpdate) async throws -> HermesConnectorMutationResult
+
+    /// Disconnect/disable a connector. The daemon revokes its own
+    /// credentials; the desktop app simply requests the change.
+    func disconnectConnector(id: String) async throws -> HermesConnectorDisconnectResult
 }

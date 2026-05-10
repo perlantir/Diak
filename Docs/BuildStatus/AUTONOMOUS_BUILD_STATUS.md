@@ -1,50 +1,37 @@
 # Hermes Desktop Autonomous Build Status
 
-Updated: 2026-05-09 23:53 CDT
+Updated: 2026-05-10 01:00 CDT
 
 ## Current milestone
 
-M3 — settings, profiles, models, tools has been independently verified locally.
+M5 — connectors UI and typed API boundary.
 
-## Latest verified commits
+## Repo/process state
 
-- `HEAD` — `M3 settings models and tools`
-- `0e98729` — `Add M3 settings build prompt`
-- `24f0965` — `M2 approvals and action evidence`
-- `8ca77ff` — `Update M2 builder status`
-- `f9617a9` — `Add M2 prompt and connector architecture decision`
+- Project files present: `project.yml`, `HermesDesktop.xcodeproj`.
+- No active Claude Code builder for `/Users/perlantir/Projects/HermesDesktop` was found via `ps`/`pgrep`.
+- Previous verified head before this M5 increment: `7616014 Implement M4 automations`.
+- Claude Code M5 builder output left local changes for connector catalog/detail/setup/policy UI and API boundary.
 
-## M3 result
+## Work completed this run
 
-Implemented M3 within the local SwiftUI/API-boundary scope:
+- Reviewed the completed M5 builder changes instead of starting a duplicate builder.
+- Regenerated the Xcode project with `xcodegen generate`.
+- Fixed two deterministic compile/test issues from the agent-produced M5 work:
+  - Corrected `HermesConnectorScope` argument order in `MockHermesAPIClient`.
+  - Added M5 connector protocol stubs to `RestartOnlyConfigClient` test double.
+  - Made unknown connector write-policy decoding fail closed to `.alwaysAsk` per the new test contract.
+- Verified M5 locally.
 
-- typed Hermes configuration models for profiles, model providers, tool permissions, security/privacy, daemon logs, snapshots, and update payloads
-- Hermes API client boundary methods for config snapshot/update, daemon restart/reconnect, and daemon log summary
-- mock client config state transitions for profile/model/tool/security edits and restart-required clearing
-- URLSession endpoint shells for the same M3 boundary
-- Settings container with General/Profile, Models & Providers, Tools & Permissions, Security & Privacy, and Hermes Engine sections
-- reusable design-system components for capability chips, toggle rows, restart-required banner, and log previews
-- settings view model with loading/error, draft editing, unsaved-change, save, restart, reconnect, and restart-required behavior
-- tests for config decoding and settings view-model/mock-client behavior
-
-Explicitly not implemented in M3:
-
-- real OAuth/connectors/Composio
-- real connector writes or destructive actions
-- automations
-- skills/memory UI
-- menu bar/global hotkey
-- packaging/updater/notarization
-- Hermes engine internals inside the Mac app
-
-## Verification after M3 implementation
+## Verification evidence
 
 Commands run from `/Users/perlantir/Projects/HermesDesktop`:
 
 ```bash
 git status --short
-ps ax -o pid=,etime=,command= | grep -i '[c]laude' | grep 'HermesDesktop' || true
-/opt/homebrew/bin/xcodegen generate
+ps aux | grep -i '[c]laude' | grep -i HermesDesktop || true
+pgrep -af 'claude.*HermesDesktop|HermesDesktop.*claude' || true
+xcodegen generate
 xcodebuild -list
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -configuration Debug build
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' test
@@ -53,37 +40,27 @@ git diff --check
 
 Results:
 
-- No active Claude Code builder was found for `HermesDesktop` during this cron run.
-- XcodeGen succeeded and regenerated `HermesDesktop.xcodeproj`.
-- `xcodebuild -list` succeeded; scheme: `HermesDesktop`.
-- Debug macOS build succeeded.
-- Tests succeeded: 47 tests, 0 failures.
-- `git diff --check` succeeded.
-- Secret-like scan found no key material; matches were benign source text containing words like `risk-sorted`.
+- `xcodegen generate`: succeeded.
+- `xcodebuild -list`: succeeded; scheme `HermesDesktop`.
+- Debug macOS build: succeeded after the local `HermesConnectorScope` fix.
+- Tests: succeeded after local test-double and write-policy fixes.
+- Test count: 71 tests, 0 failures.
+- Latest passing test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_00-59-53--0500.xcresult`.
+- `git diff --check`: succeeded.
 
-Test result bundle:
+## M5 scope notes
 
-```text
-/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.09_23-53-27--0500.xcresult
-```
+Implemented/verifiable M5 surface is local/mock/API-boundary only:
 
-## Current repo state
+- Connector catalog and detail UI.
+- Connector status/sync/scope/error state models.
+- Daemon-owned setup handoff UI with required acknowledgement.
+- Safe write-policy updates through typed API boundary.
+- Disconnect request boundary.
+- URLSession endpoint tests for connector boundary calls.
 
-M3 source changes are committed as the verified `HEAD` milestone increment.
-
-Post-commit `git status --short` is expected to be clean after this status file is included in the milestone commit.
-
-Changed/added areas in the M3 commit:
-
-- `HermesDesktop/Models/HermesConfig.swift`
-- `HermesDesktop/Services/HermesAPI/*`
-- `HermesDesktop/Features/Settings/*`
-- `HermesDesktop/Features/AppShell/ContentRouter.swift`
-- `HermesDesktop/DesignSystem/Components/*`
-- `HermesDesktopTests/HermesConfigDecodingTests.swift`
-- `HermesDesktopTests/SettingsViewModelTests.swift`
-- `Docs/BuildStatus/AUTONOMOUS_BUILD_STATUS.md`
+No real connector/OAuth/provider token handling was implemented. The Swift app still treats Hermes Agent/the daemon as the engine and does not reimplement connector internals.
 
 ## Next action
 
-Commit the verified M3 increment. Do not start M4 automations from this cron run because the project context still identifies M3 as the current milestone and explicitly says not to implement automations yet. Next build-manager action after the commit should be to prepare a bounded M4 prompt only once the milestone boundary is advanced.
+Commit this verified M5 increment, then the next autonomous milestone is M6 — skills/memory UI and typed API boundary only. Do not start M7 menu bar/global hotkey/native integrations until M6 is verified.

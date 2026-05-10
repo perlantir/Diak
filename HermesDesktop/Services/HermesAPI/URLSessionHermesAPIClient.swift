@@ -153,6 +153,38 @@ public final class URLSessionHermesAPIClient: HermesAPIClient, @unchecked Sendab
         try await delete("/automations/\(id)")
     }
 
+    // MARK: Connectors (M5)
+
+    public func connectors() async throws -> HermesConnectorCatalog {
+        try await get("/connectors")
+    }
+
+    public func connector(id: String) async throws -> HermesConnector {
+        try await get("/connectors/\(id)")
+    }
+
+    public func beginConnectorSetup(_ request: HermesConnectorSetupRequest) async throws -> HermesConnectorSetupChallenge {
+        // The boundary contract requires the user to acknowledge that
+        // the Mac app will not run a real OAuth/browser flow itself.
+        // Reject locally so misuse never reaches the daemon.
+        guard request.acknowledgedDaemonHandoff else {
+            throw HermesAPIError.invalidURL
+        }
+        let trimmed = request.connectorID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw HermesAPIError.invalidURL }
+        return try await post("/connectors/\(trimmed)/setup", body: request)
+    }
+
+    public func updateConnectorPolicy(_ update: HermesConnectorPolicyUpdate) async throws -> HermesConnectorMutationResult {
+        let trimmed = update.connectorID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw HermesAPIError.invalidURL }
+        return try await patch("/connectors/\(trimmed)/policy", body: update)
+    }
+
+    public func disconnectConnector(id: String) async throws -> HermesConnectorDisconnectResult {
+        try await delete("/connectors/\(id)")
+    }
+
     // MARK: Internals
 
     private func get<T: Decodable>(_ path: String) async throws -> T {

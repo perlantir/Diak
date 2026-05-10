@@ -80,4 +80,24 @@ final class RestartOnlyConfigClient: HermesAPIClient, @unchecked Sendable {
     func deleteAutomation(id: String) async throws -> HermesAutomationDeleteResult {
         throw HermesAPIError.http(status: 501, body: nil)
     }
+
+    func connectors() async throws -> HermesConnectorCatalog {
+        HermesConnectorCatalog(connectors: [], boundaryNote: "Connector APIs are not used by settings tests.")
+    }
+
+    func connector(id: String) async throws -> HermesConnector {
+        throw HermesAPIError.http(status: 404, body: nil)
+    }
+
+    func beginConnectorSetup(_ request: HermesConnectorSetupRequest) async throws -> HermesConnectorSetupChallenge {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
+
+    func updateConnectorPolicy(_ update: HermesConnectorPolicyUpdate) async throws -> HermesConnectorMutationResult {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
+
+    func disconnectConnector(id: String) async throws -> HermesConnectorDisconnectResult {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
 }
