@@ -15,6 +15,7 @@ import json
 import os
 import queue
 import re
+import subprocess
 import sys
 import tempfile
 import threading
@@ -117,7 +118,7 @@ class BridgeState:
         self.path = path or DEFAULT_STATE_PATH
         self.persist = persist
         self._lock = threading.RLock()
-        self._data: dict[str, Any] = {"sessions": {}, "messages": {}, "events": {}, "connectors": {}, "artifacts": {}}
+        self._data: dict[str, Any] = {"sessions": {}, "messages": {}, "events": {}, "connectors": {}, "artifacts": {}, "approvals": {}, "memory": {}, "automations": {}, "skills": {}}
         if persist:
             self._load()
 
@@ -131,10 +132,14 @@ class BridgeState:
                     self._data["events"] = loaded.get("events", {}) if isinstance(loaded.get("events", {}), dict) else {}
                     self._data["connectors"] = loaded.get("connectors", {}) if isinstance(loaded.get("connectors", {}), dict) else {}
                     self._data["artifacts"] = loaded.get("artifacts", {}) if isinstance(loaded.get("artifacts", {}), dict) else {}
+                    self._data["approvals"] = loaded.get("approvals", {}) if isinstance(loaded.get("approvals", {}), dict) else {}
+                    self._data["memory"] = loaded.get("memory", {}) if isinstance(loaded.get("memory", {}), dict) else {}
+                    self._data["automations"] = loaded.get("automations", {}) if isinstance(loaded.get("automations", {}), dict) else {}
+                    self._data["skills"] = loaded.get("skills", {}) if isinstance(loaded.get("skills", {}), dict) else {}
         except Exception:
             # Corrupt state must not prevent the bridge from starting.  Keep the
             # bad file for forensic inspection and begin with empty state.
-            self._data = {"sessions": {}, "messages": {}, "events": {}, "connectors": {}, "artifacts": {}}
+            self._data = {"sessions": {}, "messages": {}, "events": {}, "connectors": {}, "artifacts": {}, "approvals": {}, "memory": {}, "automations": {}, "skills": {}}
 
     def _save_locked(self) -> None:
         if not self.persist:
@@ -252,12 +257,61 @@ CONNECTOR_CATALOG: list[dict[str, Any]] = [
             {"id": "linear.write", "display_name": "Update issues", "detail": "Create/update issues after approval.", "is_granted": False, "is_required": False},
         ],
     },
+    {
+        "id": "conn-telegram", "kind": "http", "display_name": "Telegram",
+        "summary": "Read Hermes Telegram gateway status and send messages only after explicit Diak approval.",
+        "status": "connected", "sync_status": "ok", "write_policy": "always_ask",
+        "capabilities": ["read", "send"], "setup_kind": "none",
+        "account_label": "Hermes Telegram home channel",
+        "scopes": [
+            {"id": "telegram.status", "display_name": "Read gateway status", "detail": "Inspect Hermes Telegram delivery availability.", "is_granted": True, "is_required": True},
+            {"id": "telegram.send", "display_name": "Send messages", "detail": "Send Telegram messages after explicit approval.", "is_granted": True, "is_required": False},
+        ],
+    },
 ]
 
 
 def connector_toolkit(connector_id: str) -> str:
     return connector_id.removeprefix("conn-").upper().replace("-", "_")
 
+
+def _parse_hermes_cron_list(output: str) -> list[dict[str, Any]]:
+    jobs: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    for raw in output.splitlines():
+        line = raw.rstrip()
+        m = re.match(r"\s*([0-9a-f]{8,}) \[(\w+)\]", line)
+        if m:
+            if current:
+                jobs.append(current)
+            current = {"id": m.group(1), "status": "active" if m.group(2) == "active" else "paused"}
+            continue
+        if current and ":" in line:
+            key, val = line.strip().split(":", 1)
+            current[key.lower().replace(" ", "_")] = val.strip()
+    if current:
+        jobs.append(current)
+    return jobs
+
+def _run_command(argv: list[str], timeout: int = 30) -> tuple[int, str]:
+    try:
+        cp = subprocess.run(argv, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+        return cp.returncode, cp.stdout
+    except Exception as exc:
+        return 1, str(exc)
+
+def _skill_category_from_path(path: Path) -> str:
+    text = "/".join(path.parts).lower()
+    if any(x in text for x in ("coding", "software", "ios", "github")): return "coding"
+    if any(x in text for x in ("research", "mlops")): return "research"
+    if any(x in text for x in ("devops", "ops")): return "ops"
+    if "data" in text: return "data"
+    if any(x in text for x in ("plan", "product")): return "planning"
+    return "general"
+
+def _extract_frontmatter_field(text: str, field: str, default: str = "") -> str:
+    m = re.search(rf"^\s*{re.escape(field)}\s*:\s*[\"]?([^\n\"]+)", text, flags=re.MULTILINE)
+    return m.group(1).strip().strip("'") if m else default
 
 class ConnectorRegistry:
     def __init__(self, state: BridgeState, config: BridgeConfig):
@@ -508,6 +562,32 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
                 return self._handle_get_session_path(path)
             if path == "/connectors":
                 return self._send_json(200, self.server.connectors.list())
+            if path == "/approvals":
+                return self._send_json(200, self._list_approvals())
+            match = re.fullmatch(r"/approvals/([^/]+)", path)
+            if match:
+                approval = self._get_approval(match.group(1))
+                if not approval:
+                    return self._send_error(404, "Approval not found")
+                return self._send_json(200, approval)
+            if path == "/automations":
+                return self._send_json(200, self._list_automations())
+            if path == "/memory":
+                return self._send_json(200, self._memory_dashboard())
+            match = re.fullmatch(r"/memory/([^/]+)", path)
+            if match:
+                item = self._get_memory(match.group(1))
+                if not item:
+                    return self._send_error(404, "Memory not found")
+                return self._send_json(200, item)
+            if path == "/skills":
+                return self._send_json(200, self._skills_catalog())
+            match = re.fullmatch(r"/skills/([^/]+)", path)
+            if match:
+                skill = self._get_skill(match.group(1))
+                if not skill:
+                    return self._send_error(404, "Skill not found")
+                return self._send_json(200, skill)
             match = re.fullmatch(r"/connectors/([^/]+)", path)
             if match:
                 connector = self.server.connectors.get(match.group(1))
@@ -538,6 +618,22 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
             if match:
                 status, payload = self.server.connectors.begin_setup(match.group(1))
                 return self._send_json(status, payload)
+            match = re.fullmatch(r"/connectors/([^/]+)/actions/send", path)
+            if match:
+                return self._queue_connector_send(match.group(1), body)
+            match = re.fullmatch(r"/approvals/([^/]+)/decision", path)
+            if match:
+                return self._decide_approval(match.group(1), body)
+            if path == "/automations":
+                return self._create_automation(body)
+            match = re.fullmatch(r"/automations/([^/]+)/test-run", path)
+            if match:
+                return self._run_automation(match.group(1))
+            match = re.fullmatch(r"/automations/([^/]+)/(pause|resume)", path)
+            if match:
+                return self._set_automation_status(match.group(1), "paused" if match.group(2) == "pause" else "active")
+            if path == "/memory":
+                return self._create_memory(body)
             return self._send_error(404, "Not found")
         except Exception as exc:
             traceback.print_exc()
@@ -550,6 +646,15 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
         body = self._read_json_body()
         if body is None:
             return
+        match = re.fullmatch(r"/automations/([^/]+)", path)
+        if match:
+            return self._update_automation(match.group(1), body)
+        match = re.fullmatch(r"/memory/([^/]+)", path)
+        if match:
+            return self._update_memory(match.group(1), body)
+        match = re.fullmatch(r"/skills/([^/]+)/enabled", path)
+        if match:
+            return self._set_skill_enabled(match.group(1), bool(body.get("is_enabled")))
         match = re.fullmatch(r"/connectors/([^/]+)/policy", path)
         if match:
             policy = str(body.get("write_policy") or "always_ask")
@@ -563,6 +668,12 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
         if not self._authorized():
             return
         path = urlparse(self.path).path.rstrip("/") or "/"
+        match = re.fullmatch(r"/automations/([^/]+)", path)
+        if match:
+            return self._delete_automation(match.group(1))
+        match = re.fullmatch(r"/memory/([^/]+)", path)
+        if match:
+            return self._delete_memory(match.group(1))
         match = re.fullmatch(r"/connectors/([^/]+)", path)
         if match:
             result = self.server.connectors.disconnect(match.group(1))
@@ -570,6 +681,232 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
                 return self._send_error(404, "Connector not found")
             return self._send_json(200, result)
         return self._send_error(404, "Not found")
+
+
+    def _list_approvals(self) -> list[dict[str, Any]]:
+        with self.server.state._lock:
+            vals = list(self.server.state._data.setdefault("approvals", {}).values())
+        vals.sort(key=lambda a: a.get("created_at", ""), reverse=True)
+        return vals
+
+    def _get_approval(self, approval_id: str) -> dict[str, Any] | None:
+        with self.server.state._lock:
+            approval = self.server.state._data.setdefault("approvals", {}).get(approval_id)
+            return dict(approval) if isinstance(approval, dict) else None
+
+    def _store_approval(self, approval: dict[str, Any]) -> dict[str, Any]:
+        with self.server.state._lock:
+            self.server.state._data.setdefault("approvals", {})[approval["id"]] = dict(approval)
+            self.server.state._save_locked()
+        return approval
+
+    def _queue_connector_send(self, connector_id: str, body: dict[str, Any]) -> None:
+        connector = self.server.connectors.get(connector_id)
+        if not connector:
+            return self._send_error(404, "Connector not found")
+        if connector_id != "conn-telegram":
+            return self._send_error(400, "Only Telegram send is implemented in this Diak bridge slice")
+        message = str(body.get("message") or "").strip()
+        target = str(body.get("target") or "telegram").strip() or "telegram"
+        if not message:
+            return self._send_error(400, "Missing message")
+        approval_id = make_id("appr-telegram-send")
+        now = utc_now()
+        approval = {
+            "id": approval_id, "title": "Send Telegram message", "summary": message[:240],
+            "risk": "medium", "status": "pending", "created_at": now, "updated_at": now,
+            "session_id": None, "action_type": "connector_send", "target": target,
+            "payload_preview": {"connector_id": connector_id, "target": target, "message": message},
+            "decision_note": None,
+        }
+        self._store_approval(approval)
+        with self.server.state._lock:
+            self.server.state._data.setdefault("connectors", {}).setdefault(connector_id, {}).update({"pending_approval_id": approval_id, "status": "connected", "sync_status": "ok"})
+            self.server.state._save_locked()
+        return self._send_json(200, {"approval": approval, "note": "Telegram send queued for explicit approval; no message sent yet."})
+
+    def _decide_approval(self, approval_id: str, body: dict[str, Any]) -> None:
+        approval = self._get_approval(approval_id)
+        if not approval:
+            return self._send_error(404, "Approval not found")
+        decision = str(body.get("decision") or "").lower()
+        if decision not in ("approved", "denied", "approve", "deny"):
+            return self._send_error(400, "Decision must be approved or denied")
+        approved = decision in ("approved", "approve")
+        note = str(body.get("note") or "").strip() or None
+        approval["status"] = "approved" if approved else "denied"
+        approval["decision_note"] = note
+        approval["updated_at"] = utc_now()
+        if approved and approval.get("action_type") == "connector_send":
+            payload = approval.get("payload_preview") or {}
+            sent = self._send_telegram_via_hermes(str(payload.get("target") or "telegram"), str(payload.get("message") or ""))
+            approval["execution_result"] = sent
+            if not sent.get("success"):
+                approval["status"] = "failed"
+        self._store_approval(approval)
+        return self._send_json(200, approval)
+
+    def _send_telegram_via_hermes(self, target: str, message: str) -> dict[str, Any]:
+        agent_path = str(self.server.config.hermes_agent_path.expanduser())
+        if agent_path not in sys.path:
+            sys.path.insert(0, agent_path)
+        try:
+            from tools.send_message_tool import send_message_tool
+            raw = send_message_tool({"action": "send", "target": target, "message": message})
+            payload = json.loads(raw) if isinstance(raw, str) else raw
+            ok = not (isinstance(payload, dict) and payload.get("error"))
+            return {"success": bool(ok), "provider_result": payload}
+        except Exception as exc:
+            return {"success": False, "error": str(exc)}
+
+    def _list_automations(self) -> list[dict[str, Any]]:
+        with self.server.state._lock:
+            jobs = list(self.server.state._data.setdefault("automations", {}).values())
+        # Refresh with Hermes cron CLI metadata when available.
+        rc, out = _run_command(["hermes", "cron", "list"], timeout=15)
+        if rc == 0:
+            cron = {j["id"]: j for j in _parse_hermes_cron_list(out)}
+            for job in jobs:
+                cid = job.get("cron_job_id")
+                if cid and cid in cron:
+                    job["status"] = cron[cid].get("status", job.get("status", "active"))
+                    job["next_run_at"] = cron[cid].get("next_run") or job.get("next_run_at")
+        jobs.sort(key=lambda j: j.get("updated_at", ""), reverse=True)
+        return jobs
+
+    def _automation_payload(self, job_id: str, title: str, prompt: str, cron: str, human: str, status: str = "active", cron_job_id: str | None = None, run_history: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+        now = utc_now()
+        return {"id": job_id, "title": title, "prompt": prompt,
+                "schedule": {"cron": cron, "human_description": human, "timezone": os.getenv("TZ", "local")},
+                "status": status, "project": None, "created_at": now, "updated_at": now, "next_run_at": None,
+                "last_run": (run_history or [None])[-1], "run_history": run_history or [],
+                "notification_status": "enabled", "notification_summary": "Managed by Hermes cron when cron_job_id is present.",
+                "model_override": None, "cron_job_id": cron_job_id}
+
+    def _create_automation(self, body: dict[str, Any]) -> None:
+        title = str(body.get("title") or "").strip()
+        prompt = str(body.get("prompt") or "").strip()
+        schedule = body.get("schedule") or {}
+        cron = str(schedule.get("cron") or "").strip()
+        human = str(schedule.get("human_description") or cron).strip() or cron
+        if not (title and prompt and cron):
+            return self._send_error(400, "Missing automation title, prompt, or schedule")
+        cron_job_id = None
+        rc, out = _run_command(["hermes", "cron", "create", cron, prompt, "--name", f"diak-{title}", "--deliver", "local", "--repeat", "1"], timeout=30)
+        if rc == 0:
+            m = re.search(r"([0-9a-f]{8,})", out)
+            cron_job_id = m.group(1) if m else None
+        job = self._automation_payload(make_id("auto"), title, prompt, cron, human, cron_job_id=cron_job_id)
+        if not cron_job_id:
+            job["notification_summary"] = f"Hermes cron CLI create failed; stored in Diak bridge only: {out[:200]}"
+        with self.server.state._lock:
+            self.server.state._data.setdefault("automations", {})[job["id"]] = job
+            self.server.state._save_locked()
+        return self._send_json(200, {"job": job, "note": "Automation created through Hermes cron." if cron_job_id else "Automation stored; Hermes cron create failed."})
+
+    def _update_automation(self, job_id: str, body: dict[str, Any]) -> None:
+        with self.server.state._lock:
+            job = self.server.state._data.setdefault("automations", {}).get(job_id)
+            if not job: return self._send_error(404, "Automation not found")
+            for key in ("title", "prompt"):
+                if key in body and body[key] is not None: job[key] = str(body[key])
+            if isinstance(body.get("schedule"), dict): job["schedule"].update(body["schedule"])
+            job["updated_at"] = utc_now(); self.server.state._save_locked()
+        return self._send_json(200, {"job": job, "note": "Automation updated in Diak bridge; recreate cron job for schedule changes."})
+
+    def _run_automation(self, job_id: str) -> None:
+        with self.server.state._lock:
+            job = self.server.state._data.setdefault("automations", {}).get(job_id)
+        if not job: return self._send_error(404, "Automation not found")
+        started = utc_now(); lines=[]; status="succeeded"
+        cid = job.get("cron_job_id")
+        if cid:
+            rc, out = _run_command(["hermes", "cron", "run", cid], timeout=30)
+            lines = out.splitlines()[-20:]
+            if rc != 0: status="failed"
+        else:
+            try:
+                result = self.server.runtime.run(job.get("prompt", ""), history=[], stream_callback=None)
+                lines=[result.text[:1000]]
+            except Exception as exc:
+                status="failed"; lines=[str(exc)]
+        run={"id": make_id("run"), "automation_id": job_id, "status": status, "started_at": started, "finished_at": utc_now(), "summary": (lines[-1] if lines else status)[:240], "log_preview": lines}
+        with self.server.state._lock:
+            job.setdefault("run_history", []).append(run); job["last_run"]=run; job["updated_at"]=utc_now(); self.server.state._save_locked()
+        return self._send_json(200, run)
+
+    def _set_automation_status(self, job_id: str, status: str) -> None:
+        with self.server.state._lock:
+            job = self.server.state._data.setdefault("automations", {}).get(job_id)
+            if not job: return self._send_error(404, "Automation not found")
+            job["status"] = status; job["updated_at"] = utc_now(); self.server.state._save_locked()
+        return self._send_json(200, {"job": job, "note": f"Automation {status}."})
+
+    def _delete_automation(self, job_id: str) -> None:
+        with self.server.state._lock:
+            job = self.server.state._data.setdefault("automations", {}).pop(job_id, None); self.server.state._save_locked()
+        return self._send_json(200, {"deleted": bool(job), "id": job_id, "note": "Automation removed from Diak bridge. Remove paired Hermes cron job from Cron UI if needed."})
+
+    def _memory_dashboard(self) -> dict[str, Any]:
+        with self.server.state._lock:
+            items = list(self.server.state._data.setdefault("memory", {}).values())
+        items.sort(key=lambda i: (not i.get("is_pinned", False), i.get("updated_at", "")), reverse=False)
+        return {"items": items, "boundary_note": f"Diak bridge memory is persisted at {self.server.config.state_path} and survives bridge/app restart.", "pinned_count": sum(1 for i in items if i.get("is_pinned")), "total_count": len(items)}
+
+    def _get_memory(self, item_id: str) -> dict[str, Any] | None:
+        with self.server.state._lock:
+            item = self.server.state._data.setdefault("memory", {}).get(item_id)
+            return dict(item) if isinstance(item, dict) else None
+
+    def _create_memory(self, body: dict[str, Any]) -> None:
+        title = str(body.get("title") or "").strip(); text = str(body.get("body") or "").strip()
+        if not (title and text): return self._send_error(400, "Missing title or body")
+        now=utc_now(); item={"id": make_id("mem"), "title": title, "body": text, "scope": str(body.get("scope") or "user"), "source": "manual", "confidence": "high", "tags": body.get("tags") if isinstance(body.get("tags"), list) else [], "project_ref": None, "session_id": None, "created_at": now, "updated_at": now, "is_pinned": bool(body.get("is_pinned"))}
+        with self.server.state._lock:
+            self.server.state._data.setdefault("memory", {})[item["id"]]=item; self.server.state._save_locked()
+        return self._send_json(200, {"item": item, "note": "Memory added and persisted by Diak bridge."})
+
+    def _update_memory(self, item_id: str, body: dict[str, Any]) -> None:
+        if not body.get("acknowledged_review", False): return self._send_error(400, "Memory update requires acknowledged_review")
+        with self.server.state._lock:
+            item = self.server.state._data.setdefault("memory", {}).get(item_id)
+            if not item: return self._send_error(404, "Memory not found")
+            for key in ("title", "body", "scope"):
+                if key in body and body[key] is not None: item[key] = str(body[key])
+            if "is_pinned" in body and body["is_pinned"] is not None: item["is_pinned"] = bool(body["is_pinned"])
+            item["updated_at"] = utc_now(); self.server.state._save_locked()
+        return self._send_json(200, {"item": item, "note": "Memory updated and persisted by Diak bridge."})
+
+    def _delete_memory(self, item_id: str) -> None:
+        with self.server.state._lock:
+            item = self.server.state._data.setdefault("memory", {}).pop(item_id, None); self.server.state._save_locked()
+        return self._send_json(200, {"deleted": bool(item), "id": item_id, "note": "Memory deleted from Diak bridge persistence."})
+
+    def _skills_catalog(self) -> dict[str, Any]:
+        skills=[]; root=Path.home()/".hermes"/"skills"
+        if root.exists():
+            for path in root.rglob("SKILL.md"):
+                try:
+                    text=path.read_text(encoding="utf-8", errors="ignore")
+                    name=_extract_frontmatter_field(text,"name", path.parent.name)
+                    sid=name
+                    with self.server.state._lock:
+                        enabled=self.server.state._data.setdefault("skills", {}).get(sid, {}).get("is_enabled", True)
+                    skills.append({"id": sid, "name": name, "summary": _extract_frontmatter_field(text,"description", "Hermes skill"), "status": "active" if enabled else "disabled", "category": _skill_category_from_path(path), "source": "user_created", "risk_style": "requires_approval", "version": _extract_frontmatter_field(text,"version", "1.0.0"), "trigger_summary": _extract_frontmatter_field(text,"description", "Loaded when relevant."), "usage_notes": str(path), "artifacts": [], "is_enabled": bool(enabled), "source_session_id": None, "updated_at": None, "installed_by": "Hermes Agent"})
+                except Exception: pass
+        skills.sort(key=lambda x: x["name"])
+        return {"skills": skills, "boundary_note": "Live Hermes skill library scanned from ~/.hermes/skills; enable state persisted by Diak bridge.", "active_count": sum(1 for s in skills if s["is_enabled"]), "draft_count": 0, "total_count": len(skills)}
+
+    def _get_skill(self, skill_id: str) -> dict[str, Any] | None:
+        return next((s for s in self._skills_catalog()["skills"] if s["id"] == skill_id), None)
+
+    def _set_skill_enabled(self, skill_id: str, enabled: bool) -> None:
+        skill = self._get_skill(skill_id)
+        if not skill: return self._send_error(404, "Skill not found")
+        with self.server.state._lock:
+            self.server.state._data.setdefault("skills", {}).setdefault(skill_id, {})["is_enabled"] = enabled; self.server.state._save_locked()
+        skill["is_enabled"] = enabled; skill["status"] = "active" if enabled else "disabled"
+        return self._send_json(200, {"skill": skill, "note": "Skill enable state saved in Diak bridge overlay."})
 
     def _version_payload(self) -> dict[str, Any]:
         provider = None
@@ -701,7 +1038,7 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
             if artifact:
                 artifacts = [artifact]
                 self.server.state.set_artifacts(session_id, artifacts)
-                events.append({"type": "canvas_updated", "session_id": session_id, "artifact_count": len(artifacts)})
+                events.append({"type": "canvas_updated", "session_id": session_id, "update": {"type": "select_tab", "tab": "browser"}})
             events.append({"type": "message_completed", "message_id": assistant_message_id, "content": text})
             events.append({"type": "session_ended", "session_id": session_id, "status": "completed"})
             session.update({

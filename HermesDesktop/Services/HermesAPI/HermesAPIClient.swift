@@ -114,6 +114,10 @@ public protocol HermesAPIClient: Sendable {
     /// credentials; the desktop app simply requests the change.
     func disconnectConnector(id: String) async throws -> HermesConnectorDisconnectResult
 
+    /// Queue a connector send through the daemon approval system. No message
+    /// is sent until the returned approval is explicitly approved.
+    func queueConnectorSend(_ request: HermesConnectorSendRequest) async throws -> HermesConnectorSendQueueResult
+
     // MARK: Skills (M6)
 
     /// Catalog of every skill the daemon currently knows about plus a
@@ -149,6 +153,9 @@ public protocol HermesAPIClient: Sendable {
     /// persistence and indexing.
     func memoryItems() async throws -> HermesMemoryDashboard
 
+    /// Add a reviewed memory item through the daemon-owned memory store.
+    func createMemoryItem(_ request: HermesMemoryCreateRequest) async throws -> HermesMemoryMutationResult
+
     /// Fetch one memory item by id. Useful for refreshing the edit
     /// sheet after a save without reloading the whole dashboard.
     func memoryItem(id: String) async throws -> HermesMemoryItem
@@ -171,6 +178,31 @@ public protocol HermesAPIClient: Sendable {
     /// and any side-effecting writes — the desktop app never produces
     /// real artifacts itself.
     func canvasArtifacts(sessionID: String) async throws -> HermesCanvasArtifactList
+
+    // MARK: Secrets metadata (M12 Slice 1)
+
+    /// Catalog of every named secret slot the desktop boundary exposes
+    /// (Composio in M12 Slice 1) plus the daemon-reported status for
+    /// each. The response carries metadata only — never raw secret
+    /// material — so it is safe to log/echo. Raw values only travel
+    /// through `saveSecret(_:)`.
+    func secrets() async throws -> HermesSecretCatalog
+
+    /// Save raw secret values for one slot. The desktop app persists
+    /// these in macOS Keychain and informs the daemon that values are
+    /// available; this method is the only typed boundary entry point
+    /// that ever carries plaintext credential material.
+    func saveSecret(_ request: HermesSecretSaveRequest) async throws -> HermesSecretMutationResult
+
+    /// Remove all field values for a secret slot. The Mac app drops the
+    /// Keychain entries; the daemon clears any cached presence/state.
+    func deleteSecret(id: String) async throws -> HermesSecretMutationResult
+
+    /// Ask the daemon to perform a connectivity test against the saved
+    /// values for this slot. The Mac app never tests credentials itself;
+    /// it only surfaces the daemon's verdict. Implementations must
+    /// reject locally if the slot has no saved sensitive value.
+    func testSecret(id: String) async throws -> HermesSecretTestResult
 }
 
 public extension HermesAPIClient {

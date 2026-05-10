@@ -38,6 +38,7 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     public private(set) var beginConnectorSetupCallCount = 0
     public private(set) var updateConnectorPolicyCallCount = 0
     public private(set) var disconnectConnectorCallCount = 0
+    public private(set) var queueConnectorSendCallCount = 0
     public private(set) var skillsCallCount = 0
     public private(set) var skillCallCount = 0
     public private(set) var setSkillEnabledCallCount = 0
@@ -45,9 +46,14 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     public private(set) var submitSkillDraftCallCount = 0
     public private(set) var memoryItemsCallCount = 0
     public private(set) var memoryItemCallCount = 0
+    public private(set) var createMemoryItemCallCount = 0
     public private(set) var updateMemoryItemCallCount = 0
     public private(set) var deleteMemoryItemCallCount = 0
     public private(set) var canvasArtifactsCallCount = 0
+    public private(set) var secretsCallCount = 0
+    public private(set) var saveSecretCallCount = 0
+    public private(set) var deleteSecretCallCount = 0
+    public private(set) var testSecretCallCount = 0
 
     /// In-memory approval/evidence stores. Mutating them through
     /// `decideApproval` keeps state visible across reads inside a single
@@ -87,6 +93,19 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     /// canvas without live daemon stream events.
     private var canvasArtifactStore: [String: [HermesCanvasArtifact]] = MockHermesData.canvasArtifactStore
     private var canvasArtifactBoundaryNote: String = MockHermesData.canvasArtifactBoundaryNote
+
+    /// In-memory secret descriptor catalog + per-slot status. The mock
+    /// never writes to the real Keychain — it just tracks
+    /// presence/validity transitions so the Settings UI and view-model
+    /// tests can drive deterministic state. The mock also never persists
+    /// raw secret values; saved values are kept in a side store keyed by
+    /// `<id>.<fieldID>` so tests can verify save behavior without
+    /// leaking values back through descriptor/status reads.
+    private var secretDescriptors: [HermesSecretDescriptor] = MockHermesData.secretDescriptors
+    private var secretStatuses: [String: HermesSecretStatus] = MockHermesData.secretStatusIndex
+    private var secretBoundaryNote: String = MockHermesData.secretBoundaryNote
+    private var secretValueStore: [String: String] = [:]
+    public var nextSecretTestResult: HermesSecretTestResult?
 
     /// Optional override: force a specific session to be returned by
     /// `createSession` so tests/previews can pin the id.
@@ -630,6 +649,36 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
         )
     }
 
+    public func queueConnectorSend(_ request: HermesConnectorSendRequest) async throws -> HermesConnectorSendQueueResult {
+        queueConnectorSendCallCount += 1
+        guard request.acknowledgedApprovalGate, !request.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw HermesAPIError.invalidURL }
+        let approval = HermesApprovalRequest(
+            id: "appr-\(UUID().uuidString.prefix(8))",
+            title: "Send Telegram message",
+            summary: request.message,
+            kind: .connectorSend,
+            status: .pending,
+            risk: .medium,
+            createdAt: Date(),
+            updatedAt: Date(),
+            sessionID: nil,
+            sessionTitle: nil,
+            toolName: "send_message",
+            requester: "Diak",
+            payload: .connectorSend(HermesConnectorSendPayload(
+                connectorName: "Telegram",
+                connectorIcon: "paperplane.fill",
+                endpoint: "/v1/connectors/telegram/send",
+                method: "POST",
+                recipient: request.target,
+                bodyPreview: request.message
+            )),
+            decisionNote: nil
+        )
+        approvals[approval.id] = approval
+        return HermesConnectorSendQueueResult(approval: approval, note: "Queued for approval.")
+    }
+
     public func disconnectConnector(id: String) async throws -> HermesConnectorDisconnectResult {
         disconnectConnectorCallCount += 1
         if case .offline = outcome { throw HermesAPIError.notReachable }
@@ -793,6 +842,24 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
 
     // MARK: Memory (M6)
 
+    public func createMemoryItem(_ request: HermesMemoryCreateRequest) async throws -> HermesMemoryMutationResult {
+        createMemoryItemCallCount += 1
+        guard request.acknowledgedReview,
+              !request.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !request.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw HermesAPIError.invalidURL }
+        let item = HermesMemoryItem(id: "mem-\(UUID().uuidString.prefix(8))",
+                                    title: request.title,
+                                    body: request.body,
+                                    scope: request.scope,
+                                    source: .manual,
+                                    confidence: .high,
+                                    createdAt: Date(),
+                                    updatedAt: Date(),
+                                    isPinned: request.isPinned)
+        memoryIndex[item.id] = item
+        return HermesMemoryMutationResult(item: item, note: "Memory added.")
+    }
+
     public func memoryItems() async throws -> HermesMemoryDashboard {
         memoryItemsCallCount += 1
         if case .offline = outcome { throw HermesAPIError.notReachable }
@@ -897,6 +964,187 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
 
     public func resetCanvasArtifactState() {
         canvasArtifactStore = MockHermesData.canvasArtifactStore
+    }
+
+    // MARK: Secrets metadata (M12 Slice 1)
+
+    public func secrets() async throws -> HermesSecretCatalog {
+        secretsCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        let statuses = secretDescriptors.map { descriptor in
+            secretStatuses[descriptor.id]
+                ?? HermesSecretStatus(id: descriptor.id, presence: .missing, validity: .untested)
+        }
+        return HermesSecretCatalog(
+            descriptors: secretDescriptors,
+            statuses: statuses,
+            boundaryNote: secretBoundaryNote
+        )
+    }
+
+    public func saveSecret(_ request: HermesSecretSaveRequest) async throws -> HermesSecretMutationResult {
+        saveSecretCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        let trimmed = request.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw HermesAPIError.invalidURL }
+        guard request.acknowledgedKeychainStorage else { throw HermesAPIError.invalidURL }
+        guard !request.isEmpty else { throw HermesAPIError.invalidURL }
+        guard let descriptor = secretDescriptors.first(where: { $0.id == trimmed }) else {
+            throw HermesAPIError.http(status: 404, body: "no secret \(trimmed)")
+        }
+
+        // Persist raw values into the side store so save behavior is
+        // observable in tests; descriptor/status reads must never echo
+        // these back.
+        let now = Date()
+        var savedNonSensitive: [String] = []
+        for field in request.fields where !field.value.isEmpty {
+            let key = "\(descriptor.id).\(field.fieldID)"
+            secretValueStore[key] = field.value
+            if let descriptorField = descriptor.fields.first(where: { $0.id == field.fieldID }),
+               !descriptorField.kind.isSensitive {
+                savedNonSensitive.append(field.fieldID)
+            }
+        }
+
+        let presence: HermesSecretPresence
+        if let primaryID = descriptor.primarySensitiveFieldID,
+           let primary = secretValueStore["\(descriptor.id).\(primaryID)"],
+           !primary.isEmpty {
+            presence = .saved
+        } else {
+            presence = .missing
+        }
+
+        // Updating a saved value invalidates any prior test verdict —
+        // the daemon will need to re-test before it can claim "valid".
+        let status = HermesSecretStatus(
+            id: descriptor.id,
+            presence: presence,
+            validity: presence == .saved ? .untested : .untested,
+            lastSavedAt: now,
+            lastTestedAt: nil,
+            lastTestMessage: nil,
+            savedNonSensitiveFieldIDs: savedNonSensitive
+        )
+        secretStatuses[descriptor.id] = status
+
+        return HermesSecretMutationResult(
+            status: status,
+            requiresBridgeRestart: presence == .saved,
+            note: presence == .saved
+                ? "Saved to macOS Keychain. Hermes Engine reads it on the next bridge launch."
+                : "Cleared saved values for \(descriptor.displayName)."
+        )
+    }
+
+    public func deleteSecret(id: String) async throws -> HermesSecretMutationResult {
+        deleteSecretCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw HermesAPIError.invalidURL }
+        guard let descriptor = secretDescriptors.first(where: { $0.id == trimmed }) else {
+            throw HermesAPIError.http(status: 404, body: "no secret \(trimmed)")
+        }
+
+        for field in descriptor.fields {
+            secretValueStore.removeValue(forKey: "\(descriptor.id).\(field.id)")
+        }
+
+        let status = HermesSecretStatus(
+            id: descriptor.id,
+            presence: .missing,
+            validity: .untested,
+            lastSavedAt: nil,
+            lastTestedAt: nil,
+            lastTestMessage: nil,
+            savedNonSensitiveFieldIDs: []
+        )
+        secretStatuses[descriptor.id] = status
+
+        return HermesSecretMutationResult(
+            status: status,
+            requiresBridgeRestart: true,
+            note: "Removed from macOS Keychain. Restart the bridge so Hermes Engine picks up the change."
+        )
+    }
+
+    public func testSecret(id: String) async throws -> HermesSecretTestResult {
+        testSecretCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw HermesAPIError.invalidURL }
+        guard let descriptor = secretDescriptors.first(where: { $0.id == trimmed }) else {
+            throw HermesAPIError.http(status: 404, body: "no secret \(trimmed)")
+        }
+        if let pinned = nextSecretTestResult, pinned.id == trimmed {
+            // Update the cached status so subsequent reads reflect the
+            // pinned verdict.
+            var existing = secretStatuses[descriptor.id]
+                ?? HermesSecretStatus(id: descriptor.id, presence: .missing, validity: .untested)
+            existing = HermesSecretStatus(
+                id: existing.id,
+                presence: existing.presence,
+                validity: pinned.validity,
+                lastSavedAt: existing.lastSavedAt,
+                lastTestedAt: pinned.testedAt,
+                lastTestMessage: pinned.message,
+                savedNonSensitiveFieldIDs: existing.savedNonSensitiveFieldIDs
+            )
+            secretStatuses[descriptor.id] = existing
+            return pinned
+        }
+
+        // Default mock verdict: "valid" iff the primary sensitive field
+        // is saved, "invalid" otherwise. The daemon owns real testing.
+        let now = Date()
+        let primaryID = descriptor.primarySensitiveFieldID
+        let primaryValue = primaryID.flatMap { secretValueStore["\(descriptor.id).\($0)"] }
+        let isOK = (primaryValue?.isEmpty == false)
+        let validity: HermesSecretValidity = isOK ? .valid : .invalid
+        let message = isOK
+            ? "Daemon mock confirmed credentials look reachable. Real connectivity test runs in Slice 3."
+            : "No saved credential to test. Save an API key first."
+
+        var existing = secretStatuses[descriptor.id]
+            ?? HermesSecretStatus(id: descriptor.id, presence: .missing, validity: .untested)
+        existing = HermesSecretStatus(
+            id: existing.id,
+            presence: existing.presence,
+            validity: validity,
+            lastSavedAt: existing.lastSavedAt,
+            lastTestedAt: now,
+            lastTestMessage: message,
+            savedNonSensitiveFieldIDs: existing.savedNonSensitiveFieldIDs
+        )
+        secretStatuses[descriptor.id] = existing
+
+        return HermesSecretTestResult(
+            id: descriptor.id,
+            isOK: isOK,
+            validity: validity,
+            message: message,
+            testedAt: now
+        )
+    }
+
+    /// Test affordance: snapshot the saved values for a slot. The
+    /// production client never exposes raw values back through the
+    /// boundary; this exists purely so XCTest can verify save behavior.
+    public func _debugSavedSecretValues(forID id: String) -> [String: String] {
+        let prefix = "\(id)."
+        var out: [String: String] = [:]
+        for (key, value) in secretValueStore where key.hasPrefix(prefix) {
+            out[String(key.dropFirst(prefix.count))] = value
+        }
+        return out
+    }
+
+    public func resetSecretState() {
+        secretDescriptors = MockHermesData.secretDescriptors
+        secretStatuses = MockHermesData.secretStatusIndex
+        secretValueStore = [:]
+        nextSecretTestResult = nil
     }
 
     private static func riskWeight(_ risk: HermesApprovalRisk) -> Int {
@@ -1955,5 +2203,23 @@ public enum MockHermesData {
 
     public static var canvasArtifactStore: [String: [HermesCanvasArtifact]] {
         Dictionary(grouping: canvasArtifacts, by: { $0.sessionID })
+    }
+
+    // MARK: Secrets (M12 Slice 1 fixtures)
+
+    public static let secretBoundaryNote = HermesSecretCatalog.defaultBoundaryNote
+
+    public static let secretDescriptors: [HermesSecretDescriptor] = [
+        .composio
+    ]
+
+    /// Default state: no slot has values saved yet. The Settings UI
+    /// drives the "Missing" badge from this baseline.
+    public static let secretStatuses: [HermesSecretStatus] = secretDescriptors.map { descriptor in
+        HermesSecretStatus(id: descriptor.id, presence: .missing, validity: .untested)
+    }
+
+    public static var secretStatusIndex: [String: HermesSecretStatus] {
+        Dictionary(uniqueKeysWithValues: secretStatuses.map { ($0.id, $0) })
     }
 }

@@ -7,7 +7,8 @@ import unittest
 from http.client import HTTPConnection
 from pathlib import Path
 
-from Scripts.diak_hermes_bridge import BridgeConfig, BridgeState, DiakHermesBridgeServer, RuntimeResult
+import Scripts.diak_hermes_bridge as bridge
+from Scripts.diak_hermes_bridge import BridgeConfig, BridgeState, DiakHermesBridgeServer, DiakHermesBridgeHandler, RuntimeResult
 
 
 class FakeHermesRuntime:
@@ -189,6 +190,146 @@ class DiakHermesBridgeTests(unittest.TestCase):
                 os.environ.pop("DIAK_CONNECTOR_SETUP_URL_TEMPLATE", None)
             else:
                 os.environ["DIAK_CONNECTOR_SETUP_URL_TEMPLATE"] = old_template
+
+    def test_session_messages_and_canvas_survive_bridge_restart(self):
+        tmp = tempfile.TemporaryDirectory()
+        state_path = Path(tmp.name) / "state.json"
+
+        def start(runtime):
+            state = BridgeState(state_path)
+            server = DiakHermesBridgeServer(("127.0.0.1", 0), runtime=runtime, state=state, config=BridgeConfig(bind_host="127.0.0.1", port=0, persist_state=True))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            return server, thread, server.server_address[1]
+
+        def req(port, method, path, body=None):
+            conn = HTTPConnection("127.0.0.1", port, timeout=5)
+            payload = None if body is None else json.dumps(body).encode("utf-8")
+            headers = {"Accept": "application/json"}
+            if payload is not None: headers["Content-Type"] = "application/json"
+            conn.request(method, path, body=payload, headers=headers)
+            resp = conn.getresponse(); data = resp.read().decode("utf-8"); conn.close()
+            return resp.status, json.loads(data) if data and data[:1] in "[{" else data
+
+        runtime1 = FakeHermesRuntime()
+        server, thread, port = start(runtime1)
+        try:
+            status, session = req(port, "POST", "/sessions", {"prompt": "Build me a website and show it in the canvas"})
+            self.assertEqual(status, 200)
+            session_id = session["id"]
+        finally:
+            server.shutdown(); server.server_close(); thread.join(timeout=2)
+
+        runtime2 = FakeHermesRuntime()
+        server, thread, port = start(runtime2)
+        try:
+            status, messages = req(port, "GET", f"/sessions/{session_id}/messages")
+            self.assertEqual(status, 200)
+            self.assertEqual([m["role"] for m in messages], ["user", "assistant"])
+            status, payload = req(port, "GET", f"/sessions/{session_id}/canvas/artifacts")
+            self.assertEqual(status, 200)
+            self.assertEqual(payload["artifacts"][0]["kind"], "browser")
+            status, _ = req(port, "POST", f"/sessions/{session_id}/messages", {"prompt": "after restart"})
+            self.assertEqual(status, 200)
+            self.assertEqual(runtime2.calls[0]["preferred_session_id"], "hermes-session-1")
+            self.assertEqual([m["role"] for m in runtime2.calls[0]["history"]], ["user", "assistant"])
+        finally:
+            server.shutdown(); server.server_close(); thread.join(timeout=2); tmp.cleanup()
+
+    def test_telegram_send_is_approval_gated_and_approval_executes(self):
+        original = DiakHermesBridgeHandler._send_telegram_via_hermes
+        sent = []
+        DiakHermesBridgeHandler._send_telegram_via_hermes = lambda self, target, message: sent.append((target, message)) or {"success": True, "provider_result": {"platform": "telegram"}}
+        try:
+            status, _, body = self.harness.request("POST", "/connectors/conn-telegram/actions/send", {"target": "telegram", "message": "Diak QA approval gate"})
+            self.assertEqual(status, 200)
+            queued = json.loads(body)
+            approval = queued["approval"]
+            self.assertEqual(approval["status"], "pending")
+            self.assertEqual(sent, [])
+
+            status, _, body = self.harness.request("POST", f"/approvals/{approval['id']}/decision", {"decision": "approved", "note": "QA approved"})
+            self.assertEqual(status, 200)
+            decided = json.loads(body)
+            self.assertEqual(decided["status"], "approved")
+            self.assertEqual(sent, [("telegram", "Diak QA approval gate")])
+            self.assertTrue(decided["execution_result"]["success"])
+        finally:
+            DiakHermesBridgeHandler._send_telegram_via_hermes = original
+
+    def test_memory_create_update_pin_delete_persists(self):
+        tmp = tempfile.TemporaryDirectory()
+        state_path = Path(tmp.name) / "state.json"
+
+        def start_server():
+            state = BridgeState(state_path)
+            server = DiakHermesBridgeServer(("127.0.0.1", 0), runtime=FakeHermesRuntime(), state=state, config=BridgeConfig(bind_host="127.0.0.1", port=0, persist_state=True))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            return server, thread, server.server_address[1]
+
+        def req(port, method, path, body=None):
+            conn = HTTPConnection("127.0.0.1", port, timeout=5)
+            payload = None if body is None else json.dumps(body).encode("utf-8")
+            headers = {"Accept": "application/json"}
+            if payload is not None: headers["Content-Type"] = "application/json"
+            conn.request(method, path, body=payload, headers=headers)
+            resp = conn.getresponse(); data = resp.read().decode("utf-8"); conn.close()
+            return resp.status, json.loads(data) if data and data[:1] in "[{" else data
+
+        server, thread, port = start_server()
+        try:
+            status, body = req(port, "POST", "/memory", {"title": "Diak QA memory", "body": "Survives bridge restart", "scope": "project", "is_pinned": True})
+            self.assertEqual(status, 200)
+            item = body["item"]
+            status, body = req(port, "PATCH", f"/memory/{item['id']}", {"body": "Edited memory body", "is_pinned": False, "acknowledged_review": True})
+            self.assertEqual(status, 200)
+            edited = body["item"]
+            self.assertEqual(edited["body"], "Edited memory body")
+            self.assertFalse(edited["is_pinned"])
+        finally:
+            server.shutdown(); server.server_close(); thread.join(timeout=2)
+
+        server, thread, port = start_server()
+        try:
+            status, body = req(port, "GET", f"/memory/{edited['id']}")
+            self.assertEqual(status, 200)
+            self.assertEqual(body["body"], "Edited memory body")
+            status, body = req(port, "DELETE", f"/memory/{edited['id']}")
+            self.assertEqual(status, 200)
+            self.assertTrue(body["deleted"])
+            status, body = req(port, "GET", f"/memory/{edited['id']}")
+            self.assertEqual(status, 404)
+        finally:
+            server.shutdown(); server.server_close(); thread.join(timeout=2); tmp.cleanup()
+
+    def test_automation_create_registers_hermes_cron_and_test_run_records_result(self):
+        original = bridge._run_command
+        commands = []
+        def fake_run_command(argv, timeout=30):
+            commands.append(argv)
+            if argv[:3] == ["hermes", "cron", "create"]:
+                return 0, "Created job abcdef123456\n"
+            if argv[:3] == ["hermes", "cron", "run"]:
+                return 0, "automation output\nDONE\n"
+            if argv[:3] == ["hermes", "cron", "list"]:
+                return 0, "  abcdef123456 [active]\n    Name: diak QA\n    Next run: 2030-01-01T00:00:00Z\n"
+            return 0, ""
+        bridge._run_command = fake_run_command
+        try:
+            status, _, body = self.harness.request("POST", "/automations", {"title": "QA cron", "prompt": "Say done", "schedule": {"cron": "30m", "human_description": "Every 30 minutes"}})
+            self.assertEqual(status, 200)
+            job = json.loads(body)["job"]
+            self.assertEqual(job["cron_job_id"], "abcdef123456")
+            self.assertTrue(any(cmd[:3] == ["hermes", "cron", "create"] for cmd in commands))
+
+            status, _, body = self.harness.request("POST", f"/automations/{job['id']}/test-run")
+            self.assertEqual(status, 200)
+            run = json.loads(body)
+            self.assertEqual(run["status"], "succeeded")
+            self.assertIn("DONE", run["summary"])
+        finally:
+            bridge._run_command = original
 
 
 if __name__ == "__main__":

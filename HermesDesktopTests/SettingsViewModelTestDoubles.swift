@@ -101,6 +101,10 @@ final class RestartOnlyConfigClient: HermesAPIClient, @unchecked Sendable {
         throw HermesAPIError.http(status: 501, body: nil)
     }
 
+    func queueConnectorSend(_ request: HermesConnectorSendRequest) async throws -> HermesConnectorSendQueueResult {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
+
     func skills() async throws -> HermesSkillCatalog {
         HermesSkillCatalog(skills: [], boundaryNote: "Skills APIs are not used by settings tests.")
     }
@@ -128,6 +132,10 @@ final class RestartOnlyConfigClient: HermesAPIClient, @unchecked Sendable {
                               totalCount: 0)
     }
 
+    func createMemoryItem(_ request: HermesMemoryCreateRequest) async throws -> HermesMemoryMutationResult {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
+
     func memoryItem(id: String) async throws -> HermesMemoryItem {
         throw HermesAPIError.http(status: 404, body: nil)
     }
@@ -141,6 +149,22 @@ final class RestartOnlyConfigClient: HermesAPIClient, @unchecked Sendable {
     }
 
     func canvasArtifacts(sessionID: String) async throws -> HermesCanvasArtifactList {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
+
+    func secrets() async throws -> HermesSecretCatalog {
+        HermesSecretCatalog(descriptors: [], statuses: [], boundaryNote: "Secrets APIs are not used by settings tests.")
+    }
+
+    func saveSecret(_ request: HermesSecretSaveRequest) async throws -> HermesSecretMutationResult {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
+
+    func deleteSecret(id: String) async throws -> HermesSecretMutationResult {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
+
+    func testSecret(id: String) async throws -> HermesSecretTestResult {
         throw HermesAPIError.http(status: 501, body: nil)
     }
 }

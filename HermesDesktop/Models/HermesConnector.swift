@@ -584,3 +584,31 @@ public struct HermesConnectorDisconnectResult: Codable, Equatable, Sendable {
         self.note = note
     }
 }
+
+
+// MARK: - Approval-gated connector send
+
+public struct HermesConnectorSendRequest: Codable, Equatable, Sendable {
+    public let connectorID: String
+    public let target: String
+    public let message: String
+    public let acknowledgedApprovalGate: Bool
+
+    public init(connectorID: String, target: String = "telegram", message: String, acknowledgedApprovalGate: Bool) {
+        self.connectorID = connectorID
+        self.target = target
+        self.message = message
+        self.acknowledgedApprovalGate = acknowledgedApprovalGate
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case connectorID = "connector_id"
+        case target, message
+        case acknowledgedApprovalGate = "acknowledged_approval_gate"
+    }
+}
+
+public struct HermesConnectorSendQueueResult: Codable, Equatable, Sendable {
+    public let approval: HermesApprovalRequest
+    public let note: String?
+}

@@ -255,6 +255,14 @@ public final class URLSessionHermesAPIClient: HermesAPIClient, @unchecked Sendab
         try await delete("/connectors/\(id)")
     }
 
+    public func queueConnectorSend(_ request: HermesConnectorSendRequest) async throws -> HermesConnectorSendQueueResult {
+        let trimmed = request.connectorID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              !request.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              request.acknowledgedApprovalGate else { throw HermesAPIError.invalidURL }
+        return try await post("/connectors/\(trimmed)/actions/send", body: request)
+    }
+
     // MARK: Skills (M6)
 
     public func skills() async throws -> HermesSkillCatalog {
@@ -300,6 +308,13 @@ public final class URLSessionHermesAPIClient: HermesAPIClient, @unchecked Sendab
         try await get("/memory")
     }
 
+    public func createMemoryItem(_ request: HermesMemoryCreateRequest) async throws -> HermesMemoryMutationResult {
+        guard !request.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !request.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              request.acknowledgedReview else { throw HermesAPIError.invalidURL }
+        return try await post("/memory", body: request)
+    }
+
     public func memoryItem(id: String) async throws -> HermesMemoryItem {
         let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw HermesAPIError.invalidURL }
@@ -329,6 +344,35 @@ public final class URLSessionHermesAPIClient: HermesAPIClient, @unchecked Sendab
         let trimmed = sessionID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw HermesAPIError.invalidURL }
         return try await get("/sessions/\(trimmed)/canvas/artifacts")
+    }
+
+    // MARK: Secrets metadata (M12 Slice 1)
+
+    public func secrets() async throws -> HermesSecretCatalog {
+        try await get("/settings/secrets")
+    }
+
+    public func saveSecret(_ request: HermesSecretSaveRequest) async throws -> HermesSecretMutationResult {
+        let trimmed = request.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw HermesAPIError.invalidURL }
+        // Boundary contract: refuse to ship a save with no field values
+        // and no acknowledgement that Keychain storage is happening.
+        guard request.acknowledgedKeychainStorage else { throw HermesAPIError.invalidURL }
+        guard !request.isEmpty else { throw HermesAPIError.invalidURL }
+        return try await post("/settings/secrets/\(trimmed)", body: request)
+    }
+
+    public func deleteSecret(id: String) async throws -> HermesSecretMutationResult {
+        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw HermesAPIError.invalidURL }
+        return try await delete("/settings/secrets/\(trimmed)")
+    }
+
+    public func testSecret(id: String) async throws -> HermesSecretTestResult {
+        struct Empty: Encodable {}
+        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw HermesAPIError.invalidURL }
+        return try await post("/settings/secrets/\(trimmed)/test", body: Empty())
     }
 
     // MARK: Internals

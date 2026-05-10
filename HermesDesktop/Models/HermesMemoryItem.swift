@@ -262,6 +262,34 @@ public struct HermesMemoryDashboard: Codable, Equatable, Sendable {
     }
 }
 
+/// Request body for `createMemoryItem`. Creation is intentionally explicit
+/// and review-gated so the desktop app cannot silently write durable memory.
+public struct HermesMemoryCreateRequest: Codable, Equatable, Sendable {
+    public let title: String
+    public let body: String
+    public let scope: HermesMemoryScope
+    public let isPinned: Bool
+    public let acknowledgedReview: Bool
+
+    public init(title: String,
+                body: String,
+                scope: HermesMemoryScope = .user,
+                isPinned: Bool = false,
+                acknowledgedReview: Bool) {
+        self.title = title
+        self.body = body
+        self.scope = scope
+        self.isPinned = isPinned
+        self.acknowledgedReview = acknowledgedReview
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case title, body, scope
+        case isPinned = "is_pinned"
+        case acknowledgedReview = "acknowledged_review"
+    }
+}
+
 /// Request body for `updateMemoryItem`. Every field is optional except
 /// id; an entirely-empty update is rejected at the boundary so we don't
 /// burn a daemon round-trip on a no-op.
