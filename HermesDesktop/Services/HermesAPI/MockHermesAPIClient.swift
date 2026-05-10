@@ -37,6 +37,15 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     public private(set) var beginConnectorSetupCallCount = 0
     public private(set) var updateConnectorPolicyCallCount = 0
     public private(set) var disconnectConnectorCallCount = 0
+    public private(set) var skillsCallCount = 0
+    public private(set) var skillCallCount = 0
+    public private(set) var setSkillEnabledCallCount = 0
+    public private(set) var previewSkillDraftCallCount = 0
+    public private(set) var submitSkillDraftCallCount = 0
+    public private(set) var memoryItemsCallCount = 0
+    public private(set) var memoryItemCallCount = 0
+    public private(set) var updateMemoryItemCallCount = 0
+    public private(set) var deleteMemoryItemCallCount = 0
 
     /// In-memory approval/evidence stores. Mutating them through
     /// `decideApproval` keeps state visible across reads inside a single
@@ -58,6 +67,17 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     /// daemon handoff truthfully.
     private var connectorIndex: [String: HermesConnector] = MockHermesData.connectorIndex
     private var connectorBoundaryNote: String = MockHermesData.connectorBoundaryNote
+
+    /// In-memory skill library. Toggle/install mutations only touch the
+    /// record — the mock never spawns a real skill execution. Drafts
+    /// from sessions land here as `.draft` until the user submits.
+    private var skillIndex: [String: HermesSkill] = MockHermesData.skillIndex
+    private var skillBoundaryNote: String = MockHermesData.skillBoundaryNote
+
+    /// In-memory memory store. Edits/deletes only flip the local record
+    /// — the mock never indexes/embeds anything.
+    private var memoryIndex: [String: HermesMemoryItem] = MockHermesData.memoryIndex
+    private var memoryBoundaryNote: String = MockHermesData.memoryBoundaryNote
 
     /// Optional override: force a specific session to be returned by
     /// `createSession` so tests/previews can pin the id.
@@ -453,6 +473,16 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
         connectorBoundaryNote = MockHermesData.connectorBoundaryNote
     }
 
+    public func resetSkillState() {
+        skillIndex = MockHermesData.skillIndex
+        skillBoundaryNote = MockHermesData.skillBoundaryNote
+    }
+
+    public func resetMemoryState() {
+        memoryIndex = MockHermesData.memoryIndex
+        memoryBoundaryNote = MockHermesData.memoryBoundaryNote
+    }
+
     // MARK: Connectors (M5)
 
     public func connectors() async throws -> HermesConnectorCatalog {
@@ -566,6 +596,228 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
             disconnected: true,
             id: id,
             note: "Daemon revoked credentials and cleared local sync state."
+        )
+    }
+
+    // MARK: Skills (M6)
+
+    public func skills() async throws -> HermesSkillCatalog {
+        skillsCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        let ordered = skillIndex.values.sorted { lhs, rhs in
+            // Enabled-active skills float to the top so the library
+            // surfaces actionable state first; ties break by name.
+            let lActive = lhs.isEnabled && lhs.status == .active
+            let rActive = rhs.isEnabled && rhs.status == .active
+            if lActive != rActive { return lActive && !rActive }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+        return HermesSkillCatalog(skills: ordered, boundaryNote: skillBoundaryNote)
+    }
+
+    public func skill(id: String) async throws -> HermesSkill {
+        skillCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        guard let skill = skillIndex[id] else {
+            throw HermesAPIError.http(status: 404, body: "no skill \(id)")
+        }
+        return skill
+    }
+
+    public func setSkillEnabled(id: String, isEnabled: Bool) async throws -> HermesSkillMutationResult {
+        setSkillEnabledCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        guard var skill = skillIndex[id] else {
+            throw HermesAPIError.http(status: 404, body: "no skill \(id)")
+        }
+        guard skill.supportsEnableToggle else {
+            throw HermesAPIError.http(status: 409, body: "skill \(id) does not support enable toggle")
+        }
+        skill.isEnabled = isEnabled
+        if skill.status == .disabled && isEnabled { skill.status = .active }
+        if skill.status == .active && !isEnabled { skill.status = .disabled }
+        skillIndex[id] = skill
+        return HermesSkillMutationResult(
+            skill: skill,
+            note: isEnabled
+                ? "Skill enabled. The daemon will surface it on matching prompts."
+                : "Skill disabled. It stays in the library but the daemon will skip it."
+        )
+    }
+
+    public func previewSkillDraftFromSession(sessionID: String) async throws -> HermesSkillDraftReview {
+        previewSkillDraftCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        let trimmed = sessionID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw HermesAPIError.invalidURL }
+        // Deterministic mock: known sessions get a tailored review;
+        // anything else falls back to a generic "needs clarification".
+        switch trimmed {
+        case "sess-001":
+            return HermesSkillDraftReview(
+                sessionID: trimmed,
+                suggestedName: "Project triage summary",
+                suggestedSummary: "Reusable skill that summarises a project, flags risky modules, and produces a triage report.",
+                suggestedTriggerSummary: "When the user asks for a project summary or triage report.",
+                suggestedCategory: .planning,
+                suggestedRiskStyle: .safe,
+                safetyHighlights: [
+                    "Reads files only inside trusted folders.",
+                    "Does not invoke shell commands or write to disk.",
+                    "Surfaces all tool calls in the chat transcript."
+                ],
+                readiness: .ready,
+                message: "The daemon can build this skill from the session transcript. Review the draft before submitting."
+            )
+        case "sess-002":
+            return HermesSkillDraftReview(
+                sessionID: trimmed,
+                suggestedName: "Migration helper",
+                suggestedSummary: "Drives a project migration end-to-end and pauses for approval before each terminal command.",
+                suggestedTriggerSummary: "When the user runs a one-shot migration with explicit terminal approvals.",
+                suggestedCategory: .ops,
+                suggestedRiskStyle: .requiresApproval,
+                safetyHighlights: [
+                    "All terminal commands queue an approval before execution.",
+                    "Operates inside the configured project working directory.",
+                    "Captures full command + output for the audit trail."
+                ],
+                readiness: .needsClarification,
+                message: "The session contains a pending approval. Resolve the approval before submitting so the draft inherits the final command shape."
+            )
+        default:
+            return HermesSkillDraftReview(
+                sessionID: trimmed,
+                suggestedName: "Skill draft",
+                suggestedSummary: "Hermes did not find enough signal in this session to suggest a complete draft. Edit before submitting.",
+                suggestedTriggerSummary: "Edit me — describe when this skill should fire.",
+                suggestedCategory: .general,
+                suggestedRiskStyle: .requiresApproval,
+                safetyHighlights: [
+                    "Default to approval-gated execution until you confirm the trigger surface."
+                ],
+                readiness: .needsClarification,
+                message: "Add detail to the draft before asking the daemon to install it."
+            )
+        }
+    }
+
+    public func submitSkillDraft(_ request: HermesSkillDraftRequest) async throws -> HermesSkillMutationResult {
+        submitSkillDraftCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        guard request.acknowledgedDaemonInstall else { throw HermesAPIError.invalidURL }
+        let name = request.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let session = request.sessionID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, !session.isEmpty else { throw HermesAPIError.invalidURL }
+
+        let now = Date()
+        let id = "skill-draft-\(Int(now.timeIntervalSince1970))"
+        let skill = HermesSkill(
+            id: id,
+            name: name,
+            summary: request.summary.trimmingCharacters(in: .whitespacesAndNewlines),
+            status: .draft,
+            category: request.category,
+            source: .sessionDraft,
+            riskStyle: request.riskStyle,
+            version: "0.1.0",
+            triggerSummary: request.triggerSummary,
+            usageNotes: "Draft created from session \(session). Daemon will finalise install in the background.",
+            artifacts: [
+                HermesSkillArtifact(id: "art-session-\(session)",
+                                    kind: .promptTemplate,
+                                    title: "Session transcript",
+                                    detail: "Captured from \(session)")
+            ],
+            isEnabled: false,
+            sourceSessionID: session,
+            updatedAt: now,
+            installedBy: "Daemon (mock)"
+        )
+        skillIndex[id] = skill
+        return HermesSkillMutationResult(
+            skill: skill,
+            note: "Draft submitted to the daemon. The skill will appear as a draft until the daemon finishes installation."
+        )
+    }
+
+    // MARK: Memory (M6)
+
+    public func memoryItems() async throws -> HermesMemoryDashboard {
+        memoryItemsCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        let items = memoryIndex.values.sorted { lhs, rhs in
+            // Pinned float first, then by recency of update.
+            if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
+            let l = lhs.updatedAt ?? lhs.createdAt ?? .distantPast
+            let r = rhs.updatedAt ?? rhs.createdAt ?? .distantPast
+            return l > r
+        }
+        let pinned = items.filter { $0.isPinned }.count
+        return HermesMemoryDashboard(
+            items: items,
+            boundaryNote: memoryBoundaryNote,
+            pinnedCount: pinned,
+            totalCount: items.count
+        )
+    }
+
+    public func memoryItem(id: String) async throws -> HermesMemoryItem {
+        memoryItemCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        guard let item = memoryIndex[id] else {
+            throw HermesAPIError.http(status: 404, body: "no memory item \(id)")
+        }
+        return item
+    }
+
+    public func updateMemoryItem(_ update: HermesMemoryUpdate) async throws -> HermesMemoryMutationResult {
+        updateMemoryItemCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        guard !update.isEmpty else { throw HermesAPIError.invalidURL }
+        guard update.acknowledgedReview else { throw HermesAPIError.invalidURL }
+        guard var item = memoryIndex[update.id] else {
+            throw HermesAPIError.http(status: 404, body: "no memory item \(update.id)")
+        }
+        if let title = update.title { item.title = title }
+        if let body = update.body { item.body = body }
+        if let scope = update.scope { item.scope = scope }
+        if let pinned = update.isPinned { item.isPinned = pinned }
+        let updated = HermesMemoryItem(
+            id: item.id,
+            title: item.title,
+            body: item.body,
+            scope: item.scope,
+            source: item.source,
+            confidence: item.confidence,
+            tags: item.tags,
+            projectRef: item.projectRef,
+            sessionID: item.sessionID,
+            createdAt: item.createdAt,
+            updatedAt: Date(),
+            isPinned: item.isPinned
+        )
+        memoryIndex[update.id] = updated
+        return HermesMemoryMutationResult(
+            item: updated,
+            note: "Memory updated. The daemon-side index will refresh on the next sync."
+        )
+    }
+
+    public func deleteMemoryItem(id: String) async throws -> HermesMemoryDeleteResult {
+        deleteMemoryItemCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        guard let existing = memoryIndex[id] else {
+            throw HermesAPIError.http(status: 404, body: "no memory item \(id)")
+        }
+        guard existing.supportsDelete else {
+            throw HermesAPIError.http(status: 409, body: "memory item \(id) cannot be deleted from the desktop boundary")
+        }
+        memoryIndex.removeValue(forKey: id)
+        return HermesMemoryDeleteResult(
+            deleted: true,
+            id: id,
+            note: "Memory removed from the daemon store."
         )
     }
 
@@ -1311,5 +1563,247 @@ public enum MockHermesData {
         }
         copy.security.restartRequired = false
         return copy
+    }
+
+    // MARK: Skills (M6 fixtures)
+
+    public static let skillBoundaryNote: String = "Hermes Desktop manages skill records through the daemon API. Real installation, sandboxing, and execution remain daemon-owned and audited through the approval system."
+
+    public static let skills: [HermesSkill] = [
+        HermesSkill(
+            id: "skill-pr-review",
+            name: "Pull request reviewer",
+            summary: "Reads a PR diff, summarises risks, and drafts review comments.",
+            status: .active,
+            category: .coding,
+            source: .builtIn,
+            riskStyle: .safe,
+            version: "1.4.0",
+            triggerSummary: "When the user shares a PR URL or asks for a review.",
+            usageNotes: "Reads only. Comments are drafted in chat — posting requires explicit approval through the GitHub connector.",
+            artifacts: [
+                HermesSkillArtifact(id: "art-skill-pr-1",
+                                    kind: .promptTemplate,
+                                    title: "PR review prompt",
+                                    detail: "Built-in template, daemon-owned"),
+                HermesSkillArtifact(id: "art-skill-pr-2",
+                                    kind: .toolBinding,
+                                    title: "files.read",
+                                    detail: "Bound for diff inspection")
+            ],
+            isEnabled: true,
+            sourceSessionID: nil,
+            updatedAt: referenceDate.addingTimeInterval(-3 * 86_400),
+            installedBy: "Daemon (built-in)"
+        ),
+        HermesSkill(
+            id: "skill-meeting-brief",
+            name: "Meeting brief",
+            summary: "Drafts an agenda and pre-read for an upcoming meeting using calendar context.",
+            status: .active,
+            category: .planning,
+            source: .userCreated,
+            riskStyle: .requiresApproval,
+            version: "0.3.1",
+            triggerSummary: "When the user asks to prep for a meeting or build an agenda.",
+            usageNotes: "Calendar reads happen through the daemon. Outbound writes (sending agendas) require approval.",
+            artifacts: [
+                HermesSkillArtifact(id: "art-skill-mb-1",
+                                    kind: .promptTemplate,
+                                    title: "Meeting brief prompt"),
+                HermesSkillArtifact(id: "art-skill-mb-2",
+                                    kind: .file,
+                                    title: "agenda_template.md",
+                                    detail: "/Users/nick/Documents/notes/agenda_template.md")
+            ],
+            isEnabled: true,
+            sourceSessionID: "sess-004",
+            updatedAt: referenceDate.addingTimeInterval(-86_400),
+            installedBy: "You"
+        ),
+        HermesSkill(
+            id: "skill-shell-runner",
+            name: "Shell runner",
+            summary: "Executes scripted shell commands inside trusted folders. Always approval-gated.",
+            status: .disabled,
+            category: .ops,
+            source: .builtIn,
+            riskStyle: .sensitive,
+            version: "1.0.2",
+            triggerSummary: "When the user asks to run a script or batch command in a project folder.",
+            usageNotes: "Disabled by default. Enable only if your project policy permits shell execution.",
+            artifacts: [
+                HermesSkillArtifact(id: "art-skill-sh-1",
+                                    kind: .toolBinding,
+                                    title: "shell.run"),
+                HermesSkillArtifact(id: "art-skill-sh-2",
+                                    kind: .note,
+                                    title: "Trusted folders required",
+                                    detail: "Skill refuses to run outside configured trusted folders.")
+            ],
+            isEnabled: false,
+            sourceSessionID: nil,
+            updatedAt: referenceDate.addingTimeInterval(-7 * 86_400),
+            installedBy: "Daemon (built-in)"
+        ),
+        HermesSkill(
+            id: "skill-research-digest",
+            name: "Research digest",
+            summary: "Summarises a set of links or notes into a structured research digest.",
+            status: .active,
+            category: .research,
+            source: .sharedTeam,
+            riskStyle: .safe,
+            version: "2.0.0",
+            triggerSummary: "When the user asks to summarise multiple sources or build a research brief.",
+            usageNotes: "Reads only. Output stays in the chat transcript.",
+            artifacts: [
+                HermesSkillArtifact(id: "art-skill-rd-1",
+                                    kind: .promptTemplate,
+                                    title: "Research digest prompt")
+            ],
+            isEnabled: true,
+            sourceSessionID: nil,
+            updatedAt: referenceDate.addingTimeInterval(-2 * 86_400),
+            installedBy: "Team library"
+        ),
+        HermesSkill(
+            id: "skill-launch-notes",
+            name: "Launch notes drafter",
+            summary: "Drafts release notes from session history and recent commits.",
+            status: .draft,
+            category: .writing,
+            source: .sessionDraft,
+            riskStyle: .requiresApproval,
+            version: "0.1.0",
+            triggerSummary: "When the user asks to draft release notes or change-log entries.",
+            usageNotes: "Created from a session draft. The daemon will finalise install before this becomes runnable.",
+            artifacts: [
+                HermesSkillArtifact(id: "art-skill-ln-1",
+                                    kind: .promptTemplate,
+                                    title: "Launch notes prompt",
+                                    detail: "Captured from sess-streaming")
+            ],
+            isEnabled: false,
+            sourceSessionID: "sess-streaming",
+            updatedAt: referenceDate.addingTimeInterval(-30),
+            installedBy: "Draft"
+        ),
+        HermesSkill(
+            id: "skill-archive-html",
+            name: "HTML archive importer",
+            summary: "Legacy importer that pulled offline HTML archives. Archived in 0.42.",
+            status: .archived,
+            category: .data,
+            source: .builtIn,
+            riskStyle: .unknown,
+            version: "0.9.0",
+            triggerSummary: "Was used to import .html archives. Replaced by the connector pipeline.",
+            usageNotes: "Archived for historical context. Cannot be re-enabled from the desktop boundary.",
+            artifacts: [],
+            isEnabled: false,
+            sourceSessionID: nil,
+            updatedAt: referenceDate.addingTimeInterval(-30 * 86_400),
+            installedBy: "Daemon (built-in)"
+        )
+    ]
+
+    public static var skillIndex: [String: HermesSkill] {
+        Dictionary(uniqueKeysWithValues: skills.map { ($0.id, $0) })
+    }
+
+    // MARK: Memory (M6 fixtures)
+
+    public static let memoryBoundaryNote: String = "Hermes Desktop reads and edits memory entries through the typed daemon API. Real persistence, embedding, and indexing remain daemon-owned. Edits and deletes always queue a review step before applying."
+
+    public static let memoryItems: [HermesMemoryItem] = [
+        HermesMemoryItem(
+            id: "mem-user-role",
+            title: "User role and tone",
+            body: "Senior engineer working on the Hermes platform. Prefers concise, low-friction responses with concrete code examples.",
+            scope: .user,
+            source: .manual,
+            confidence: .high,
+            tags: ["profile", "tone"],
+            projectRef: nil,
+            sessionID: nil,
+            createdAt: referenceDate.addingTimeInterval(-30 * 86_400),
+            updatedAt: referenceDate.addingTimeInterval(-2 * 86_400),
+            isPinned: true
+        ),
+        HermesMemoryItem(
+            id: "mem-project-policy",
+            title: "Hermes repo: do not commit generated artifacts",
+            body: "Build outputs (DerivedData, Build/) and the auto-generated Xcode project should never be committed. Run xcodegen locally and verify with git status before any commit.",
+            scope: .project,
+            source: .manual,
+            confidence: .high,
+            tags: ["policy", "build"],
+            projectRef: projectHermes,
+            sessionID: nil,
+            createdAt: referenceDate.addingTimeInterval(-14 * 86_400),
+            updatedAt: referenceDate.addingTimeInterval(-86_400),
+            isPinned: true
+        ),
+        HermesMemoryItem(
+            id: "mem-session-style",
+            title: "Migration helper session preferences",
+            body: "When running migrations, queue every shell command for explicit approval. Do not execute multi-step migrations in a single approval batch.",
+            scope: .session,
+            source: .sessionLearned,
+            confidence: .medium,
+            tags: ["approvals", "shell"],
+            projectRef: projectHermes,
+            sessionID: "sess-002",
+            createdAt: referenceDate.addingTimeInterval(-2_400),
+            updatedAt: referenceDate.addingTimeInterval(-1_800),
+            isPinned: false
+        ),
+        HermesMemoryItem(
+            id: "mem-trusted-folders",
+            title: "Trusted folders configured",
+            body: "Daemon trusts /Users/nick/dev/hermes (read+write) and /Users/nick/Documents/notes (read-only). Anything outside these requires explicit per-session trust.",
+            scope: .global,
+            source: .autoExtracted,
+            confidence: .high,
+            tags: ["security", "trust"],
+            projectRef: nil,
+            sessionID: nil,
+            createdAt: referenceDate.addingTimeInterval(-21 * 86_400),
+            updatedAt: referenceDate.addingTimeInterval(-7 * 86_400),
+            isPinned: false
+        ),
+        HermesMemoryItem(
+            id: "mem-style-imports",
+            title: "Architecture preference: explicit imports",
+            body: "User prefers explicit module imports over wildcard re-exports. Surfaced from review comments across multiple sessions.",
+            scope: .user,
+            source: .autoExtracted,
+            confidence: .low,
+            tags: ["architecture", "style"],
+            projectRef: nil,
+            sessionID: nil,
+            createdAt: referenceDate.addingTimeInterval(-10 * 86_400),
+            updatedAt: referenceDate.addingTimeInterval(-3 * 86_400),
+            isPinned: false
+        ),
+        HermesMemoryItem(
+            id: "mem-imported-handbook",
+            title: "Hermes engineering handbook excerpt",
+            body: "Imported reference: \"Use semantic colour tokens (HermesColors.*) — never raw hex in feature views.\" Synced from the team handbook on 2026-04-30.",
+            scope: .global,
+            source: .importedReference,
+            confidence: .high,
+            tags: ["handbook", "design-system"],
+            projectRef: nil,
+            sessionID: nil,
+            createdAt: referenceDate.addingTimeInterval(-9 * 86_400),
+            updatedAt: referenceDate.addingTimeInterval(-9 * 86_400),
+            isPinned: false
+        )
+    ]
+
+    public static var memoryIndex: [String: HermesMemoryItem] {
+        Dictionary(uniqueKeysWithValues: memoryItems.map { ($0.id, $0) })
     }
 }

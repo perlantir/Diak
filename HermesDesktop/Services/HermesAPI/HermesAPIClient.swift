@@ -109,4 +109,52 @@ public protocol HermesAPIClient: Sendable {
     /// Disconnect/disable a connector. The daemon revokes its own
     /// credentials; the desktop app simply requests the change.
     func disconnectConnector(id: String) async throws -> HermesConnectorDisconnectResult
+
+    // MARK: Skills (M6)
+
+    /// Catalog of every skill the daemon currently knows about plus a
+    /// boundary note. The desktop app never executes a skill itself —
+    /// it only manages the library record and surfaces what the daemon
+    /// reports.
+    func skills() async throws -> HermesSkillCatalog
+
+    /// Fetch one skill by id. Used after toggling so the detail panel
+    /// can refresh without reloading the whole library.
+    func skill(id: String) async throws -> HermesSkill
+
+    /// Enable or disable a skill. The only mutation the M6 desktop
+    /// boundary exposes for existing skills — install/uninstall remain
+    /// daemon-owned.
+    func setSkillEnabled(id: String, isEnabled: Bool) async throws -> HermesSkillMutationResult
+
+    /// Ask the daemon what a "create skill from this session" draft
+    /// would look like. Returns a review payload the user can edit
+    /// before submission. The desktop app never installs skills itself.
+    func previewSkillDraftFromSession(sessionID: String) async throws -> HermesSkillDraftReview
+
+    /// Submit an edited skill draft back to the daemon for installation.
+    /// Implementations must reject locally if the user has not
+    /// acknowledged that the daemon (not the Mac app) will perform the
+    /// install side effect.
+    func submitSkillDraft(_ request: HermesSkillDraftRequest) async throws -> HermesSkillMutationResult
+
+    // MARK: Memory (M6)
+
+    /// Memory dashboard payload. The desktop app reads memory entries
+    /// through this typed boundary; the daemon owns all real
+    /// persistence and indexing.
+    func memoryItems() async throws -> HermesMemoryDashboard
+
+    /// Fetch one memory item by id. Useful for refreshing the edit
+    /// sheet after a save without reloading the whole dashboard.
+    func memoryItem(id: String) async throws -> HermesMemoryItem
+
+    /// Apply a draft update to a memory item. Implementations must
+    /// reject locally when the update is empty or when the user has
+    /// not acknowledged the review-and-write step.
+    func updateMemoryItem(_ update: HermesMemoryUpdate) async throws -> HermesMemoryMutationResult
+
+    /// Delete a memory item. The daemon performs the actual removal;
+    /// the desktop app simply requests the change.
+    func deleteMemoryItem(id: String) async throws -> HermesMemoryDeleteResult
 }

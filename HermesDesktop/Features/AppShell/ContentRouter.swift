@@ -11,6 +11,8 @@ struct ContentRouter: View {
     @StateObject private var settings: SettingsViewModel
     @StateObject private var automations: AutomationsViewModel
     @StateObject private var connectors: ConnectorsViewModel
+    @StateObject private var skills: SkillsViewModel
+    @StateObject private var memory: MemoryViewModel
 
     init(section: SidebarNavSection,
          daemon: DaemonStatusViewModel,
@@ -27,6 +29,8 @@ struct ContentRouter: View {
         _settings = StateObject(wrappedValue: SettingsViewModel(client: client))
         _automations = StateObject(wrappedValue: AutomationsViewModel(client: client))
         _connectors = StateObject(wrappedValue: ConnectorsViewModel(client: client))
+        _skills = StateObject(wrappedValue: SkillsViewModel(client: client))
+        _memory = StateObject(wrappedValue: MemoryViewModel(client: client))
     }
 
     var body: some View {
@@ -45,13 +49,9 @@ struct ContentRouter: View {
                 case .connectors:
                     ConnectorsView(viewModel: connectors)
                 case .skills:
-                    EmptyStateView(icon: "wand.and.stars",
-                                   title: "Skills",
-                                   message: "Reusable, inspectable agent skills. Coming in M6.")
+                    SkillsView(viewModel: skills)
                 case .memory:
-                    EmptyStateView(icon: "brain.head.profile",
-                                   title: "Memory",
-                                   message: "What Hermes remembers about you and your work. Coming in M6.")
+                    MemoryView(viewModel: memory)
                 case .projects:
                     EmptyStateView(icon: "folder",
                                    title: "Projects",

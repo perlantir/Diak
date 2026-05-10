@@ -100,4 +100,43 @@ final class RestartOnlyConfigClient: HermesAPIClient, @unchecked Sendable {
     func disconnectConnector(id: String) async throws -> HermesConnectorDisconnectResult {
         throw HermesAPIError.http(status: 501, body: nil)
     }
+
+    func skills() async throws -> HermesSkillCatalog {
+        HermesSkillCatalog(skills: [], boundaryNote: "Skills APIs are not used by settings tests.")
+    }
+
+    func skill(id: String) async throws -> HermesSkill {
+        throw HermesAPIError.http(status: 404, body: nil)
+    }
+
+    func setSkillEnabled(id: String, isEnabled: Bool) async throws -> HermesSkillMutationResult {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
+
+    func previewSkillDraftFromSession(sessionID: String) async throws -> HermesSkillDraftReview {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
+
+    func submitSkillDraft(_ request: HermesSkillDraftRequest) async throws -> HermesSkillMutationResult {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
+
+    func memoryItems() async throws -> HermesMemoryDashboard {
+        HermesMemoryDashboard(items: [],
+                              boundaryNote: "Memory APIs are not used by settings tests.",
+                              pinnedCount: 0,
+                              totalCount: 0)
+    }
+
+    func memoryItem(id: String) async throws -> HermesMemoryItem {
+        throw HermesAPIError.http(status: 404, body: nil)
+    }
+
+    func updateMemoryItem(_ update: HermesMemoryUpdate) async throws -> HermesMemoryMutationResult {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
+
+    func deleteMemoryItem(id: String) async throws -> HermesMemoryDeleteResult {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
 }

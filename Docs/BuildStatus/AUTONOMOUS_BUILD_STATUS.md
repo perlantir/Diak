@@ -1,20 +1,26 @@
 # Hermes Desktop Autonomous Build Status
 
-Updated: 2026-05-10 01:00 CDT
+Updated: 2026-05-10 01:34 CDT
 
 ## Current milestone
 
-M6 — skills/memory UI and typed API boundary is now the active milestone.
+M6 — skills/memory UI and typed API boundary verified locally. Preparing to advance to M7 native Mac integrations after committing the verified M6 increment.
 
 ## Completed this run
 
-M5 connectors was verified and committed.
+Claude Code's prior M6 builder had finished; no active Claude process was found for `/Users/perlantir/Projects/HermesDesktop`.
 
-- Commit: `570559b Implement M5 connectors`
-- Verified M5 surface: connector catalog/detail UI, status/sync/scope/error models, setup handoff acknowledgement, write-policy API boundary, disconnect boundary, URLSession endpoint tests, and view-model tests.
-- M5 remained mock/local API-boundary only; no real connectors/OAuth/provider tokens were implemented.
+Verified and repaired the M6 increment:
 
-## M5 verification evidence
+- Added Skills library/detail/create-from-session review surface through `HermesAPIClient` typed boundary and mock URLSession/client behavior.
+- Added Memory dashboard/edit/delete surface through typed API boundary and mock URLSession/client behavior.
+- Wired Skills and Memory into `ContentRouter` through reusable view models.
+- Added M6 model decoding, view-model, and URLSession endpoint tests.
+- Fixed a deterministic test-build break by updating `RestartOnlyConfigClient` test double with M6 protocol stubs.
+
+M6 remains boundary-only: no real skill execution, no memory persistence internals, no provider writes, and no native menu-bar/global-hotkey implementation in this increment.
+
+## Verification evidence
 
 Commands run from `/Users/perlantir/Projects/HermesDesktop`:
 
@@ -31,19 +37,16 @@ Results:
 - `xcodegen generate`: succeeded.
 - `xcodebuild -list`: succeeded; scheme `HermesDesktop`.
 - Debug macOS build: succeeded.
-- Tests: succeeded — 71 tests, 0 failures.
-- Latest passing test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_00-59-53--0500.xcresult`.
+- First full test attempt found one compile issue in `SettingsViewModelTestDoubles.swift` after `HermesAPIClient` gained M6 requirements.
+- Fixed the test double with no-op/throwing M6 API stubs.
+- Re-run tests: succeeded — 97 tests, 0 failures.
+- Latest passing test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_01-33-49--0500.xcresult`.
 - `git diff --check`: succeeded.
 
 ## Builder status
 
-Prepared M6 kickoff context:
-
-- Updated `CLAUDE.md` to mark M0–M5 complete and M6 active.
-- Created `Docs/Prompts/CLAUDE_CODE_M6_SKILLS_MEMORY_KICKOFF.md`.
-
-M6 scope: skills library/detail/create-review and memory dashboard/edit-delete UI through typed API-boundary/mock behavior only. No real skill execution, memory persistence internals, menu bar/global hotkey, packaging/updater, or native integrations.
+No Claude Code process is active at this update.
 
 ## Next action
 
-Start exactly one Claude Code print-mode builder for M6. Next cron run should not start a duplicate builder while that process is active. If it has finished, inspect repo state, run XcodeGen/build/tests, fix deterministic failures if safe, and commit only a verified M6 increment.
+Commit the verified M6 increment, update milestone context to M7, create an M7 native Mac integrations kickoff prompt, and start exactly one bounded Claude Code print-mode builder for M7 if no duplicate builder appears.

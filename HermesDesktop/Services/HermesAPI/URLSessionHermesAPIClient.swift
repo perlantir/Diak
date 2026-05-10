@@ -185,6 +185,71 @@ public final class URLSessionHermesAPIClient: HermesAPIClient, @unchecked Sendab
         try await delete("/connectors/\(id)")
     }
 
+    // MARK: Skills (M6)
+
+    public func skills() async throws -> HermesSkillCatalog {
+        try await get("/skills")
+    }
+
+    public func skill(id: String) async throws -> HermesSkill {
+        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw HermesAPIError.invalidURL }
+        return try await get("/skills/\(trimmed)")
+    }
+
+    public func setSkillEnabled(id: String, isEnabled: Bool) async throws -> HermesSkillMutationResult {
+        struct Body: Encodable { let is_enabled: Bool }
+        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw HermesAPIError.invalidURL }
+        return try await patch("/skills/\(trimmed)/enabled", body: Body(is_enabled: isEnabled))
+    }
+
+    public func previewSkillDraftFromSession(sessionID: String) async throws -> HermesSkillDraftReview {
+        let trimmed = sessionID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw HermesAPIError.invalidURL }
+        return try await get("/skills/draft-from-session/\(trimmed)")
+    }
+
+    public func submitSkillDraft(_ request: HermesSkillDraftRequest) async throws -> HermesSkillMutationResult {
+        // Boundary contract: the user must acknowledge the daemon owns
+        // install side effects before we even hit the wire.
+        guard request.acknowledgedDaemonInstall else {
+            throw HermesAPIError.invalidURL
+        }
+        let trimmedName = request.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSession = request.sessionID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, !trimmedSession.isEmpty else {
+            throw HermesAPIError.invalidURL
+        }
+        return try await post("/skills/draft", body: request)
+    }
+
+    // MARK: Memory (M6)
+
+    public func memoryItems() async throws -> HermesMemoryDashboard {
+        try await get("/memory")
+    }
+
+    public func memoryItem(id: String) async throws -> HermesMemoryItem {
+        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw HermesAPIError.invalidURL }
+        return try await get("/memory/\(trimmed)")
+    }
+
+    public func updateMemoryItem(_ update: HermesMemoryUpdate) async throws -> HermesMemoryMutationResult {
+        let trimmed = update.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw HermesAPIError.invalidURL }
+        guard !update.isEmpty else { throw HermesAPIError.invalidURL }
+        guard update.acknowledgedReview else { throw HermesAPIError.invalidURL }
+        return try await patch("/memory/\(trimmed)", body: update)
+    }
+
+    public func deleteMemoryItem(id: String) async throws -> HermesMemoryDeleteResult {
+        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw HermesAPIError.invalidURL }
+        return try await delete("/memory/\(trimmed)")
+    }
+
     // MARK: Internals
 
     private func get<T: Decodable>(_ path: String) async throws -> T {
