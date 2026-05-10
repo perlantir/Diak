@@ -3,7 +3,8 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var daemon: DaemonStatusViewModel
     @ObservedObject var engineViewModel: HermesEngineViewModel
-    @State private var selection: Tab = .hermesEngine
+    @ObservedObject var settings: SettingsViewModel
+    @State private var selection: Tab = .general
 
     enum Tab: String, CaseIterable, Identifiable {
         case general
@@ -49,6 +50,13 @@ struct SettingsView: View {
                     }
                 }
                 Spacer()
+                if settings.savedRequiresRestart {
+                    Text("Daemon restart required")
+                        .font(HermesTypography.caption)
+                        .foregroundStyle(HermesColors.warning)
+                        .padding(.horizontal, HermesSpacing.sm)
+                        .padding(.bottom, HermesSpacing.sm)
+                }
             }
             .padding(HermesSpacing.sm)
             .frame(minWidth: 200, idealWidth: 220, maxWidth: 240)
@@ -57,27 +65,22 @@ struct SettingsView: View {
             Group {
                 switch selection {
                 case .general:
-                    EmptyStateView(icon: "gearshape",
-                                   title: "General",
-                                   message: "Appearance, hotkeys, startup, and updates land in later milestones.")
+                    ProfileSettingsView(viewModel: settings)
                 case .hermesEngine:
-                    HermesEngineSettingsView(daemon: daemon, viewModel: engineViewModel)
+                    HermesEngineSettingsView(daemon: daemon,
+                                             viewModel: engineViewModel,
+                                             settings: settings)
                 case .modelsProviders:
-                    EmptyStateView(icon: "cpu",
-                                   title: "Models & Providers",
-                                   message: "Configure which providers Hermes routes to. Coming in M3.")
+                    ModelsProvidersView(viewModel: settings)
                 case .toolsPermissions:
-                    EmptyStateView(icon: "wrench.and.screwdriver",
-                                   title: "Tools & Permissions",
-                                   message: "Per-tool approval policies and capability scopes. Coming in M3.")
+                    ToolsPermissionsView(viewModel: settings)
                 case .securityPrivacy:
-                    EmptyStateView(icon: "lock.shield",
-                                   title: "Security & Privacy",
-                                   message: "Logs, redaction, and trust folders. Coming in M3.")
+                    SecurityPrivacyView(viewModel: settings)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(HermesColors.canvas)
         }
+        .task { await settings.refresh() }
     }
 }

@@ -85,6 +85,35 @@ public final class URLSessionHermesAPIClient: HermesAPIClient, @unchecked Sendab
         return try await get("/evidence")
     }
 
+    // MARK: Settings / config (M3)
+
+    public func config() async throws -> HermesConfigSnapshot {
+        try await get("/config")
+    }
+
+    public func updateConfig(_ update: HermesConfigUpdate) async throws -> HermesConfigSaveResult {
+        guard !update.isEmpty else {
+            // Don't waste a daemon round-trip on a no-op save. The view
+            // model already guards this; the boundary is the safety net.
+            throw HermesAPIError.invalidURL
+        }
+        return try await post("/config", body: update)
+    }
+
+    public func restartDaemon() async throws -> HermesDaemonLifecycleResult {
+        struct Empty: Encodable {}
+        return try await post("/daemon/restart", body: Empty())
+    }
+
+    public func reconnectDaemon() async throws -> HermesDaemonLifecycleResult {
+        struct Empty: Encodable {}
+        return try await post("/daemon/reconnect", body: Empty())
+    }
+
+    public func daemonLogs() async throws -> HermesDaemonLogSummary {
+        try await get("/daemon/logs")
+    }
+
     // MARK: Internals
 
     private func get<T: Decodable>(_ path: String) async throws -> T {

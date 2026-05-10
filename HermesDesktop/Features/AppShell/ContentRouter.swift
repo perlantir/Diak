@@ -8,6 +8,7 @@ struct ContentRouter: View {
     let client: HermesAPIClient
     @StateObject private var chat: ChatViewModel
     @StateObject private var sessions: SessionsViewModel
+    @StateObject private var settings: SettingsViewModel
 
     init(section: SidebarNavSection,
          daemon: DaemonStatusViewModel,
@@ -21,6 +22,7 @@ struct ContentRouter: View {
         self.client = client
         _chat = StateObject(wrappedValue: ChatViewModel(client: client))
         _sessions = StateObject(wrappedValue: SessionsViewModel(client: client))
+        _settings = StateObject(wrappedValue: SettingsViewModel(client: client))
     }
 
     var body: some View {
@@ -57,7 +59,9 @@ struct ContentRouter: View {
                 case .actionCenter:
                     ActionCenterView(viewModel: approvals)
                 case .settings:
-                    SettingsView(daemon: daemon, engineViewModel: engineViewModel)
+                    SettingsView(daemon: daemon,
+                                 engineViewModel: engineViewModel,
+                                 settings: settings)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

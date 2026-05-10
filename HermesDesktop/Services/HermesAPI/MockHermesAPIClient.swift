@@ -20,12 +20,21 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     public private(set) var approvalCallCount = 0
     public private(set) var decideApprovalCallCount = 0
     public private(set) var actionEvidenceCallCount = 0
+    public private(set) var configCallCount = 0
+    public private(set) var updateConfigCallCount = 0
+    public private(set) var restartDaemonCallCount = 0
+    public private(set) var reconnectDaemonCallCount = 0
+    public private(set) var daemonLogsCallCount = 0
 
     /// In-memory approval/evidence stores. Mutating them through
     /// `decideApproval` keeps state visible across reads inside a single
     /// process (drives view-model refresh in tests + previews).
     private var approvals: [String: HermesApprovalRequest] = MockHermesData.approvalIndex
     private var evidence: [HermesActionEvidence] = MockHermesData.actionEvidence
+
+    /// In-memory config snapshot. Saves replace fields field-by-field
+    /// so partial updates don't clobber unrelated state.
+    private var configSnapshot: HermesConfigSnapshot = MockHermesData.configSnapshot
 
     /// Optional override: force a specific session to be returned by
     /// `createSession` so tests/previews can pin the id.
@@ -180,6 +189,108 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     public func resetApprovalState() {
         approvals = MockHermesData.approvalIndex
         evidence = MockHermesData.actionEvidence
+    }
+
+    // MARK: Settings / config (M3)
+
+    public func config() async throws -> HermesConfigSnapshot {
+        configCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        return configSnapshot
+    }
+
+    public func updateConfig(_ update: HermesConfigUpdate) async throws -> HermesConfigSaveResult {
+        updateConfigCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        guard !update.isEmpty else {
+            // Surfaced through the same error type the URL client uses
+            // so view-model error paths stay consistent.
+            throw HermesAPIError.invalidURL
+        }
+
+        var snapshot = configSnapshot
+        var requiresRestart = false
+
+        if let activeProfile = update.activeProfile {
+            snapshot.activeProfileID = activeProfile.id
+            // Replace the matching profile in the list and clear active
+            // flags on the others so the snapshot stays self-consistent.
+            snapshot.profiles = snapshot.profiles.map { existing in
+                var copy = existing
+                copy.isActive = (existing.id == activeProfile.id)
+                if existing.id == activeProfile.id {
+                    copy.displayName = activeProfile.displayName
+                    copy.role = activeProfile.role
+                    copy.defaultProjectLabel = activeProfile.defaultProjectLabel
+                }
+                return copy
+            }
+        }
+
+        if let providers = update.providers {
+            // Merge by id; new providers can be added but the mock only
+            // reuses existing ids so flag-bit changes are visible.
+            var byID: [String: HermesModelProvider] = Dictionary(
+                uniqueKeysWithValues: snapshot.providers.map { ($0.id, $0) }
+            )
+            for provider in providers {
+                if provider.restartRequired { requiresRestart = true }
+                byID[provider.id] = provider
+            }
+            snapshot.providers = providers.map { byID[$0.id] ?? $0 }
+        }
+
+        if let tools = update.tools {
+            var byID: [String: HermesToolPermission] = Dictionary(
+                uniqueKeysWithValues: snapshot.tools.map { ($0.id, $0) }
+            )
+            for tool in tools {
+                if tool.restartRequired { requiresRestart = true }
+                byID[tool.id] = tool
+            }
+            snapshot.tools = tools.map { byID[$0.id] ?? $0 }
+        }
+
+        if let security = update.security {
+            if security.restartRequired { requiresRestart = true }
+            snapshot.security = security
+        }
+
+        configSnapshot = snapshot
+        return HermesConfigSaveResult(
+            snapshot: snapshot,
+            requiresRestart: requiresRestart,
+            note: requiresRestart
+                ? "Some changes will take effect after a daemon restart."
+                : nil
+        )
+    }
+
+    public func restartDaemon() async throws -> HermesDaemonLifecycleResult {
+        restartDaemonCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        // Restart clears any restart-required bits on the snapshot.
+        configSnapshot = MockHermesData.applyRestart(to: configSnapshot)
+        return HermesDaemonLifecycleResult(accepted: true,
+                                           note: "Restart scheduled.")
+    }
+
+    public func reconnectDaemon() async throws -> HermesDaemonLifecycleResult {
+        reconnectDaemonCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        return HermesDaemonLifecycleResult(accepted: true,
+                                           note: "Reconnect attempted.")
+    }
+
+    public func daemonLogs() async throws -> HermesDaemonLogSummary {
+        daemonLogsCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        return configSnapshot.daemon
+    }
+
+    /// Test affordance: reset the in-memory config back to fixtures.
+    public func resetConfigState() {
+        configSnapshot = MockHermesData.configSnapshot
     }
 
     private static func riskWeight(_ risk: HermesApprovalRisk) -> Int {
@@ -605,5 +716,156 @@ public enum MockHermesData {
         let limit = 48
         if firstLine.count <= limit { return String(firstLine) }
         return String(firstLine.prefix(limit)) + "…"
+    }
+
+    // MARK: Settings / config (M3 fixtures)
+
+    public static let profiles: [HermesProfile] = [
+        HermesProfile(id: "prof-default",
+                      displayName: "Nick — Engineer",
+                      role: .engineer,
+                      defaultProjectLabel: "Hermes repo",
+                      isActive: true),
+        HermesProfile(id: "prof-research",
+                      displayName: "Research scratchpad",
+                      role: .researcher,
+                      defaultProjectLabel: nil,
+                      isActive: false)
+    ]
+
+    public static let providers: [HermesModelProvider] = [
+        HermesModelProvider(
+            id: "prov-anthropic",
+            displayName: "Anthropic",
+            kind: .anthropic,
+            status: .ready,
+            defaultModel: "claude-sonnet-4-6",
+            availableModels: [
+                "claude-opus-4-7",
+                "claude-sonnet-4-6",
+                "claude-haiku-4-5"
+            ],
+            needsAPIKey: true,
+            hasAPIKey: true
+        ),
+        HermesModelProvider(
+            id: "prov-openai",
+            displayName: "OpenAI",
+            kind: .openai,
+            status: .missingKey,
+            defaultModel: "gpt-5.5",
+            availableModels: ["gpt-5.5", "gpt-5"],
+            needsAPIKey: true,
+            hasAPIKey: false
+        ),
+        HermesModelProvider(
+            id: "prov-ollama",
+            displayName: "Ollama (local)",
+            kind: .ollama,
+            status: .ready,
+            defaultModel: "llama3.3:70b",
+            availableModels: ["llama3.3:70b", "qwen2.5:32b"],
+            needsAPIKey: false,
+            hasAPIKey: true
+        )
+    ]
+
+    public static let tools: [HermesToolPermission] = [
+        HermesToolPermission(
+            id: "tool-files",
+            name: "Files",
+            description: "Read and edit files inside trusted folders.",
+            canRead: true,
+            canWrite: true,
+            canDestroy: false,
+            policy: .autoReadOnly,
+            isEnabled: true
+        ),
+        HermesToolPermission(
+            id: "tool-shell",
+            name: "Terminal",
+            description: "Run shell commands inside trusted folders.",
+            canRead: true,
+            canWrite: true,
+            canDestroy: true,
+            policy: .alwaysAsk,
+            isEnabled: true
+        ),
+        HermesToolPermission(
+            id: "tool-browser",
+            name: "Browser",
+            description: "Navigate and read pages with the headless browser.",
+            canRead: true,
+            canWrite: false,
+            canDestroy: false,
+            policy: .autoApprove,
+            isEnabled: true
+        ),
+        HermesToolPermission(
+            id: "tool-connectors",
+            name: "Connectors",
+            description: "Send messages and writes to external services.",
+            canRead: true,
+            canWrite: true,
+            canDestroy: false,
+            policy: .alwaysAsk,
+            isEnabled: false
+        )
+    ]
+
+    public static let security = HermesSecuritySettings(
+        trustedFolders: [
+            HermesTrustedFolder(id: "fold-hermes",
+                                path: "/Users/nick/dev/hermes",
+                                allowsWrites: true),
+            HermesTrustedFolder(id: "fold-notes",
+                                path: "/Users/nick/Documents/notes",
+                                allowsWrites: false)
+        ],
+        logRedaction: .standard,
+        logRetentionDays: 14,
+        telemetryEnabled: false,
+        offlineModeEnabled: false
+    )
+
+    public static let daemonLogs = HermesDaemonLogSummary(
+        version: "0.42.0",
+        build: "2026.05.09",
+        profile: "local-dev",
+        uptimeSeconds: 4321,
+        logPath: "/Users/nick/Library/Logs/Hermes/daemon.log",
+        recentLines: [
+            "[2026-05-09 22:30:01] hermes.daemon ready on 127.0.0.1:8765",
+            "[2026-05-09 22:30:14] provider:anthropic ready",
+            "[2026-05-09 22:30:14] provider:ollama ready",
+            "[2026-05-09 22:31:02] tool:files registered (read+write)",
+            "[2026-05-09 22:31:02] tool:shell registered (read+write+destroy)",
+            "[2026-05-09 22:31:02] tool:browser registered (read)"
+        ],
+        lastCheckedAt: referenceDate
+    )
+
+    public static let configSnapshot = HermesConfigSnapshot(
+        profiles: profiles,
+        activeProfileID: "prof-default",
+        providers: providers,
+        tools: tools,
+        security: security,
+        daemon: daemonLogs
+    )
+
+    /// Clear restart-required bits across the snapshot — the mock uses
+    /// this when the user "restarts" the daemon so the UI can verify
+    /// the after-state.
+    public static func applyRestart(to snapshot: HermesConfigSnapshot) -> HermesConfigSnapshot {
+        var copy = snapshot
+        copy.providers = copy.providers.map {
+            var p = $0; p.restartRequired = false; return p
+        }
+        copy.tools = copy.tools.map {
+            var t = $0; t.restartRequired = false; return t
+        }
+        copy.security.restartRequired = false
+        return copy
     }
 }

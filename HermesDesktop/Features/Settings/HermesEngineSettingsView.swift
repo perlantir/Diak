@@ -3,12 +3,22 @@ import SwiftUI
 struct HermesEngineSettingsView: View {
     @ObservedObject var daemon: DaemonStatusViewModel
     @ObservedObject var viewModel: HermesEngineViewModel
+    @ObservedObject var settings: SettingsViewModel
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: HermesSpacing.lg) {
                 SectionHeader("Hermes Engine",
                               subtitle: "The agent runtime that powers Hermes Desktop.")
+
+                if settings.savedRequiresRestart {
+                    RestartRequiredBanner(
+                        title: "Restart required",
+                        message: "Saved changes to providers, tools, or security need a daemon restart to take effect.",
+                        restartTitle: "Restart daemon",
+                        onRestart: { Task { await settings.restartDaemon() } }
+                    )
+                }
 
                 HermesCard {
                     VStack(alignment: .leading, spacing: HermesSpacing.md) {
@@ -67,18 +77,50 @@ struct HermesEngineSettingsView: View {
                             HermesButton("Reconnect",
                                          kind: .secondary,
                                          isLoading: viewModel.reconnectState == .running) {
-                                Task { await viewModel.reconnect() }
+                                Task {
+                                    await settings.reconnectDaemon()
+                                    await viewModel.reconnect()
+                                }
                             }
                             HermesButton("Restart daemon",
                                          kind: .secondary,
                                          isLoading: viewModel.restartState == .running) {
-                                Task { await viewModel.restart() }
+                                Task {
+                                    await settings.restartDaemon()
+                                    await viewModel.restart()
+                                }
                             }
                             Spacer()
                         }
-                        Text("Restart is a placeholder in M0. Real lifecycle controls land in M3.")
+                        Text("Restart goes through the typed API boundary; the daemon owns the lifecycle.")
                             .font(HermesTypography.caption)
                             .foregroundStyle(HermesColors.subtle)
+                    }
+                }
+
+                if let daemonLogs = settings.draft?.daemon {
+                    HermesCard {
+                        VStack(alignment: .leading, spacing: HermesSpacing.md) {
+                            HStack {
+                                Text("Daemon logs")
+                                    .font(HermesTypography.bodyStrong)
+                                    .foregroundStyle(HermesColors.text)
+                                Spacer()
+                                if case .offline = daemon.status {
+                                    StatusBadge("Offline — log path only", tone: .warning)
+                                }
+                            }
+                            if let path = daemonLogs.logPath {
+                                StatusRow(label: "Log path", value: path, monospaced: true)
+                            }
+                            if daemonLogs.recentLines.isEmpty {
+                                Text("No recent log lines available.")
+                                    .font(HermesTypography.caption)
+                                    .foregroundStyle(HermesColors.subtle)
+                            } else {
+                                LogPreviewView(lines: daemonLogs.recentLines)
+                            }
+                        }
                     }
                 }
 
@@ -88,6 +130,7 @@ struct HermesEngineSettingsView: View {
             .frame(maxWidth: 760, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .task { await settings.refresh() }
     }
 
     private var daemonLabel: String {

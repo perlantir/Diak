@@ -42,4 +42,30 @@ public protocol HermesAPIClient: Sendable {
     /// global Action Center view; pass a value for the per-session
     /// inspector pane.
     func actionEvidence(sessionID: String?) async throws -> [HermesActionEvidence]
+
+    // MARK: Settings / config (M3)
+
+    /// Full settings snapshot the daemon currently has applied. Drives
+    /// the General/Models/Tools/Security screens. Always read-fresh
+    /// before draft editing.
+    func config() async throws -> HermesConfigSnapshot
+
+    /// Apply a draft update. Returns the new snapshot plus whether a
+    /// daemon restart is required to fully take effect. Implementations
+    /// must reject empty updates locally rather than reaching out.
+    func updateConfig(_ update: HermesConfigUpdate) async throws -> HermesConfigSaveResult
+
+    /// Ask the daemon to restart. Returns immediately with an
+    /// acceptance flag; the caller should follow up with a status
+    /// refresh to observe the new state.
+    func restartDaemon() async throws -> HermesDaemonLifecycleResult
+
+    /// Ask the daemon to drop and rebuild local connections (websockets,
+    /// provider sessions). Cheaper than a full restart.
+    func reconnectDaemon() async throws -> HermesDaemonLifecycleResult
+
+    /// Daemon log/status summary surfaced in the Hermes Engine tab.
+    /// Truthful: implementations must surface offline/error explicitly
+    /// rather than fabricating logs.
+    func daemonLogs() async throws -> HermesDaemonLogSummary
 }
