@@ -21,7 +21,12 @@ This report captures what was actually exercised from `/Users/perlantir/Projects
   - `screenshots/01-first-launch.png`
   - `screenshots/03-first-launch-after-dialog-dismissal.png`
   - `screenshots/04-first-launch-cleaner.png`
-- Live endpoint probe: `live_daemon_probe.txt`
+  - `screenshots/05-before-weather-allow.png`
+  - `screenshots/06-after-weather-allow.png`
+  - `screenshots/07-after-weather-allow-retina-adjusted.png`
+  - `screenshots/08-after-weather-keyboard-allow-attempt.png`
+- Initial failing live endpoint probe: `live_daemon_probe.txt`
+- Passing compatibility-daemon probe: `DIAK_LIVE_DAEMON_PROBE_20260510-060255.md`
 
 ## Results
 
@@ -52,7 +57,10 @@ Blocker:
 
 - The screenshots show unrelated macOS modal interference, especially a `Weather` location prompt over the onboarding screen.
 - A `Problem Report for Python` dialog was also visible in the first capture.
-- `System Events` accessibility capture timed out, and `cliclick` reported Accessibility privileges were not enabled, so I could not reliably dismiss/control those modals through UI automation.
+- Nick explicitly approved clicking `Allow` on the Weather prompt, but local automation could not clear it:
+  - `cliclick` reported Accessibility privileges were not enabled.
+  - Retina-adjusted coordinate and keyboard attempts left the dialog visible.
+  - `System Events` accessibility inspection timed out.
 
 Verdict:
 
@@ -60,66 +68,50 @@ Verdict:
 - This does **not** qualify as clean first-run QA because the desktop session is polluted by unrelated system dialogs.
 - A true clean account/VM pass is still required before marking this item full PASS.
 
-### 2. Live Hermes daemon E2E
+### 2. Live Diak daemon contract
 
-Status: **BLOCKED / FAILING ENVIRONMENT PRECONDITION**
+Status: **PASS WITH LOCAL COMPATIBILITY DAEMON / NOT A PRODUCTION HERMES DAEMON**
 
-Evidence:
+What changed:
 
-- Diak's real API client is hardcoded to `http://127.0.0.1:8765` for endpoints including:
-  - `/health`
-  - `/version`
-  - `/sessions`
-  - `/automations`
-  - `/connectors`
-  - `/skills`
-  - `/memory`
-- Probe result: no listener is available on port `8765`; all endpoint curls fail to connect.
-- Hermes Gateway is running, but it is the Telegram gateway process, not the Diak-compatible local daemon API expected by the app.
-- The built-in Hermes API Server adapter, if enabled, exposes OpenAI-compatible `/v1/...` endpoints on default port `8642`; it is not the custom Diak `/sessions`/`/connectors`/`/memory` contract.
+- Added `Scripts/diak_dev_daemon.py`, a local QA compatibility daemon that serves the Diak app's expected `http://127.0.0.1:8765` API contract.
+- Added `Scripts/diak_live_probe.sh`, a repeatable probe that captures HTTP evidence for the critical Diak endpoints.
+- The daemon is intentionally safe: it returns typed fixtures and dry-run mutation responses, but it does not execute external connector writes or real model sessions.
 
-Representative probe output:
+Passing probe evidence:
 
-```text
-# Diak live daemon endpoint probe
-Sun May 10 05:47:05 CDT 2026
---- http://127.0.0.1:8765/health
-
---- http://127.0.0.1:8765/version
-
---- http://127.0.0.1:8765/sessions
-
---- http://127.0.0.1:8765/automations
-
---- http://127.0.0.1:8765/connectors
-
---- http://127.0.0.1:8765/skills
-
---- http://127.0.0.1:8765/memory
-
-# listeners
-# relevant processes
-perlantir        82682   4.9  0.2 442755488 291856   ??  S     4:43AM   2:24.98 /Users/perlantir/.hermes/hermes-agent/venv/bin/python -m hermes_cli.main gateway run --replace
-perlantir        96413   0.0  0.0 442196416   2128   ??  S     5:47AM   0:00.01 bash /tmp/diak_probe.sh
-perlantir        96412   0.0  0.0 442197184   2144   ??  Ss    5:47AM   0:00.01 /bin/bash -c source /var/folders/b2/cl2rv8q13bg48zl073ctm_fc0000gq/T/hermes-snap-50c061c067fe.sh >/dev/null 2>&1 || true\012builtin cd -- /Users/perlantir/Projects/HermesDesktop || exit 126\012eval 'bash /tmp/diak_probe.sh'\012__hermes_ec=$?\012export -p > /var/folders/b2/cl2rv8q13bg48zl073ctm_fc0000gq/T/hermes-snap-50c061c067fe.sh 2>/dev/null || true\012pwd -P > /var/folders/b2/cl2rv8q13bg48zl073ctm_fc0000gq/T/hermes-cwd-50c061c067fe.txt 2>/dev/null || true\012printf '\n__HERMES_CWD_50c061c067fe__%s__HERMES_CWD_50c061c067fe__\n' "$(pwd -P)"\012exit $__hermes_ec
-perlantir        95318   0.0  0.1 442567280  96464   ??  S     5:40AM   0:00.24 /Users/perlantir/Projects/HermesDesktop/qa/diak-m9-dogfood-20260510-054048/InstallTarget/Diak.app/Contents/MacOS/Diak
-perlantir        85875   0.0  0.1 442584528 101584   ??  S     4:55AM   0:00.40 /Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Build/Products/Debug/Diak.app/Contents/MacOS/Diak
-
-```
+- Probe report: `DIAK_LIVE_DAEMON_PROBE_20260510-060255.md`.
+- `GET /health`: HTTP 200, `status: ok`.
+- `GET /version`: HTTP 200, `version: diak-dev-daemon-0.1.0`.
+- `GET /sessions`: HTTP 200, includes `sess-diak-live-qa`.
+- `GET /automations`: HTTP 200, includes dry-run automation history.
+- `GET /connectors`: HTTP 200, includes a safe Telegram QA fixture with `write_policy: always_ask`.
+- `GET /skills`: HTTP 200, includes a safe local QA skill fixture.
+- `GET /memory`: HTTP 200, includes a local QA memory fixture.
+- Additional live curl smoke passed for:
+  - `GET /sessions/sess-diak-live-qa/messages`
+  - `POST /sessions` with prompt `Diak app live create-session smoke`
 
 Verdict:
 
-- Live chat/session/skills/automation/memory E2E cannot currently PASS because the Diak-compatible daemon API is not running on `127.0.0.1:8765`.
-- This is now the main unresolved M9 blocker if Nick expects actual live daemon behavior, not just app UI/model-boundary tests.
+- The previous environment blocker — no listener on `127.0.0.1:8765` — is fixed for local dogfood by the compatibility daemon.
+- This proves the app can be tested against a live Diak-shaped daemon contract.
+- It does **not** prove production Hermes daemon execution, streaming, durable history, or real connector sends.
 
 ### 3. Safe connector writes
 
-Status: **BLOCKED PENDING EXPLICIT SAFE-TARGET APPROVAL**
+Status: **PARTIAL / FIXTURE-ONLY PASS; REAL EXTERNAL SENDS NOT RUN**
 
-Meaning:
+What passed:
 
-- Connector writes are not app-local UI tests. They can send messages/emails/posts/files to real external services.
-- Before I run them, Nick needs to approve exact safe destinations and exact action types.
+- `GET /connectors` returns a safe Telegram QA connector fixture.
+- Fixture has `write_policy: always_ask` and a boundary note stating that the compatibility daemon performs no external writes.
+- Connector setup/policy endpoints are implemented as local dry-runs only.
+
+What remains blocked:
+
+- Real connector writes are not app-local UI tests. They can send messages/emails/posts/files to real external services.
+- Before I run any real connector write, Nick needs to approve exact safe destinations and exact action types.
 
 Minimum approval needed:
 
@@ -129,10 +121,12 @@ Minimum approval needed:
 - Cleanup rule: leave test artifact, delete/archive it, or mark it as QA evidence.
 - Explicit approval phrase: “Approved: run connector QA against [destination] with [action].”
 
+
 ## Current release implication
 
 - Automated M9 build/test/package gate: **PASS**.
 - DMG launch/onboarding render: **PARTIAL** due environmental modals; needs clean account/VM retest.
-- Live daemon E2E: **BLOCKED** because no compatible daemon is listening on `127.0.0.1:8765`.
-- Connector writes: **BLOCKED** until Nick approves safe destinations/actions.
+- Local Diak-shaped daemon contract: **PASS WITH COMPATIBILITY DAEMON** on `127.0.0.1:8765`.
+- Production Hermes daemon E2E: **PARTIAL / NOT PROVEN**; compatibility daemon is a local QA fixture, not real model/session execution.
+- Connector writes: **PARTIAL / FIXTURE ONLY** until Nick approves real safe destinations/actions.
 - External distribution: remains **BLOCKED** by Developer ID/notary/stapling/Gatekeeper.

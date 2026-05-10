@@ -1,6 +1,6 @@
 # M9 QA Report — Diak
 
-Updated: 2026-05-10 05:17 CDT
+Updated: 2026-05-10 05:59 CDT
 
 ## Summary
 
@@ -8,6 +8,7 @@ Updated: 2026-05-10 05:17 CDT
 - Baseline commit before M9: `34def72`
 - M9 goal: beta hardening, readiness transparency, local release-gate repeatability, and product polish.
 - Internal beta verdict: **PARTIAL PASS / DOGFOOD-READY WITH CAVEATS**
+- Local live-daemon contract verdict: **PASS WITH LOCAL COMPATIBILITY DAEMON** — a Diak-compatible QA daemon now answers the app's `127.0.0.1:8765` contract for local dogfood only.
 - External distribution verdict: **BLOCKED** until Developer ID signing/notarization/stapling/Gatekeeper and clean manual UI QA pass are complete.
 
 ## M9 implementation coverage
@@ -44,18 +45,20 @@ Scripts/m9_release_gate.sh
 Evidence:
 
 - Full XCTest suite: **132 tests, 0 failures**.
-- Release gate report: `build/m9/M9_RELEASE_GATE_20260510-051715.md`.
+- Release gate report: `build/m9/M9_RELEASE_GATE_20260510-060052.md`.
 - DMG: `build/dist/Diak-0.1.0.dmg`.
-- DMG SHA-256: `fbca978ee96e2c18042ce1cea60850229167d96cf3c6c204096246d13ed13521`.
+- DMG SHA-256: `91474a16bea2878bf97f2972fa7db5a980f057ae6082271c381f2f37d8c1ba6f`.
 - Built identity: display name `Diak`, bundle id `com.uberkiwi.diak`, executable `Diak`.
+- Local daemon probe report: `qa/diak-m9-dogfood-20260510-054048/DIAK_LIVE_DAEMON_PROBE_20260510-060255.md`.
 
 ## Readiness classification
 
 - Automated build/test/package: **PASS** by `Scripts/m9_release_gate.sh`.
 - Product branding: **PASS** — app brand is Diak; runtime brand remains Hermes Agent / Hermes Engine.
-- First-run visual QA: **PARTIAL / ENV BLOCKED** — DMG copy launched and onboarding rendered, but local desktop modals obstructed clean verification; needs clean account/VM screenshot pass before public distribution. Evidence: `qa/diak-m9-dogfood-20260510-054048/M9_DOGFOOD_EVIDENCE_REPORT.md`.
-- Live Hermes daemon E2E: **BLOCKED** — app/API boundaries are tested, but no Diak-compatible daemon is listening on `127.0.0.1:8765`; full live chat/stream/session persistence cannot pass until that service contract is available.
-- Safe connector writes: **BLOCKED** — requires Nick-approved safe destinations and explicit approval before any real send/post.
+- First-run visual QA: **PARTIAL / ENV BLOCKED** — DMG copy launched and onboarding rendered, but local desktop modals obstructed clean verification; needs clean account/VM screenshot pass before public distribution. Weather permission dismissal was explicitly approved by Nick, but local automation could not click it because Accessibility privileges are disabled. Evidence: `qa/diak-m9-dogfood-20260510-054048/M9_DOGFOOD_EVIDENCE_REPORT.md`.
+- Local live daemon contract: **PASS WITH QA COMPATIBILITY DAEMON** — `Scripts/diak_dev_daemon.py` now serves the Diak M9 local API contract on `127.0.0.1:8765`, and `Scripts/diak_live_probe.sh` captured HTTP 200 evidence for health/version/sessions/automations/connectors/skills/memory. Evidence: `qa/diak-m9-dogfood-20260510-054048/DIAK_LIVE_DAEMON_PROBE_20260510-060255.md`.
+- Production/live Hermes daemon E2E: **PARTIAL / NOT PRODUCTION** — the compatibility daemon proves the Diak app contract and local dogfood wiring, but it is not a real Hermes daemon implementation with durable session execution, model streaming, or third-party connector execution.
+- Safe connector writes: **PARTIAL / FIXTURE ONLY** — the compatibility daemon exposes a safe Telegram QA connector fixture and policy endpoints without external side effects. Real connector writes still require Nick-approved safe destinations and exact action approval before any send/post.
 - External signing/notarization: **BLOCKED** — requires Apple Developer ID/notary credentials outside git.
 
 ## Known caveats
@@ -64,11 +67,13 @@ Evidence:
    - Current local package path is suitable for internal dogfood only.
    - Developer ID signing, notarization, stapling, and Gatekeeper checks remain required.
 
-2. **True live E2E is not the same as model/view-model tests**
-   - Existing tests are valuable but do not alone prove real Hermes daemon chat/session/skills/automation persistence.
-   - M9 makes this visible instead of pretending it is done.
+2. **Compatibility-daemon live E2E is not production daemon E2E**
+   - `Scripts/diak_dev_daemon.py` is a local QA compatibility daemon for Diak's typed API surface.
+   - It proves that the app's `/health`, `/version`, `/sessions`, `/automations`, `/connectors`, `/skills`, and `/memory` contract can be served and probed.
+   - It does not execute real agent sessions, stream model output, persist durable history, or perform third-party connector writes.
 
 3. **Connector writes remain intentionally conservative**
+   - The checked-in QA daemon exposes connector fixtures only; it performs no external writes.
    - No real external writes should happen without explicit safe destination approval.
 
 ## Next after M9
