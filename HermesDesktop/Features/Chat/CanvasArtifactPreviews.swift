@@ -37,6 +37,8 @@ struct CanvasDocumentPreview: View {
                 CanvasArtifactRefRow(ref: artifact.ref)
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(CanvasAccessibilityID.canvasArtifact(artifact.id))
     }
 }
 
@@ -57,6 +59,8 @@ struct CanvasCodePreview: View {
                 codeBlock
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(CanvasAccessibilityID.canvasArtifact(artifact.id))
     }
 
     private var pathStrip: some View {
@@ -124,6 +128,8 @@ struct CanvasBrowserPreview: View {
                 snapshotBlock
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(CanvasAccessibilityID.canvasArtifact(artifact.id))
     }
 
     private var urlChrome: some View {
@@ -207,6 +213,8 @@ struct CanvasDesignPreview: View {
                 CanvasArtifactRefRow(ref: artifact.ref)
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(CanvasAccessibilityID.canvasArtifact(artifact.id))
     }
 
     private var designSurface: some View {
@@ -261,6 +269,8 @@ struct CanvasBoardPreview: View {
                 CanvasArtifactRefRow(ref: artifact.ref)
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(CanvasAccessibilityID.canvasArtifact(artifact.id))
     }
 }
 

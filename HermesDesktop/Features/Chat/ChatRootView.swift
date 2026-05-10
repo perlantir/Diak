@@ -16,11 +16,16 @@ struct ChatRootView: View {
                                    approvals: approvals,
                                    title: viewModel.session?.title ?? "New chat")
                     .frame(minWidth: 460, idealWidth: 640)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier(CanvasAccessibilityID.chatTranscriptPane)
                 ChatCanvasView(canvas: viewModel.canvas,
                                artifactLoadError: viewModel.artifactLoadError,
                                isLoadingArtifacts: viewModel.isLoadingArtifacts)
                     .frame(minWidth: 360, idealWidth: 460)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier(CanvasAccessibilityID.chatCanvasPane)
             }
+            .accessibilityIdentifier(CanvasAccessibilityID.chatRootSplit)
         }
     }
 }

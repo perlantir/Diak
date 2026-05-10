@@ -258,4 +258,161 @@ final class ChatCanvasWorkspaceTests: XCTestCase {
         XCTAssertEqual(state.primaryArtifact(for: .design)?.id, "new")
         XCTAssertEqual(state.secondaryArtifacts(for: .design).map(\.id), ["mid", "old"])
     }
+
+    // MARK: - M10 Phase 6 — visual testability hooks
+
+    func testCanvasAccessibilityIdentifiersAreStableAndNamespaced() {
+        XCTAssertEqual(CanvasAccessibilityID.chatRootSplit, "chat-root-split")
+        XCTAssertEqual(CanvasAccessibilityID.chatTranscriptPane, "chat-transcript-pane")
+        XCTAssertEqual(CanvasAccessibilityID.chatCanvasPane, "chat-canvas-pane")
+        XCTAssertEqual(CanvasAccessibilityID.canvasHeader, "canvas-header")
+        XCTAssertEqual(CanvasAccessibilityID.canvasTitle, "canvas-title")
+        XCTAssertEqual(CanvasAccessibilityID.canvasTabStrip, "canvas-tab-strip")
+        XCTAssertEqual(CanvasAccessibilityID.canvasActivityFeed, "canvas-activity-feed")
+
+        XCTAssertEqual(CanvasAccessibilityID.canvasTab(.document), "canvas-tab-document")
+        XCTAssertEqual(CanvasAccessibilityID.canvasTab(.browser), "canvas-tab-browser")
+        XCTAssertEqual(CanvasAccessibilityID.canvasTab(.code), "canvas-tab-code")
+        XCTAssertEqual(CanvasAccessibilityID.canvasTab(.design), "canvas-tab-design")
+        XCTAssertEqual(CanvasAccessibilityID.canvasTab(.board), "canvas-tab-board")
+
+        XCTAssertEqual(CanvasAccessibilityID.canvasPrimaryPreview(.code), "canvas-primary-code")
+        XCTAssertEqual(CanvasAccessibilityID.canvasSecondaryList(.browser), "canvas-secondary-list-browser")
+        XCTAssertEqual(CanvasAccessibilityID.canvasArtifact("a-1"), "canvas-artifact-a-1")
+        XCTAssertEqual(CanvasAccessibilityID.canvasSecondaryArtifact("a-2"), "canvas-secondary-artifact-a-2")
+        XCTAssertEqual(CanvasAccessibilityID.canvasEmpty(.design), "canvas-empty-design")
+        XCTAssertEqual(CanvasAccessibilityID.canvasLoading(.code), "canvas-loading-code")
+        XCTAssertEqual(CanvasAccessibilityID.canvasError(.browser), "canvas-error-browser")
+        XCTAssertEqual(CanvasAccessibilityID.canvasActivityRow("act-1"), "canvas-activity-act-1")
+
+        // Identifiers must be unique per (kind, key) so the test surface
+        // never resolves the same ID to two different elements.
+        let allTabIDs = HermesCanvasTab.allCases.flatMap { tab in
+            [
+                CanvasAccessibilityID.canvasTab(tab),
+                CanvasAccessibilityID.canvasPrimaryPreview(tab),
+                CanvasAccessibilityID.canvasSecondaryList(tab),
+                CanvasAccessibilityID.canvasEmpty(tab),
+                CanvasAccessibilityID.canvasLoading(tab),
+                CanvasAccessibilityID.canvasError(tab)
+            ]
+        }
+        XCTAssertEqual(Set(allTabIDs).count, allTabIDs.count)
+    }
+
+    func testVisualSnapshotPinsTypedPrimaryWhereArtifactExists() {
+        var state = HermesCanvasState.bootstrap(sessionTitle: "Workspace")
+        let base = Date(timeIntervalSince1970: 1_700_000_000)
+        state.setArtifacts([
+            HermesCanvasArtifact(id: "a-doc", sessionID: "s", kind: .document, title: "Doc", createdAt: base),
+            HermesCanvasArtifact(id: "a-doc-2", sessionID: "s", kind: .document, title: "Doc 2", createdAt: base.addingTimeInterval(30)),
+            HermesCanvasArtifact(id: "a-code", sessionID: "s", kind: .code, title: "Patch", createdAt: base)
+        ], boundaryNote: "Persisted by Hermes daemon.")
+
+        let snap = state.visualSnapshot()
+
+        XCTAssertEqual(snap.documentTitle, "Workspace")
+        XCTAssertEqual(snap.activeTab, .document)
+        XCTAssertEqual(snap.artifactBoundaryNote, "Persisted by Hermes daemon.")
+
+        let doc = snap.tab(.document)
+        XCTAssertEqual(doc.primaryArtifactID, "a-doc-2")
+        XCTAssertEqual(doc.secondaryArtifactIDs, ["a-doc"])
+        XCTAssertEqual(doc.fallback, .typedPrimary)
+        XCTAssertEqual(doc.primaryAccessibilityID, "canvas-artifact-a-doc-2")
+
+        let code = snap.tab(.code)
+        XCTAssertEqual(code.primaryArtifactID, "a-code")
+        XCTAssertEqual(code.fallback, .typedPrimary)
+
+        // Tabs without artifacts: scaffolded surfaces (document/board) keep
+        // their fixed bootstrap content so the canvas never reads "empty"
+        // for those; pure artifact tabs report .empty when not loading.
+        let board = snap.tab(.board)
+        XCTAssertNil(board.primaryArtifactID)
+        XCTAssertEqual(board.fallback, .scaffolding)
+
+        let design = snap.tab(.design)
+        XCTAssertNil(design.primaryArtifactID)
+        XCTAssertEqual(design.fallback, .empty)
+    }
+
+    func testVisualSnapshotSurfacesLoadingAndErrorOnArtifactTabsOnly() {
+        var state = HermesCanvasState.bootstrap(sessionTitle: "Workspace")
+        // No artifacts loaded yet.
+        state.setArtifacts([], boundaryNote: nil)
+
+        let loading = state.visualSnapshot(artifactLoadError: nil, isLoadingArtifacts: true)
+        XCTAssertEqual(loading.tab(.code).fallback, .loading)
+        XCTAssertEqual(loading.tab(.browser).fallback, .loading)
+        XCTAssertEqual(loading.tab(.design).fallback, .loading)
+        // Document/Board still show scaffolding instead of a loading hint.
+        XCTAssertEqual(loading.tab(.document).fallback, .scaffolding)
+        XCTAssertEqual(loading.tab(.board).fallback, .scaffolding)
+
+        let errored = state.visualSnapshot(artifactLoadError: "Daemon offline", isLoadingArtifacts: false)
+        XCTAssertEqual(errored.tab(.code).fallback, .error("Daemon offline"))
+        XCTAssertEqual(errored.tab(.document).fallback, .scaffolding)
+    }
+
+    func testVisualSnapshotIsDeterministicAcrossInsertionOrder() {
+        let base = Date(timeIntervalSince1970: 1_700_000_000)
+        let artifacts = [
+            HermesCanvasArtifact(id: "a", sessionID: "s", kind: .browser, title: "A", createdAt: base, updatedAt: base.addingTimeInterval(10)),
+            HermesCanvasArtifact(id: "b", sessionID: "s", kind: .browser, title: "B", createdAt: base, updatedAt: base.addingTimeInterval(20)),
+            HermesCanvasArtifact(id: "c", sessionID: "s", kind: .browser, title: "C", createdAt: base, updatedAt: base.addingTimeInterval(20))
+        ]
+
+        var state1 = HermesCanvasState.bootstrap(sessionTitle: "Workspace")
+        state1.setArtifacts(artifacts, boundaryNote: nil)
+        let snap1 = state1.visualSnapshot()
+
+        var state2 = HermesCanvasState.bootstrap(sessionTitle: "Workspace")
+        state2.setArtifacts(artifacts.reversed(), boundaryNote: nil)
+        let snap2 = state2.visualSnapshot()
+
+        XCTAssertEqual(snap1.tab(.browser).primaryArtifactID, snap2.tab(.browser).primaryArtifactID)
+        XCTAssertEqual(snap1.tab(.browser).secondaryArtifactIDs, snap2.tab(.browser).secondaryArtifactIDs)
+        // Tie on updatedAt between b and c is broken by id; c > b lexicographically.
+        XCTAssertEqual(snap1.tab(.browser).primaryArtifactID, "c")
+        XCTAssertEqual(snap1.tab(.browser).secondaryArtifactIDs, ["b", "a"])
+    }
+
+    func testChatViewModelExposesVisualSnapshotForUITestability() async {
+        let client = MockHermesAPIClient()
+        let viewModel = ChatViewModel(
+            client: client,
+            session: HermesSession(
+                id: "sess-001",
+                title: "Project triage",
+                summary: nil,
+                status: .completed,
+                createdAt: Date(),
+                updatedAt: Date(),
+                model: "Claude Sonnet",
+                project: nil,
+                hasArtifacts: true,
+                pendingApprovalsCount: 0
+            )
+        )
+
+        await viewModel.loadArtifacts(for: "sess-001")
+        let snap = viewModel.canvas.visualSnapshot(
+            artifactLoadError: viewModel.artifactLoadError,
+            isLoadingArtifacts: viewModel.isLoadingArtifacts
+        )
+
+        // Every typed-preview tab that the mock fixtures populate must
+        // resolve to a stable accessibility identifier so the QA harness
+        // can locate it deterministically without OCR/screenshot diff.
+        var tabsWithPrimary = 0
+        for tab in HermesCanvasTab.allCases where snap.tab(tab).primaryArtifactID != nil {
+            tabsWithPrimary += 1
+            let identifier = snap.tab(tab).primaryAccessibilityID
+            XCTAssertNotNil(identifier)
+            XCTAssertTrue(identifier?.hasPrefix("canvas-artifact-") ?? false)
+        }
+        XCTAssertGreaterThan(tabsWithPrimary, 0, "Mock fixtures should pin at least one typed primary preview")
+        XCTAssertFalse(snap.activityIDs.isEmpty, "Bootstrap should seed at least one activity row")
+    }
 }

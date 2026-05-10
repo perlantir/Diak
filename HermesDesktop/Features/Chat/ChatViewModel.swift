@@ -95,11 +95,24 @@ public final class ChatViewModel: ObservableObject {
         let projectID = session?.project?.id
 
         let activeSession: HermesSession
+        let recoveredFromMissingSession: Bool
         do {
             if let existing = session {
-                activeSession = try await client.continueSession(sessionID: existing.id, prompt: prompt, projectID: projectID)
+                do {
+                    activeSession = try await client.continueSession(sessionID: existing.id, prompt: prompt, projectID: projectID)
+                    recoveredFromMissingSession = false
+                } catch HermesAPIError.http(status: 404, body: _) {
+                    // Live-screen recovery: if Diak is holding a stale session id
+                    // from a previous bridge/daemon state, the next send must not
+                    // dead-end into a hidden 404. Start a fresh real session using
+                    // the same prompt so chat remains usable after reconnects,
+                    // bridge swaps, or cleared daemon state.
+                    activeSession = try await client.createSession(prompt: prompt, projectID: projectID)
+                    recoveredFromMissingSession = true
+                }
             } else {
                 activeSession = try await client.createSession(prompt: prompt, projectID: projectID)
+                recoveredFromMissingSession = false
             }
         } catch let error as HermesAPIError {
             phase = .failed(error.userFacingMessage)
@@ -108,9 +121,10 @@ public final class ChatViewModel: ObservableObject {
             phase = .failed(error.localizedDescription)
             return
         }
-        let isContinuingExistingSession = session?.id == activeSession.id
+        let isContinuingExistingSession = !recoveredFromMissingSession && session?.id == activeSession.id
         self.session = activeSession
         if !isContinuingExistingSession {
+            messages = []
             self.canvas = HermesCanvasState.bootstrap(sessionTitle: activeSession.title)
             await loadArtifacts(for: activeSession.id)
         }

@@ -89,6 +89,42 @@ final class ChatAndSessionsViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.messages.contains { $0.role == .user && $0.content == "Follow up in this saved chat" })
     }
 
+    func testStaleSession404FallsBackToCreatingFreshSession() async {
+        let client = MockHermesAPIClient()
+        client.streamingDelayNanos = 0
+        let staleSession = HermesSession(
+            id: "sess-stale-from-old-bridge",
+            title: "Old bridge session",
+            summary: "Stale UI state",
+            status: .completed,
+            createdAt: Date(),
+            updatedAt: Date(),
+            model: "Old daemon",
+            project: nil,
+            hasArtifacts: false,
+            pendingApprovalsCount: 0
+        )
+        let viewModel = ChatViewModel(
+            client: client,
+            session: staleSession,
+            seedMessages: [HermesMessage(id: "old-user", sessionID: staleSession.id, role: .user, content: "old prompt", createdAt: Date())]
+        )
+        viewModel.draft = "Recover after bridge reconnect"
+
+        await viewModel.startStreaming()
+        for _ in 0..<20 where viewModel.phase != .completed {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        XCTAssertEqual(client.continueSessionCallCount, 1)
+        XCTAssertEqual(client.createSessionCallCount, 1)
+        XCTAssertNotEqual(viewModel.session?.id, staleSession.id)
+        XCTAssertEqual(viewModel.messages.first?.role, .user)
+        XCTAssertEqual(viewModel.messages.first?.content, "Recover after bridge reconnect")
+        XCTAssertFalse(viewModel.messages.contains { $0.content == "old prompt" })
+        XCTAssertEqual(viewModel.phase, .completed)
+    }
+
     func testHTTP404SurfacesFriendlyActionableMessage() async {
         let message = HermesAPIError.http(status: 404, body: "not_found").userFacingMessage
         XCTAssertTrue(message.contains("could not find"))

@@ -36,6 +36,7 @@ struct ChatCanvasView: View {
             }
         }
         .background(HermesColors.surface)
+        .accessibilityElement(children: .contain)
     }
 
     private var header: some View {
@@ -45,6 +46,7 @@ struct ChatCanvasView: View {
                     .font(HermesTypography.title)
                     .foregroundStyle(HermesColors.text)
                     .lineLimit(1)
+                    .accessibilityIdentifier(CanvasAccessibilityID.canvasTitle)
                 Spacer()
                 StatusBadge("Live canvas", tone: .info)
             }
@@ -53,6 +55,8 @@ struct ChatCanvasView: View {
                 .foregroundStyle(HermesColors.muted)
         }
         .padding(HermesSpacing.lg)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(CanvasAccessibilityID.canvasHeader)
     }
 
     private var tabStrip: some View {
@@ -65,17 +69,25 @@ struct ChatCanvasView: View {
                     .padding(.vertical, HermesSpacing.xs)
                     .background(tab == canvas.activeTab ? HermesColors.accent.opacity(0.12) : Color.clear)
                     .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
+                    .accessibilityElement()
+                    .accessibilityLabel(Text(tab.displayName))
+                    .accessibilityIdentifier(CanvasAccessibilityID.canvasTab(tab))
+                    .accessibilityAddTraits(tab == canvas.activeTab ? [.isSelected, .isStaticText] : [.isStaticText])
             }
             Spacer()
         }
         .padding(.horizontal, HermesSpacing.lg)
         .padding(.bottom, HermesSpacing.sm)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(CanvasAccessibilityID.canvasTabStrip)
     }
 
     private var documentContent: some View {
         VStack(alignment: .leading, spacing: HermesSpacing.md) {
             if let primary = canvas.primaryArtifact(for: .document) {
                 CanvasDocumentPreview(artifact: primary)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier(CanvasAccessibilityID.canvasPrimaryPreview(.document))
             }
             ForEach(canvas.sections) { section in
                 HermesCard {
@@ -103,6 +115,8 @@ struct ChatCanvasView: View {
         VStack(alignment: .leading, spacing: HermesSpacing.md) {
             if let primary = canvas.primaryArtifact(for: .board) {
                 CanvasBoardPreview(artifact: primary)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier(CanvasAccessibilityID.canvasPrimaryPreview(.board))
             }
             taskBoard
             secondaryArtifactList(for: .board)
@@ -144,17 +158,25 @@ struct ChatCanvasView: View {
                             }
                         }
                     }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier(CanvasAccessibilityID.canvasSecondaryArtifact(artifact.id))
                 }
             }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier(CanvasAccessibilityID.canvasSecondaryList(tab))
         } else if !hasPrimary {
             if let error = artifactLoadError {
                 EmptyStateView(icon: "exclamationmark.triangle",
                                title: "Couldn’t load artifacts",
                                message: error)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier(CanvasAccessibilityID.canvasError(tab))
             } else if isLoadingArtifacts {
                 EmptyStateView(icon: "hourglass",
                                title: "Loading artifacts",
                                message: "Reading persisted canvas references from the Hermes daemon.")
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier(CanvasAccessibilityID.canvasLoading(tab))
             }
         }
     }
@@ -211,8 +233,12 @@ struct ChatCanvasView: View {
                     Spacer()
                 }
                 .padding(.vertical, 2)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier(CanvasAccessibilityID.canvasActivityRow(activity.id))
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(CanvasAccessibilityID.canvasActivityFeed)
     }
 
     @ViewBuilder
@@ -220,12 +246,16 @@ struct ChatCanvasView: View {
         if let primary = canvas.primaryArtifact(for: canvas.activeTab) {
             VStack(alignment: .leading, spacing: HermesSpacing.md) {
                 primaryPreview(for: primary)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier(CanvasAccessibilityID.canvasPrimaryPreview(canvas.activeTab))
                 secondaryArtifactList(for: canvas.activeTab)
             }
         } else {
             VStack(alignment: .leading, spacing: HermesSpacing.md) {
                 EmptyStateView(icon: icon, title: title, message: message)
                     .padding(.vertical, HermesSpacing.xl)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier(CanvasAccessibilityID.canvasEmpty(canvas.activeTab))
                 secondaryArtifactList(for: canvas.activeTab)
             }
         }
