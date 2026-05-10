@@ -1,6 +1,6 @@
 # M9 QA Report — Diak
 
-Updated: 2026-05-10 05:12 CDT
+Updated: 2026-05-10 05:17 CDT
 
 ## Summary
 
@@ -44,15 +44,15 @@ Scripts/m9_release_gate.sh
 Evidence:
 
 - Full XCTest suite: **132 tests, 0 failures**.
-- Release gate report: `build/m9/M9_RELEASE_GATE_20260510-051605.md`.
+- Release gate report: `build/m9/M9_RELEASE_GATE_20260510-051715.md`.
 - DMG: `build/dist/Diak-0.1.0.dmg`.
-- DMG SHA-256: `f1e2dd1a6fcaf161eed148f862429bfaf6971fe8eb0bece81ff712ec893dbb31`.
+- DMG SHA-256: `fbca978ee96e2c18042ce1cea60850229167d96cf3c6c204096246d13ed13521`.
 - Built identity: display name `Diak`, bundle id `com.uberkiwi.diak`, executable `Diak`.
 
 ## Readiness classification
 
-- Automated build/test/package: **PASS expected** after final gate.
-- Product branding: **PASS expected** — app brand is Diak; runtime brand remains Hermes Agent / Hermes Engine.
+- Automated build/test/package: **PASS** by `Scripts/m9_release_gate.sh`.
+- Product branding: **PASS** — app brand is Diak; runtime brand remains Hermes Agent / Hermes Engine.
 - First-run visual QA: **PARTIAL** — needs clean account/VM screenshot pass before public distribution.
 - Live Hermes daemon E2E: **PARTIAL** — app/API boundaries are tested, but full live chat/stream/session persistence must be dogfooded against a running Hermes Agent daemon.
 - Safe connector writes: **BLOCKED** — requires Nick-approved safe destinations and explicit approval before any real send/post.

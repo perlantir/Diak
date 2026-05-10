@@ -23,31 +23,31 @@ Scripts/m9_release_gate.sh
 
 Required outcomes:
 
-- [ ] `xcodegen generate` PASS
-- [ ] `xcodebuild -list` PASS
-- [ ] Debug build PASS
-- [ ] Full XCTest suite PASS
-- [ ] `git diff --check` PASS
-- [ ] Release archive PASS
-- [ ] DMG creation PASS
-- [ ] Built bundle identity is `Diak` / `com.uberkiwi.diak` / executable `Diak`
-- [ ] Codesign inspection recorded
-- [ ] Report saved under `build/m9/`
+- [x] `xcodegen generate` PASS
+- [x] `xcodebuild -list` PASS
+- [x] Debug build PASS
+- [x] Full XCTest suite PASS — 132 tests, 0 failures
+- [x] `git diff --check` PASS
+- [x] Release archive PASS
+- [x] DMG creation PASS
+- [x] Built bundle identity is `Diak` / `com.uberkiwi.diak` / executable `Diak`
+- [x] Codesign inspection recorded
+- [x] Report saved under `build/m9/` — latest local report: `build/m9/M9_RELEASE_GATE_20260510-051715.md`
 
 ## In-app beta readiness
 
-- [ ] Settings contains **Beta Readiness**.
-- [ ] Internal beta verdict is not falsely marked full public release.
-- [ ] External distribution remains BLOCKED unless signing/notary evidence exists.
-- [ ] Safe connector writes are BLOCKED unless Nick provides safe destinations and explicit approval.
-- [ ] Live daemon E2E is PARTIAL until chat/session persistence is proven against a live Hermes Agent daemon.
+- [x] Settings contains **Beta Readiness**.
+- [x] Internal beta verdict is not falsely marked full public release.
+- [x] External distribution remains BLOCKED unless signing/notary evidence exists.
+- [x] Safe connector writes are BLOCKED unless Nick provides safe destinations and explicit approval.
+- [x] Live daemon E2E is PARTIAL until chat/session persistence is proven against a live Hermes Agent daemon.
 
 ## Product polish
 
-- [ ] Sidebar header says `Diak`.
-- [ ] Window/app bundle/menu surfaces say `Diak`.
-- [ ] Runtime references say `Hermes Agent` / `Hermes Engine` where appropriate.
-- [ ] No product-facing `Hermes Desktop` remains in app source.
+- [x] Sidebar header says `Diak`.
+- [x] Window/app bundle/menu surfaces say `Diak`.
+- [x] Runtime references say `Hermes Agent` / `Hermes Engine` where appropriate.
+- [x] No product-facing `Hermes Desktop` remains in app source.
 - [ ] First-run onboarding is visually clean on a clean macOS account or VM.
 
 ## Live dogfood gates
