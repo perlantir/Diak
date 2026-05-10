@@ -8,10 +8,17 @@ Updated: 2026-05-10 (Phase 4 visual + local daemon contract proof)
 - Scope: M10 Phases 1–4 (Chat + Canvas, model routing, canvas artifact
   persistence, artifact previews, visual + local-daemon contract proof).
 - M10 Phase 4 verdict: **PASS for local compatibility-daemon contract
-  and Swift unit-test coverage; manual visual evidence remains
-  operator-driven** for both light and dark mode.
-- Production verdict: **NOT PROVEN** against a real Hermes Agent
-  runtime, real model streaming, or real third-party connector writes.
+  and Swift unit-test coverage**.
+- 2026-05-10 visual dogfood update: **PASS** for actual Diak Chat +
+  Canvas fixture display. Evidence under
+  `build/m10-chat-canvas-qa-visual-20260510-120048/screenshots/` and
+  `build/diak_ax_after_send_deep.txt` confirms chat pane, Live Canvas,
+  Document/Browser/Code/Design/Board tabs, and Document fixture content.
+- Production bridge canvas verdict: **PASS for real Hermes runtime text →
+  typed Browser canvas artifact capture** via
+  `Scripts/diak_provider_canvas_probe.sh`. This proves a generated HTML
+  website response can be exposed to Diak Canvas through the production
+  bridge; third-party connector writes remain untested.
 
 ## Phase coverage at a glance
 
@@ -124,27 +131,28 @@ declaratively:
   through `HermesCanvasState.setArtifacts`, and exercises the SSE
   `canvas_updated` event end-to-end through `URLSessionHermesAPIClient`.
 
-## NOT TESTED here
+## NOT TESTED / remaining external gates
 
-- Real Hermes Agent runtime execution (sessions, model routing,
-  durable storage). The compatibility daemon is intentionally a
-  fixture and never executes external work.
-- Real model streaming. The SSE body is canned text + a single
-  `canvas_updated` event.
-- Real third-party connector writes. The Telegram QA fixture remains
-  policy-only; sending real messages requires explicit approval
-  outside this daemon.
+- Real third-party connector writes. The connector bridge returns typed
+  `configuration_required` when provider credentials/setup template are
+  absent, which is the correct safe behavior. A real OAuth pass still
+  requires configuring connector provider credentials/templates outside
+  this local QA run.
+- Full in-app visual proof against the production bridge after switching
+  Diak from fixture daemon port `8765` to the production bridge. The
+  production bridge HTTP/SSE/artifact contract is proven by
+  `Scripts/diak_provider_canvas_probe.sh`; the local app fixture visual
+  path is proven separately.
 - Automated SwiftUI snapshot diffs for light/dark. Visual evidence is
-  captured manually with `shift+cmd+4`. A future phase could add
-  `xcrun simctl` or a SwiftUI snapshot library if visual regression
-  starts mattering more than wire-shape contract.
-- Code-signing, notarization, stapling. Tracked under the M9 release
-  gate; not in scope for M10 Phase 4.
+  currently screenshot/accessibility-tree based. A future phase could add
+  a deterministic SwiftUI snapshot harness if visual regression starts
+  mattering more than wire-shape contract.
+- Code-signing, notarization, stapling. Tracked under the M9/M11 release
+  gates and requires Developer ID credentials.
 
 ## Next
 
-This report is the M10 Phase 4 close-out. Any production daemon work,
-real provider calls, or visual snapshot automation should be opened as
-M11 or later. The compatibility daemon and the typed Swift boundary
-are the right contract — replacing the daemon with the real Hermes
-Agent runtime is the only blocker for live chat + canvas E2E.
+This report closes the M10 Chat + Canvas contract and visual fixture
+path. The production bridge can now expose generated website/HTML output
+as typed Browser canvas artifacts; external connector OAuth and release
+signing remain environment/credential gates.

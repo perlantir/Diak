@@ -20,7 +20,10 @@ class FakeHermesRuntime:
             "history": list(history),
             "preferred_session_id": preferred_session_id,
         })
-        response = f"real-runtime-response: {prompt}"
+        if "website" in prompt.lower():
+            response = "```html\n<!doctype html><html><body><h1>Diak</h1><p>Hero, features, and pricing.</p></body></html>\n```"
+        else:
+            response = f"real-runtime-response: {prompt}"
         if stream_callback:
             stream_callback("real-runtime-")
             stream_callback(f"response: {prompt}")
@@ -112,6 +115,26 @@ class DiakHermesBridgeTests(unittest.TestCase):
         self.assertIn('"text_delta":"real-runtime-"', body)
         self.assertIn('"type":"message_completed"', body)
         self.assertIn('"type":"session_ended"', body)
+
+    def test_website_response_is_exposed_as_canvas_artifact(self):
+        status, _, body = self.harness.request("POST", "/sessions", {"prompt": "Build me a website and show it in the canvas"})
+        self.assertEqual(status, 200)
+        session = json.loads(body)
+        self.assertTrue(session["has_artifacts"])
+
+        status, _, body = self.harness.request("GET", f"/sessions/{session['id']}/canvas/artifacts")
+        self.assertEqual(status, 200)
+        payload = json.loads(body)
+        self.assertEqual(payload["session_id"], session["id"])
+        self.assertEqual(len(payload["artifacts"]), 1)
+        artifact = payload["artifacts"][0]
+        self.assertEqual(artifact["kind"], "browser")
+        self.assertEqual(artifact["title"], "Generated website")
+        self.assertIn("<h1>Diak</h1>", artifact["preview"])
+
+        status, _, body = self.harness.request("GET", f"/sessions/{session['id']}/stream")
+        self.assertEqual(status, 200)
+        self.assertIn('\"type\":\"canvas_updated\"', body)
 
     def test_continue_session_passes_prior_history_to_runtime(self):
         status, _, body = self.harness.request("POST", "/sessions", {"prompt": "first"})

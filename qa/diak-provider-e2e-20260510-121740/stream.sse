@@ -1,0 +1,40 @@
+data: {"type":"message_started","message_id":"msg-72b56eefbca94199","session_id":"sess-diak-e058e64cb91d44e8","role":"assistant"}
+
+data: {"type":"message_delta","message_id":"msg-72b56eefbca94199","text_delta":"D"}
+
+data: {"type":"message_delta","message_id":"msg-72b56eefbca94199","text_delta":"IA"}
+
+data: {"type":"message_delta","message_id":"msg-72b56eefbca94199","text_delta":"K"}
+
+data: {"type":"message_delta","message_id":"msg-72b56eefbca94199","text_delta":"_PROVIDER"}
+
+data: {"type":"message_delta","message_id":"msg-72b56eefbca94199","text_delta":"_E"}
+
+data: {"type":"message_delta","message_id":"msg-72b56eefbca94199","text_delta":"2"}
+
+data: {"type":"message_delta","message_id":"msg-72b56eefbca94199","text_delta":"E"}
+
+data: {"type":"message_delta","message_id":"msg-72b56eefbca94199","text_delta":"_"}
+
+data: {"type":"message_delta","message_id":"msg-72b56eefbca94199","text_delta":"202"}
+
+data: {"type":"message_delta","message_id":"msg-72b56eefbca94199","text_delta":"605"}
+
+data: {"type":"message_delta","message_id":"msg-72b56eefbca94199","text_delta":"10"}
+
+data: {"type":"message_delta","message_id":"msg-72b56eefbca94199","text_delta":"-"}
+
+data: {"type":"message_delta","message_id":"msg-72b56eefbca94199","text_delta":"121"}
+
+data: {"type":"message_delta","message_id":"msg-72b56eefbca94199","text_delta":"740"}
+
+data: {"type":"message_delta","message_id":"msg-72b56eefbca94199","text_delta":"_"}
+
+data: {"type":"message_delta","message_id":"msg-72b56eefbca94199","text_delta":"830"}
+
+data: {"type":"message_delta","message_id":"msg-72b56eefbca94199","text_delta":"2"}
+
+data: {"type":"message_completed","message_id":"msg-72b56eefbca94199","content":"DIAK_PROVIDER_E2E_20260510-121740_8302"}
+
+data: {"type":"session_ended","session_id":"sess-diak-e058e64cb91d44e8","status":"completed"}
+
