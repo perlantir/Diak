@@ -4,6 +4,21 @@ struct ContentRouter: View {
     let section: SidebarNavSection
     @ObservedObject var daemon: DaemonStatusViewModel
     @ObservedObject var engineViewModel: HermesEngineViewModel
+    let client: HermesAPIClient
+    @StateObject private var chat: ChatViewModel
+    @StateObject private var sessions: SessionsViewModel
+
+    init(section: SidebarNavSection,
+         daemon: DaemonStatusViewModel,
+         engineViewModel: HermesEngineViewModel,
+         client: HermesAPIClient) {
+        self.section = section
+        self.daemon = daemon
+        self.engineViewModel = engineViewModel
+        self.client = client
+        _chat = StateObject(wrappedValue: ChatViewModel(client: client))
+        _sessions = StateObject(wrappedValue: SessionsViewModel(client: client))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -11,13 +26,9 @@ struct ContentRouter: View {
             Group {
                 switch section {
                 case .home:
-                    EmptyStateView(icon: "house",
-                                   title: "Home",
-                                   message: "Your dashboard, quick actions, and recent sessions will land here in M1.")
+                    ChatRootView(viewModel: chat)
                 case .sessions:
-                    EmptyStateView(icon: "bubble.left.and.bubble.right",
-                                   title: "Sessions",
-                                   message: "Browse, search, and resume Hermes sessions. Coming in M1.")
+                    SessionsListView(viewModel: sessions, client: client)
                 case .automations:
                     EmptyStateView(icon: "clock.arrow.circlepath",
                                    title: "Automations",

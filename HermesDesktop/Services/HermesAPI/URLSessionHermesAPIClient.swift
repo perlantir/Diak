@@ -7,12 +7,14 @@ public final class URLSessionHermesAPIClient: HermesAPIClient, @unchecked Sendab
     public let baseURL: URL
     private let session: URLSession
     private let decoder: JSONDecoder
+    private let encoder: JSONEncoder
 
     public init(baseURL: URL = URL(string: "http://127.0.0.1:8765")!,
                 session: URLSession = .shared) {
         self.baseURL = baseURL
         self.session = session
         self.decoder = JSONDecoder()
+        self.encoder = JSONEncoder()
     }
 
     public func health() async throws -> HermesHealth {
@@ -23,14 +25,63 @@ public final class URLSessionHermesAPIClient: HermesAPIClient, @unchecked Sendab
         try await get("/version")
     }
 
+    // MARK: Sessions / chat (M1)
+
+    public func sessions() async throws -> [HermesSession] {
+        try await get("/sessions")
+    }
+
+    public func session(id: String) async throws -> HermesSession {
+        try await get("/sessions/\(id)")
+    }
+
+    public func messages(sessionID: String) async throws -> [HermesMessage] {
+        try await get("/sessions/\(sessionID)/messages")
+    }
+
+    public func createSession(prompt: String, projectID: String?) async throws -> HermesSession {
+        struct Body: Encodable {
+            let prompt: String
+            let project_id: String?
+        }
+        return try await post("/sessions", body: Body(prompt: prompt, project_id: projectID))
+    }
+
+    /// M1: streaming over the wire isn't implemented yet. The chat view
+    /// model uses the mock client for stream playback. When a session is
+    /// asked to stream from the real daemon we surface `.notReachable`
+    /// so the UI shows the offline path rather than spinning forever.
+    public func streamEvents(sessionID: String) -> AsyncThrowingStream<HermesStreamEvent, Error> {
+        AsyncThrowingStream { continuation in
+            continuation.finish(throwing: HermesAPIError.notReachable)
+        }
+    }
+
+    // MARK: Internals
+
     private func get<T: Decodable>(_ path: String) async throws -> T {
+        try await send(path, method: "GET", body: nil as Data?)
+    }
+
+    private func post<B: Encodable, T: Decodable>(_ path: String, body: B) async throws -> T {
+        let data = try encoder.encode(body)
+        return try await send(path, method: "POST", body: data)
+    }
+
+    private func send<T: Decodable>(_ path: String,
+                                    method: String,
+                                    body: Data?) async throws -> T {
         guard let url = URL(string: path, relativeTo: baseURL) else {
             throw HermesAPIError.invalidURL
         }
         var request = URLRequest(url: url)
-        request.httpMethod = "GET"
+        request.httpMethod = method
         request.timeoutInterval = 3
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let body {
+            request.httpBody = body
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
 
         let data: Data
         let response: URLResponse

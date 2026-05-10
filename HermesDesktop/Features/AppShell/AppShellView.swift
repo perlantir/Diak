@@ -3,12 +3,16 @@ import SwiftUI
 public struct AppShellView: View {
     @ObservedObject var daemon: DaemonStatusViewModel
     @ObservedObject var engineViewModel: HermesEngineViewModel
+    let client: HermesAPIClient
     @State private var selection: SidebarNavSection = .home
     @State private var inspectorVisible: Bool = true
 
-    public init(daemon: DaemonStatusViewModel, engineViewModel: HermesEngineViewModel) {
+    public init(daemon: DaemonStatusViewModel,
+                engineViewModel: HermesEngineViewModel,
+                client: HermesAPIClient = URLSessionHermesAPIClient()) {
         self.daemon = daemon
         self.engineViewModel = engineViewModel
+        self.client = client
     }
 
     public var body: some View {
@@ -17,7 +21,8 @@ public struct AppShellView: View {
         } content: {
             ContentRouter(section: selection,
                           daemon: daemon,
-                          engineViewModel: engineViewModel)
+                          engineViewModel: engineViewModel,
+                          client: client)
                 .frame(minWidth: 480)
         } detail: {
             if inspectorVisible {
