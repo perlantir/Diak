@@ -67,7 +67,16 @@ private struct ToolPermissionCard: View {
                 LabeledField("Approval policy") {
                     Picker("", selection: Binding(
                         get: { tool.policy },
-                        set: { tool.policy = $0 }
+                        set: { newPolicy in
+                            guard tool.policy != newPolicy else { return }
+                            tool.policy = newPolicy
+                            if newPolicy == .disabled {
+                                tool.isEnabled = false
+                            } else if !tool.isEnabled {
+                                tool.isEnabled = true
+                            }
+                            tool.restartRequired = true
+                        }
                     )) {
                         ForEach(Self.policyOptions, id: \.self) { policy in
                             Text(policy.displayName).tag(policy)

@@ -84,6 +84,62 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.saved?.providers.contains(where: { $0.restartRequired }) ?? true)
     }
 
+    func testSaveResultRestartRequirementSurvivesRefreshWhenSnapshotBitsAreClean() async throws {
+        let snapshot = MockHermesData.configSnapshot
+        let client = RestartOnlyConfigClient(snapshot: snapshot)
+        let viewModel = SettingsViewModel(client: client)
+        await viewModel.refresh()
+
+        var draft = try XCTUnwrap(viewModel.draft)
+        var profile = try XCTUnwrap(draft.profiles.first(where: { $0.id == snapshot.activeProfileID }))
+        profile.displayName = "Restart-only profile"
+        let index = try XCTUnwrap(draft.profiles.firstIndex(where: { $0.id == profile.id }))
+        draft.profiles[index] = profile
+        viewModel.draft = draft
+
+        await viewModel.save()
+        XCTAssertTrue(viewModel.savedRequiresRestart)
+        XCTAssertEqual(viewModel.saveState, .savedRequiresRestart("Daemon restart queued"))
+
+        await viewModel.refresh()
+        XCTAssertTrue(viewModel.savedRequiresRestart)
+        XCTAssertEqual(viewModel.saveState, .savedRequiresRestart("Daemon restart queued"))
+    }
+
+    func testProviderDiffDoesNotMutateDaemonOwnedAPIKeyPresence() throws {
+        let saved = MockHermesData.configSnapshot
+        var draft = saved
+        let providerIndex = try XCTUnwrap(draft.providers.firstIndex(where: { $0.needsAPIKey }))
+        draft.providers[providerIndex].defaultModel = "claude-sonnet-4-5"
+        draft.providers[providerIndex].hasAPIKey.toggle()
+        draft.providers[providerIndex].needsAPIKey.toggle()
+
+        let update = SettingsViewModel.diff(saved: saved, draft: draft)
+        let provider = try XCTUnwrap(update.providers?.first(where: { $0.id == draft.providers[providerIndex].id }))
+
+        XCTAssertEqual(provider.defaultModel, "claude-sonnet-4-5")
+        XCTAssertEqual(provider.hasAPIKey, saved.providers[providerIndex].hasAPIKey)
+        XCTAssertEqual(provider.needsAPIKey, saved.providers[providerIndex].needsAPIKey)
+    }
+
+    func testDisabledToolPolicyMustMatchDisabledEnabledFlag() throws {
+        let tool = HermesToolPermission(
+            id: "tool-shell",
+            name: "Terminal",
+            description: "Run commands",
+            canRead: true,
+            canWrite: true,
+            canDestroy: true,
+            policy: .disabled,
+            isEnabled: false,
+            restartRequired: true
+        )
+
+        XCTAssertEqual(tool.policy, .disabled)
+        XCTAssertFalse(tool.isEnabled)
+        XCTAssertTrue(tool.restartRequired)
+    }
+
     func testToolApprovalPolicyExplainsWriteAndDestructiveSafety() {
         let terminal = HermesToolPermission(
             id: "tool-shell",

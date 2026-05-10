@@ -62,7 +62,7 @@ struct HermesEngineSettingsView: View {
                         TextField("Endpoint", text: $viewModel.endpoint)
                             .textFieldStyle(.roundedBorder)
                             .font(HermesTypography.mono)
-                        Text("Endpoint editing is read-only in M0; full configuration ships in M3.")
+                        Text("Endpoint changes update the local API client target in Desktop; daemon-side config stays owned by Hermes Agent.")
                             .font(HermesTypography.caption)
                             .foregroundStyle(HermesColors.subtle)
                     }

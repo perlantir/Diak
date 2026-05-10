@@ -69,7 +69,7 @@ private struct ProviderCard: View {
                 }
 
                 if provider.needsAPIKey {
-                    APIKeyRow(provider: $provider)
+                    APIKeyStatusRow(provider: provider)
                 }
 
                 ToggleRow(
@@ -94,8 +94,8 @@ private struct ProviderCard: View {
     }
 }
 
-private struct APIKeyRow: View {
-    @Binding var provider: HermesModelProvider
+private struct APIKeyStatusRow: View {
+    let provider: HermesModelProvider
 
     var body: some View {
         HStack(alignment: .center, spacing: HermesSpacing.md) {
@@ -107,33 +107,14 @@ private struct APIKeyRow: View {
                     .font(HermesTypography.body)
                     .foregroundStyle(HermesColors.text)
                 Text(provider.hasAPIKey
-                     ? "Stored in the system keychain by the Hermes daemon. Rotate via the daemon CLI in M3."
-                     : "Add a key on the daemon side; Hermes Desktop will not store secrets locally.")
+                     ? "Secret presence is reported by the Hermes daemon; Desktop never stores or edits provider keys."
+                     : "Add or rotate the key through the Hermes daemon/CLI, then refresh this screen.")
                     .font(HermesTypography.caption)
                     .foregroundStyle(HermesColors.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
-            if provider.hasAPIKey {
-                HermesButton("Forget key", kind: .ghost) {
-                    provider.hasAPIKey = false
-                    if provider.needsAPIKey {
-                        provider.status = .missingKey
-                    }
-                    provider.restartRequired = true
-                }
-            } else {
-                HermesButton("Mark on file", kind: .ghost) {
-                    // The desktop app does not accept secrets directly
-                    // — this is a marker that the daemon CLI has
-                    // stored one. Real key entry happens out-of-band.
-                    provider.hasAPIKey = true
-                    if provider.status == .missingKey {
-                        provider.status = .ready
-                    }
-                    provider.restartRequired = true
-                }
-            }
+            StatusBadge("Daemon-owned", tone: .neutral)
         }
     }
 }

@@ -35,6 +35,7 @@ public final class SettingsViewModel: ObservableObject {
     @Published public var draft: HermesConfigSnapshot?
 
     private let client: HermesAPIClient
+    private var restartRequiredFromLastSave = false
 
     public init(client: HermesAPIClient) {
         self.client = client
@@ -55,7 +56,9 @@ public final class SettingsViewModel: ObservableObject {
                 draft = snapshot
             }
             state = .loaded
-            saveState = .ready
+            if !savedRequiresRestart {
+                saveState = .ready
+            }
         } catch let error as HermesAPIError {
             state = .failed(error.userFacingMessage)
         } catch {
@@ -75,8 +78,8 @@ public final class SettingsViewModel: ObservableObject {
     /// has drafted a change to a flag that the daemon already marks
     /// as restart-required.
     public var savedRequiresRestart: Bool {
-        guard let saved else { return false }
-        return Self.snapshotRequiresRestart(saved)
+        guard let saved else { return restartRequiredFromLastSave }
+        return restartRequiredFromLastSave || Self.snapshotRequiresRestart(saved)
     }
 
     public var draftRequiresRestart: Bool {
@@ -97,14 +100,14 @@ public final class SettingsViewModel: ObservableObject {
 
     private static func draftIntroducesRestart(saved: HermesConfigSnapshot,
                                                draft: HermesConfigSnapshot) -> Bool {
-        // Provider edits that change the default model or API-key
-        // expectations should warn about restart even if the daemon
-        // hasn't applied the bit yet.
+        // Provider edits that change the default model should warn
+        // about restart even if the daemon has not applied the bit yet.
+        // API-key presence is daemon-owned metadata and is not a
+        // desktop-editable setting.
         let savedProviders = Dictionary(uniqueKeysWithValues: saved.providers.map { ($0.id, $0) })
         for provider in draft.providers {
             guard let original = savedProviders[provider.id] else { return true }
             if original.defaultModel != provider.defaultModel { return true }
-            if original.hasAPIKey != provider.hasAPIKey { return true }
         }
         let savedTools = Dictionary(uniqueKeysWithValues: saved.tools.map { ($0.id, $0) })
         for tool in draft.tools {
@@ -128,6 +131,7 @@ public final class SettingsViewModel: ObservableObject {
         saveState = .saving
         do {
             let result = try await client.updateConfig(update)
+            restartRequiredFromLastSave = result.requiresRestart
             self.saved = result.snapshot
             self.draft = result.snapshot
             saveState = result.requiresRestart
@@ -165,7 +169,8 @@ public final class SettingsViewModel: ObservableObject {
             }
         }
         if saved.providers != draft.providers {
-            update.providers = draft.providers
+            update.providers = sanitizedProvidersForUpdate(saved: saved.providers,
+                                                           draft: draft.providers)
         }
         if saved.tools != draft.tools {
             update.tools = draft.tools
@@ -176,11 +181,26 @@ public final class SettingsViewModel: ObservableObject {
         return update
     }
 
+    private static func sanitizedProvidersForUpdate(saved: [HermesModelProvider],
+                                                    draft: [HermesModelProvider]) -> [HermesModelProvider] {
+        let savedByID = Dictionary(uniqueKeysWithValues: saved.map { ($0.id, $0) })
+        return draft.map { provider in
+            guard let original = savedByID[provider.id] else { return provider }
+            var copy = provider
+            // Secret presence is daemon-owned metadata. Desktop may show
+            // it, but must not assert or clear key state in config saves.
+            copy.needsAPIKey = original.needsAPIKey
+            copy.hasAPIKey = original.hasAPIKey
+            return copy
+        }
+    }
+
     // MARK: - Daemon lifecycle (M3 surface)
 
     public func restartDaemon() async {
         do {
             _ = try await client.restartDaemon()
+            restartRequiredFromLastSave = false
             // Pull the post-restart snapshot back so restart-required
             // bits clear in the UI without an extra user click.
             await refresh()
