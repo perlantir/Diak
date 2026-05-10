@@ -30,4 +30,53 @@ final class MockHermesAPIClientTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
     }
+
+    func testPendingApprovalsReturnsFixturesWithoutDecidedOnes() async throws {
+        let client = MockHermesAPIClient()
+        let pending = try await client.pendingApprovals()
+        XCTAssertEqual(client.pendingApprovalsCallCount, 1)
+        XCTAssertEqual(Set(pending.map(\.id)),
+                       ["appr-001", "appr-002", "appr-003"])
+        XCTAssertFalse(pending.contains { $0.id == "appr-004" })
+    }
+
+    func testDecideApprovalFlipsStatusAndIsIdempotent() async throws {
+        let client = MockHermesAPIClient()
+        let decided = try await client.decideApproval(id: "appr-001",
+                                                     decision: .approve,
+                                                     note: "ok")
+        XCTAssertEqual(decided.status, .approved)
+        XCTAssertEqual(decided.decisionNote, "ok")
+
+        // A second decision is a no-op — returns the prior decided record.
+        let again = try await client.decideApproval(id: "appr-001",
+                                                   decision: .deny,
+                                                   note: "changed mind")
+        XCTAssertEqual(again.status, .approved)
+        XCTAssertEqual(again.decisionNote, "ok")
+    }
+
+    func testActionEvidenceRespectsSessionScope() async throws {
+        let client = MockHermesAPIClient()
+        let global = try await client.actionEvidence(sessionID: nil)
+        let scoped = try await client.actionEvidence(sessionID: "sess-002")
+        XCTAssertGreaterThan(global.count, scoped.count)
+        XCTAssertTrue(scoped.allSatisfy { $0.sessionID == "sess-002" })
+    }
+
+    func testApprovalLookupNotFoundThrows() async {
+        let client = MockHermesAPIClient()
+        do {
+            _ = try await client.approval(id: "no-such-id")
+            XCTFail("Expected lookup to throw")
+        } catch let error as HermesAPIError {
+            if case .http(let status, _) = error {
+                XCTAssertEqual(status, 404)
+            } else {
+                XCTFail("Expected http(404), got \(error)")
+            }
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
 }

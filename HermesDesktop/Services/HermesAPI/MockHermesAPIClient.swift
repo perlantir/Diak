@@ -16,6 +16,16 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     public private(set) var messagesCallCount = 0
     public private(set) var createSessionCallCount = 0
     public private(set) var streamCallCount = 0
+    public private(set) var pendingApprovalsCallCount = 0
+    public private(set) var approvalCallCount = 0
+    public private(set) var decideApprovalCallCount = 0
+    public private(set) var actionEvidenceCallCount = 0
+
+    /// In-memory approval/evidence stores. Mutating them through
+    /// `decideApproval` keeps state visible across reads inside a single
+    /// process (drives view-model refresh in tests + previews).
+    private var approvals: [String: HermesApprovalRequest] = MockHermesData.approvalIndex
+    private var evidence: [HermesActionEvidence] = MockHermesData.actionEvidence
 
     /// Optional override: force a specific session to be returned by
     /// `createSession` so tests/previews can pin the id.
@@ -97,6 +107,89 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
             hasArtifacts: false,
             pendingApprovalsCount: 0
         )
+    }
+
+    // MARK: Approvals / action evidence (M2)
+
+    public func pendingApprovals() async throws -> [HermesApprovalRequest] {
+        pendingApprovalsCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        let snapshot = approvals.values.filter { $0.status == .pending }
+        return snapshot.sorted { lhs, rhs in
+            // Highest risk first, then most recently updated.
+            let l = Self.riskWeight(lhs.risk)
+            let r = Self.riskWeight(rhs.risk)
+            if l != r { return l > r }
+            return lhs.updatedAt > rhs.updatedAt
+        }
+    }
+
+    public func approval(id: String) async throws -> HermesApprovalRequest {
+        approvalCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        guard let request = approvals[id] else {
+            throw HermesAPIError.http(status: 404, body: "no approval \(id)")
+        }
+        return request
+    }
+
+    public func decideApproval(id: String,
+                               decision: HermesApprovalDecision,
+                               note: String?) async throws -> HermesApprovalRequest {
+        decideApprovalCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        guard let existing = approvals[id] else {
+            throw HermesAPIError.http(status: 404, body: "no approval \(id)")
+        }
+        guard existing.status == .pending else {
+            // Idempotent: already decided requests are returned as-is so
+            // callers can reconcile without errors after a race.
+            return existing
+        }
+        let now = Date()
+        let updated = HermesApprovalRequest(
+            id: existing.id,
+            title: existing.title,
+            summary: existing.summary,
+            kind: existing.kind,
+            status: decision == .approve ? .approved : .denied,
+            risk: existing.risk,
+            createdAt: existing.createdAt,
+            updatedAt: now,
+            sessionID: existing.sessionID,
+            sessionTitle: existing.sessionTitle,
+            toolName: existing.toolName,
+            requester: existing.requester,
+            payload: existing.payload,
+            decisionNote: note
+        )
+        approvals[id] = updated
+        evidence.insert(MockHermesData.evidenceFor(decided: updated, at: now), at: 0)
+        return updated
+    }
+
+    public func actionEvidence(sessionID: String?) async throws -> [HermesActionEvidence] {
+        actionEvidenceCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        let scoped = sessionID.map { sid in evidence.filter { $0.sessionID == sid } } ?? evidence
+        return scoped.sorted { $0.occurredAt > $1.occurredAt }
+    }
+
+    /// Test affordance: reset the in-memory approval/evidence stores
+    /// back to fixture defaults between scenarios.
+    public func resetApprovalState() {
+        approvals = MockHermesData.approvalIndex
+        evidence = MockHermesData.actionEvidence
+    }
+
+    private static func riskWeight(_ risk: HermesApprovalRisk) -> Int {
+        switch risk {
+        case .critical: return 4
+        case .high:     return 3
+        case .medium:   return 2
+        case .low:      return 1
+        case .unknown:  return 0
+        }
     }
 
     public func streamEvents(sessionID: String) -> AsyncThrowingStream<HermesStreamEvent, Error> {
@@ -313,6 +406,196 @@ public enum MockHermesData {
         events.append(.messageCompleted(messageID: messageID))
         events.append(.sessionEnded(sessionID: sessionID, status: .completed))
         return events
+    }
+
+    // MARK: Approvals + action evidence (M2 fixtures)
+
+    public static let approvals: [HermesApprovalRequest] = [
+        HermesApprovalRequest(
+            id: "appr-001",
+            title: "Run database migration",
+            summary: "Apply pending schema migrations against the local Postgres instance.",
+            kind: .terminalCommand,
+            status: .pending,
+            risk: .high,
+            createdAt: referenceDate.addingTimeInterval(-300),
+            updatedAt: referenceDate.addingTimeInterval(-300),
+            sessionID: "sess-002",
+            sessionTitle: "Migration helper",
+            toolName: "shell.run",
+            requester: "Hermes Agent",
+            payload: .terminalCommand(HermesTerminalCommandPayload(
+                command: "npm run migrate -- --write",
+                workingDirectory: "/Users/nick/dev/hermes",
+                shell: "/bin/zsh",
+                estimatedDurationSeconds: 45
+            ))
+        ),
+        HermesApprovalRequest(
+            id: "appr-002",
+            title: "Update SessionRow.swift",
+            summary: "Tighten layout for sessions with pending approvals.",
+            kind: .fileWrite,
+            status: .pending,
+            risk: .medium,
+            createdAt: referenceDate.addingTimeInterval(-180),
+            updatedAt: referenceDate.addingTimeInterval(-180),
+            sessionID: "sess-001",
+            sessionTitle: "Project triage",
+            toolName: "files.write",
+            requester: "Hermes Agent",
+            payload: .fileWrite(HermesFileWritePayload(
+                path: "HermesDesktop/DesignSystem/Components/SessionRow.swift",
+                summary: "+12 / −3 lines · adjust trailing badge stack",
+                unifiedDiff: """
+                @@
+                -                    StatusBadge(session.status.displayName, tone: tone)
+                -                    if session.pendingApprovalsCount > 0 {
+                -                        RiskBadge(.high)
+                -                    }
+                +                    StatusBadge(session.status.displayName, tone: tone)
+                +                    if session.pendingApprovalsCount > 0 {
+                +                        HStack(spacing: HermesSpacing.xs) {
+                +                            RiskBadge(.high)
+                +                            Text("\\(session.pendingApprovalsCount) pending")
+                +                                .font(HermesTypography.caption)
+                +                                .foregroundStyle(HermesColors.muted)
+                +                        }
+                +                    }
+                """,
+                addedLines: 9,
+                removedLines: 3
+            ))
+        ),
+        HermesApprovalRequest(
+            id: "appr-003",
+            title: "Send Slack message to #release",
+            summary: "Notify the release channel that the migration is staged.",
+            kind: .connectorSend,
+            status: .pending,
+            risk: .critical,
+            createdAt: referenceDate.addingTimeInterval(-60),
+            updatedAt: referenceDate.addingTimeInterval(-60),
+            sessionID: "sess-streaming",
+            sessionTitle: "Launch notes draft",
+            toolName: "connector.slack.post",
+            requester: "Hermes Agent",
+            payload: .connectorSend(HermesConnectorSendPayload(
+                connectorName: "Slack",
+                connectorIcon: "bubble.left.and.bubble.right",
+                endpoint: "POST chat.postMessage",
+                method: "POST",
+                recipient: "#release",
+                bodyPreview: """
+                Heads up team — Hermes Desktop M2 has a migration ready to apply.
+                I’ll wait for an explicit approval before running it on staging.
+                """
+            ))
+        ),
+        HermesApprovalRequest(
+            id: "appr-004",
+            title: "Read CHANGELOG.md",
+            summary: "Already approved earlier today — kept here for the audit trail.",
+            kind: .fileWrite,
+            status: .approved,
+            risk: .low,
+            createdAt: referenceDate.addingTimeInterval(-7_200),
+            updatedAt: referenceDate.addingTimeInterval(-7_000),
+            sessionID: "sess-001",
+            sessionTitle: "Project triage",
+            toolName: "files.write",
+            requester: "Hermes Agent",
+            payload: .fileWrite(HermesFileWritePayload(
+                path: "CHANGELOG.md",
+                summary: "Append release notes section.",
+                unifiedDiff: """
+                @@
+                +## 0.2.0 (2026-05-09)
+                +- Approvals UI: terminal, file, connector previews
+                +- Action Center route with risk-sorted queue
+                """,
+                addedLines: 3,
+                removedLines: 0
+            )),
+            decisionNote: "Looked correct — approved."
+        )
+    ]
+
+    public static var approvalIndex: [String: HermesApprovalRequest] {
+        Dictionary(uniqueKeysWithValues: approvals.map { ($0.id, $0) })
+    }
+
+    public static let actionEvidence: [HermesActionEvidence] = [
+        HermesActionEvidence(
+            id: "evd-001",
+            title: "Read project files",
+            summary: "Scanned 18 source files in /Users/nick/dev/hermes.",
+            status: .completed,
+            occurredAt: referenceDate.addingTimeInterval(-3_500),
+            actor: "Hermes Agent",
+            toolName: "files.read",
+            approvalID: nil,
+            sessionID: "sess-001",
+            artifacts: [
+                HermesArtifactRef(id: "art-1", kind: .file,
+                                  title: "Package.swift",
+                                  detail: "/Users/nick/dev/hermes/Package.swift"),
+                HermesArtifactRef(id: "art-2", kind: .file,
+                                  title: "README.md",
+                                  detail: "/Users/nick/dev/hermes/README.md")
+            ]
+        ),
+        HermesActionEvidence(
+            id: "evd-002",
+            title: "Wrote CHANGELOG.md",
+            summary: "Added 3 lines · approved",
+            status: .completed,
+            occurredAt: referenceDate.addingTimeInterval(-7_000),
+            actor: "You",
+            toolName: "files.write",
+            approvalID: "appr-004",
+            sessionID: "sess-001",
+            artifacts: [
+                HermesArtifactRef(id: "art-3", kind: .file,
+                                  title: "CHANGELOG.md",
+                                  detail: "+3 / −0 lines")
+            ]
+        ),
+        HermesActionEvidence(
+            id: "evd-003",
+            title: "Denied: rm -rf node_modules",
+            summary: "Blocked because Hermes flagged this as critical risk.",
+            status: .denied,
+            occurredAt: referenceDate.addingTimeInterval(-86_400),
+            actor: "You",
+            toolName: "shell.run",
+            approvalID: nil,
+            sessionID: "sess-002",
+            artifacts: []
+        )
+    ]
+
+    /// Build a synthetic evidence record from a decided approval so the
+    /// inspector reflects the user's choice immediately. Only used by
+    /// the mock client; the real daemon emits its own evidence stream.
+    public static func evidenceFor(decided approval: HermesApprovalRequest,
+                                   at when: Date) -> HermesActionEvidence {
+        let isApproved = approval.status == .approved
+        let title = isApproved
+            ? "Approved · \(approval.title)"
+            : "Denied · \(approval.title)"
+        return HermesActionEvidence(
+            id: "evd-decision-\(approval.id)",
+            title: title,
+            summary: approval.decisionNote,
+            status: isApproved ? .completed : .denied,
+            occurredAt: when,
+            actor: "You",
+            toolName: approval.toolName,
+            approvalID: approval.id,
+            sessionID: approval.sessionID,
+            artifacts: []
+        )
     }
 
     public static func titleFromPrompt(_ prompt: String) -> String {

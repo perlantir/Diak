@@ -6,12 +6,16 @@ import SwiftUI
 /// reload the latest messages so the view doesn't go stale.
 struct SessionDetailView: View {
     let session: HermesSession
+    @ObservedObject var approvals: ApprovalsViewModel
     let client: HermesAPIClient
 
     @StateObject private var chat: ChatViewModel
 
-    init(session: HermesSession, client: HermesAPIClient) {
+    init(session: HermesSession,
+         approvals: ApprovalsViewModel,
+         client: HermesAPIClient) {
         self.session = session
+        self.approvals = approvals
         self.client = client
         _chat = StateObject(wrappedValue: ChatViewModel(client: client, session: session))
     }
@@ -34,6 +38,13 @@ struct SessionDetailView: View {
         }
         .background(HermesColors.canvas)
         .task { await chat.load(session: session) }
+        .sheet(item: $approvals.presentedApproval) { request in
+            ApprovalSheet(request: request, viewModel: approvals)
+        }
+    }
+
+    private var sessionApprovals: [HermesApprovalRequest] {
+        approvals.pending.filter { $0.sessionID == session.id }
     }
 
     private var subtitle: String? {
@@ -53,8 +64,8 @@ struct SessionDetailView: View {
                 Text(headerSubtitle)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(HermesColors.muted)
-                if session.pendingApprovalsCount > 0 {
-                    Text("Approvals UI lands in M2 — pending actions will surface here.")
+                if !sessionApprovals.isEmpty {
+                    Text("\(sessionApprovals.count) pending approval\(sessionApprovals.count == 1 ? "" : "s") — review below before Hermes acts.")
                         .font(.system(size: 11))
                         .foregroundStyle(HermesColors.warning)
                         .padding(.top, HermesSpacing.xs)
@@ -82,6 +93,13 @@ struct SessionDetailView: View {
     private var transcript: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: HermesSpacing.md) {
+                ForEach(sessionApprovals) { request in
+                    ApprovalCard(
+                        request: request,
+                        onReview: { approvals.present(request) },
+                        onDeny: { Task { await approvals.decide(request, decision: .deny) } }
+                    )
+                }
                 if chat.messages.isEmpty {
                     EmptyStateView(icon: "bubble.left.and.bubble.right",
                                    title: "No messages yet",

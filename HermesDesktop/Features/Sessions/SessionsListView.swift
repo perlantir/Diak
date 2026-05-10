@@ -4,6 +4,7 @@ import SwiftUI
 /// NavigationStack so selecting a row navigates to `SessionDetailView`.
 struct SessionsListView: View {
     @ObservedObject var viewModel: SessionsViewModel
+    @ObservedObject var approvals: ApprovalsViewModel
     let client: HermesAPIClient
 
     @State private var path: [HermesSession] = []
@@ -17,7 +18,9 @@ struct SessionsListView: View {
             }
             .background(HermesColors.canvas)
             .navigationDestination(for: HermesSession.self) { session in
-                SessionDetailView(session: session, client: client)
+                SessionDetailView(session: session,
+                                  approvals: approvals,
+                                  client: client)
             }
         }
         .task { await viewModel.refresh() }

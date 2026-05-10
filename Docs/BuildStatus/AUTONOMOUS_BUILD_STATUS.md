@@ -1,63 +1,67 @@
 # Hermes Desktop Autonomous Build Status
 
-Updated: 2026-05-09 22:50 CDT
+Updated: 2026-05-09 23:26 CDT
 
 ## Current milestone
 
-M2 — approvals/action evidence is now in progress.
+M2 — approvals/action evidence with native safety UI is implemented and locally verified.
 
-## Builder status
+## Latest verified commits
 
-Claude Code print-mode builder is running for M2.
+- `8ca77ff` — `Update M2 builder status`
+- `f9617a9` — `Add M2 prompt and connector architecture decision`
+- `2c632a4` — `M1 sessions and chat foundation`
+- `389c3d1` — `M0 SwiftUI app shell and design system`
 
-- Hermes process session: `proc_8b99ac9d2ad0`
-- OS pid: `45731`
-- Prompt used: `Docs/Prompts/CLAUDE_CODE_M2_PROMPT.md`
-- Permission mode: `acceptEdits`
-- Max turns: `80`
+## M2 result
 
-## Repository state observed this run
+Implemented approvals/action evidence only:
 
-- No active Claude Code builder was found before starting M2.
-- Project files present: `project.yml`, `HermesDesktop.xcodeproj`.
-- Recent commits:
-  - `2c632a4` — `M1 sessions and chat foundation`
-  - `757196c` — `Add M1 build prompt and status`
-  - `389c3d1` — `M0 SwiftUI app shell and design system`
+- approval/action-evidence domain models
+- approval/evidence API boundary methods
+- mock pending approvals and decision transitions
+- approval cards and preview components for terminal command, file diff, and connector send/post
+- Action Center route
+- approval sheet/modal flow
+- right inspector activity/artifacts panes
+- inline pending approval cards in chat/session surfaces
+- tests for approval decoding, mock decision transitions, and approvals view model behavior
 
-## Verification before M2 kickoff
+Explicitly not implemented in M2:
+
+- real command execution
+- real connector writes
+- OAuth/connectors
+- automations
+- skills/memory UI
+- menu bar/global hotkey
+- packaging/updater/notarization
+
+## Verification after M2 implementation
 
 Commands run from `/Users/perlantir/Projects/HermesDesktop`:
 
 ```bash
+/opt/homebrew/bin/xcodegen generate
 xcodebuild -list
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -configuration Debug build
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' test
+git status --short
 ```
 
 Results:
 
+- XcodeGen succeeded.
 - `xcodebuild -list` succeeded; scheme: `HermesDesktop`.
 - Debug macOS build succeeded.
-- Tests succeeded: 24 tests, 0 failures.
+- Tests succeeded: 40 tests, 0 failures.
 
-## Local management updates before starting M2
+Test result bundle:
 
-- Added `Docs/Prompts/CLAUDE_CODE_M2_PROMPT.md`.
-- Updated `CLAUDE.md` build discipline from M0-only language to current M2 scope guardrails.
-
-## M2 scope guardrails
-
-Claude is constrained to approvals/action evidence only:
-
-- approval/action-evidence models and API-boundary methods
-- mock pending approvals and decision transitions
-- `ApprovalCard`, `ApprovalSheet`, command/diff/connector preview UI
-- Action Center route and inspector evidence panes
-- tests for decoding, mock API transitions, and view models
-
-Explicitly out of scope: real command execution, real connector writes, OAuth, automations, skills, memory, menu bar/global hotkey/native integrations, and Hermes internals.
+```text
+/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.09_23-24-43--0500.xcresult
+```
 
 ## Next action
 
-Next cron run should detect whether `proc_ed932d11dff1`/pid `26193` is still running. If finished, inspect repo changes and Claude output, run `xcodegen generate`, `xcodebuild -list`, build, and tests, then either repair M2 or progress to M3 only after M2 is verified green.
+Commit verified M2, then plan M3. Given current product direction, M3 should likely be connector foundation / approval-policy architecture with a Composio-first, provider-agnostic design, while keeping real OAuth/write execution gated behind explicit scope and tests.

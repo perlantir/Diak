@@ -4,6 +4,7 @@ struct ContentRouter: View {
     let section: SidebarNavSection
     @ObservedObject var daemon: DaemonStatusViewModel
     @ObservedObject var engineViewModel: HermesEngineViewModel
+    @ObservedObject var approvals: ApprovalsViewModel
     let client: HermesAPIClient
     @StateObject private var chat: ChatViewModel
     @StateObject private var sessions: SessionsViewModel
@@ -11,10 +12,12 @@ struct ContentRouter: View {
     init(section: SidebarNavSection,
          daemon: DaemonStatusViewModel,
          engineViewModel: HermesEngineViewModel,
+         approvals: ApprovalsViewModel,
          client: HermesAPIClient) {
         self.section = section
         self.daemon = daemon
         self.engineViewModel = engineViewModel
+        self.approvals = approvals
         self.client = client
         _chat = StateObject(wrappedValue: ChatViewModel(client: client))
         _sessions = StateObject(wrappedValue: SessionsViewModel(client: client))
@@ -26,9 +29,11 @@ struct ContentRouter: View {
             Group {
                 switch section {
                 case .home:
-                    ChatRootView(viewModel: chat)
+                    ChatRootView(viewModel: chat, approvals: approvals)
                 case .sessions:
-                    SessionsListView(viewModel: sessions, client: client)
+                    SessionsListView(viewModel: sessions,
+                                     approvals: approvals,
+                                     client: client)
                 case .automations:
                     EmptyStateView(icon: "clock.arrow.circlepath",
                                    title: "Automations",
@@ -50,9 +55,7 @@ struct ContentRouter: View {
                                    title: "Projects",
                                    message: "Trusted folders and project policies. Coming in M3/M5.")
                 case .actionCenter:
-                    EmptyStateView(icon: "tray.full",
-                                   title: "Action Center",
-                                   message: "Pending approvals and an audit log of every side effect. Coming in M2.")
+                    ActionCenterView(viewModel: approvals)
                 case .settings:
                     SettingsView(daemon: daemon, engineViewModel: engineViewModel)
                 }

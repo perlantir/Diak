@@ -4,6 +4,7 @@ import SwiftUI
 /// inline tool activity, plus the streaming composer at the bottom.
 struct ChatTranscriptView: View {
     @ObservedObject var viewModel: ChatViewModel
+    @ObservedObject var approvals: ApprovalsViewModel
     let title: String
 
     var body: some View {
@@ -13,6 +14,16 @@ struct ChatTranscriptView: View {
             composer
         }
         .background(HermesColors.canvas)
+        .sheet(item: $approvals.presentedApproval) { request in
+            ApprovalSheet(request: request, viewModel: approvals)
+        }
+    }
+
+    /// Pending approvals scoped to the active session — shown inline at
+    /// the top of the transcript (screen 08).
+    private var sessionApprovals: [HermesApprovalRequest] {
+        guard let sessionID = viewModel.session?.id else { return [] }
+        return approvals.pending.filter { $0.sessionID == sessionID }
     }
 
     private var subtitle: String? {
@@ -27,6 +38,15 @@ struct ChatTranscriptView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: HermesSpacing.md) {
+                    ForEach(sessionApprovals) { request in
+                        ApprovalCard(
+                            request: request,
+                            onReview: { approvals.present(request) },
+                            onDeny: {
+                                Task { await approvals.decide(request, decision: .deny) }
+                            }
+                        )
+                    }
                     ForEach(viewModel.messages) { message in
                         MessageBlock(message: message).id(message.id)
                     }

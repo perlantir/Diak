@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SidebarView: View {
     @Binding var selection: SidebarNavSection
+    var pendingApprovalsCount: Int = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: HermesSpacing.xs) {
@@ -10,6 +11,7 @@ struct SidebarView: View {
             ForEach(SidebarNavSection.allCases) { section in
                 SidebarItem(icon: section.systemImage,
                             title: section.title,
+                            badge: badge(for: section),
                             isSelected: selection == section) {
                     selection = section
                 }
@@ -19,6 +21,11 @@ struct SidebarView: View {
         .padding(HermesSpacing.sm)
         .frame(minWidth: 200, idealWidth: 220, maxWidth: 260)
         .background(HermesColors.sidebar)
+    }
+
+    private func badge(for section: SidebarNavSection) -> String? {
+        guard section == .actionCenter, pendingApprovalsCount > 0 else { return nil }
+        return "\(pendingApprovalsCount)"
     }
 
     private var header: some View {

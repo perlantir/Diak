@@ -57,6 +57,34 @@ public final class URLSessionHermesAPIClient: HermesAPIClient, @unchecked Sendab
         }
     }
 
+    // MARK: Approvals / action evidence (M2)
+
+    public func pendingApprovals() async throws -> [HermesApprovalRequest] {
+        try await get("/approvals?status=pending")
+    }
+
+    public func approval(id: String) async throws -> HermesApprovalRequest {
+        try await get("/approvals/\(id)")
+    }
+
+    public func decideApproval(id: String,
+                               decision: HermesApprovalDecision,
+                               note: String?) async throws -> HermesApprovalRequest {
+        struct Body: Encodable {
+            let decision: String
+            let note: String?
+        }
+        return try await post("/approvals/\(id)/decision",
+                              body: Body(decision: decision.rawValue, note: note))
+    }
+
+    public func actionEvidence(sessionID: String?) async throws -> [HermesActionEvidence] {
+        if let sessionID {
+            return try await get("/sessions/\(sessionID)/evidence")
+        }
+        return try await get("/evidence")
+    }
+
     // MARK: Internals
 
     private func get<T: Decodable>(_ path: String) async throws -> T {
