@@ -1,40 +1,15 @@
 import SwiftUI
 
-/// Active chat transcript (screens 06/07). Renders messages and any
-/// inline tool activity, plus the streaming composer at the bottom.
-struct ChatTranscriptView: View {
+/// Scrollable message timeline for the active chat. Lives inside
+/// `ChatWorkspacePane`, which owns the surrounding header and composer.
+/// Renders pending session-scoped approval cards inline at the top of
+/// the transcript and auto-scrolls to the latest message as content
+/// streams in.
+struct ChatTranscriptScroll: View {
     @ObservedObject var viewModel: ChatViewModel
     @ObservedObject var approvals: ApprovalsViewModel
-    let title: String
 
     var body: some View {
-        VStack(spacing: 0) {
-            ChatHeaderBar(title: title, subtitle: subtitle)
-            transcript
-            composer
-        }
-        .background(HermesColors.canvas)
-        .sheet(item: $approvals.presentedApproval) { request in
-            ApprovalSheet(request: request, viewModel: approvals)
-        }
-    }
-
-    /// Pending approvals scoped to the active session — shown inline at
-    /// the top of the transcript (screen 08).
-    private var sessionApprovals: [HermesApprovalRequest] {
-        guard let sessionID = viewModel.session?.id else { return [] }
-        return approvals.pending.filter { $0.sessionID == sessionID }
-    }
-
-    private var subtitle: String? {
-        guard let session = viewModel.session else { return nil }
-        var parts: [String] = []
-        if let model = session.model { parts.append(model) }
-        if let project = session.project { parts.append(project.name) }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    private var transcript: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: HermesSpacing.md) {
@@ -70,16 +45,9 @@ struct ChatTranscriptView: View {
         }
     }
 
-    private var composer: some View {
-        ChatComposer(
-            text: $viewModel.draft,
-            placeholder: "Add more constraints, attach files, or press ⌘↵…",
-            isStreaming: viewModel.isStreaming,
-            canSend: viewModel.canSend,
-            onSend: { Task { await viewModel.startStreaming() } },
-            onStop: viewModel.stop
-        )
-        .padding(HermesSpacing.lg)
+    private var sessionApprovals: [HermesApprovalRequest] {
+        guard let sessionID = viewModel.session?.id else { return [] }
+        return approvals.pending.filter { $0.sessionID == sessionID }
     }
 }
 

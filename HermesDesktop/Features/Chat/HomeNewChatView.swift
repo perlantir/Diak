@@ -1,26 +1,22 @@
 import SwiftUI
 
-/// "Empty home / new chat" state from screen 05. Shows the centered
-/// hero, three quick-action cards, and the composer at the bottom.
-/// Once the user sends their first prompt the view model transitions
-/// into streaming and the parent swaps in `ChatTranscriptView`.
-struct HomeNewChatView: View {
+/// Inline empty-state content shown above the composer in the chat
+/// workspace when no messages exist yet. Renders the centered hero
+/// and three quick-action prompt cards from screen 05. Tapping a
+/// prompt fills the composer draft so the user can edit and send.
+///
+/// This view is intentionally just content — the surrounding
+/// `ChatWorkspacePane` owns the chat header and composer so the
+/// empty-state never hides the primary chat entry point.
+struct ChatEmptyHero: View {
     @ObservedObject var viewModel: ChatViewModel
 
     var body: some View {
-        VStack(spacing: 0) {
-            ChatHeaderBar(title: "New Chat", subtitle: nil)
-            ScrollView {
-                VStack(spacing: HermesSpacing.xl) {
-                    hero
-                    quickActions
-                }
-                .padding(HermesSpacing.xl)
-                .frame(maxWidth: .infinity)
-            }
-            composer
+        VStack(spacing: HermesSpacing.xl) {
+            hero
+            quickActions
         }
-        .background(HermesColors.canvas)
+        .frame(maxWidth: .infinity)
     }
 
     private var hero: some View {
@@ -42,7 +38,7 @@ struct HomeNewChatView: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 480)
         }
-        .padding(.top, HermesSpacing.xl)
+        .padding(.top, HermesSpacing.lg)
     }
 
     private var quickActions: some View {
@@ -73,18 +69,6 @@ struct HomeNewChatView: View {
             )
         }
         .frame(maxWidth: 1080)
-    }
-
-    private var composer: some View {
-        ChatComposer(
-            text: $viewModel.draft,
-            placeholder: "Ask Hermes to do something…",
-            isStreaming: viewModel.isStreaming,
-            canSend: viewModel.canSend,
-            onSend: { Task { await viewModel.startStreaming() } },
-            onStop: viewModel.stop
-        )
-        .padding(HermesSpacing.lg)
     }
 
     private func fill(_ prompt: String) {

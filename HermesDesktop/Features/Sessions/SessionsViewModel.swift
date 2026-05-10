@@ -85,4 +85,18 @@ public final class SessionsViewModel: ObservableObject {
     public func select(_ session: HermesSession?) {
         selectedSessionID = session?.id
     }
+
+    /// Insert or replace `session` in the local list and re-sort by
+    /// `updatedAt` descending. Used by the Home / chat workspace to make
+    /// a brand-new session immediately visible in the recent-chats rail
+    /// without waiting for a daemon refresh round-trip.
+    public func upsert(_ session: HermesSession) {
+        if let idx = sessions.firstIndex(where: { $0.id == session.id }) {
+            sessions[idx] = session
+        } else {
+            sessions.append(session)
+        }
+        sessions.sort(by: { $0.updatedAt > $1.updatedAt })
+        if case .idle = state { state = .loaded }
+    }
 }

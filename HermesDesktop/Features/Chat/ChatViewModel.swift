@@ -165,6 +165,27 @@ public final class ChatViewModel: ObservableObject {
         if isStreaming { phase = .completed }
     }
 
+    /// Reset the chat workspace to an unbound, empty state so the user can
+    /// begin a fresh chat. Cancels any in-flight stream/artifact load,
+    /// drops the active session, and clears messages, draft text, canvas,
+    /// and any prior error/loading flags. Does **not** mutate the recent
+    /// sessions list — that lives in `SessionsViewModel` and must survive
+    /// a "new chat" so multi-chat history stays visible.
+    public func startNewChat() {
+        streamTask?.cancel()
+        streamTask = nil
+        artifactLoadTask?.cancel()
+        artifactLoadTask = nil
+
+        session = nil
+        messages = []
+        draft = ""
+        canvas = HermesCanvasState.bootstrap(sessionTitle: "New chat")
+        artifactLoadError = nil
+        isLoadingArtifacts = false
+        phase = .idle
+    }
+
     /// Pure event reducer — exposed for tests so streaming behavior is
     /// verifiable without spinning up a stream.
     public func apply(_ event: HermesStreamEvent) {

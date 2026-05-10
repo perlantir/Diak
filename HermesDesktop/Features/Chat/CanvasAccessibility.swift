@@ -8,10 +8,18 @@ public enum CanvasAccessibilityID {
     public static let chatRootSplit       = "chat-root-split"
     public static let chatTranscriptPane  = "chat-transcript-pane"
     public static let chatCanvasPane      = "chat-canvas-pane"
+    public static let chatRecentRail      = "chat-recent-rail"
+    public static let chatRecentList      = "chat-recent-list"
+    public static let chatNewChatHeader   = "chat-new-chat-header"
+    public static let chatNewChatRail     = "chat-new-chat-rail"
     public static let canvasHeader        = "canvas-header"
     public static let canvasTitle         = "canvas-title"
     public static let canvasTabStrip      = "canvas-tab-strip"
     public static let canvasActivityFeed  = "canvas-activity-feed"
+
+    public static func chatRecentSessionRow(_ sessionID: String) -> String {
+        "chat-recent-session-\(sessionID)"
+    }
 
     public static func canvasTab(_ tab: HermesCanvasTab) -> String {
         "canvas-tab-\(tab.rawValue)"

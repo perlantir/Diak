@@ -41,7 +41,9 @@ struct ContentRouter: View {
             Group {
                 switch section {
                 case .home:
-                    ChatRootView(viewModel: chat, approvals: approvals)
+                    ChatRootView(viewModel: chat,
+                                 approvals: approvals,
+                                 sessions: sessions)
                 case .sessions:
                     SessionsListView(viewModel: sessions,
                                      approvals: approvals,
