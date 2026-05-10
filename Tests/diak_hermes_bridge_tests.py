@@ -169,6 +169,95 @@ class DiakHermesBridgeTests(unittest.TestCase):
         self.assertEqual(connector["status"], "error")
         self.assertIn("not configured", connector["last_error"])
 
+    def test_settings_secrets_reports_missing_without_composio_env(self):
+        # Slice 3 boundary: the bridge has no Keychain. With no Composio env
+        # injected by Diak, the metadata endpoint reports presence=missing
+        # and never invents saved-field metadata.
+        for env_name in (
+            "COMPOSIO_API_KEY",
+            "COMPOSIO_API_BASE_URL",
+            "DIAK_CONNECTOR_ENTITY_ID",
+            "DIAK_CONNECTOR_REDIRECT_URL",
+            "DIAK_CONNECTOR_SETUP_URL_TEMPLATE",
+        ):
+            self.assertNotIn(env_name, os.environ, msg=f"Stale env var {env_name} polluting unit test")
+        status, _, body = self.harness.request("GET", "/settings/secrets")
+        self.assertEqual(status, 200)
+        payload = json.loads(body)
+        self.assertIsInstance(payload, list)
+        composio = next((s for s in payload if s["id"] == "composio"), None)
+        self.assertIsNotNone(composio, "Composio metadata slot must be present")
+        self.assertEqual(composio["presence"], "missing")
+        self.assertEqual(composio["validity"], "untested")
+        self.assertEqual(composio["saved_non_sensitive_field_ids"], [])
+
+    def test_settings_secrets_reports_saved_and_omits_raw_value_when_composio_env_present(self):
+        # Slice 3: when Diak has injected the Composio env via Slice-3 bridge
+        # manager, the metadata endpoint reports presence=saved + lists the
+        # non-sensitive fields it sees. The raw API key value MUST NOT appear
+        # anywhere in the response body.
+        api_key = "comp_live_unittest_DO_NOT_LEAK_ABCDEF"
+        env_to_set = {
+            "COMPOSIO_API_KEY": api_key,
+            "COMPOSIO_API_BASE_URL": "https://backend.composio.test/api/v1",
+            "DIAK_CONNECTOR_ENTITY_ID": "diak-unittest-user",
+            "DIAK_CONNECTOR_SETUP_URL_TEMPLATE": "https://connect.composio.test/oauth?toolkit={toolkit}",
+        }
+        previous: dict[str, str | None] = {k: os.environ.get(k) for k in env_to_set}
+        for key, value in env_to_set.items():
+            os.environ[key] = value
+        try:
+            self.harness.close()
+            self.harness = BridgeHTTPHarness()
+            status, _, body = self.harness.request("GET", "/settings/secrets")
+            self.assertEqual(status, 200)
+            self.assertNotIn(api_key, body, "Raw Composio API key leaked through /settings/secrets")
+            payload = json.loads(body)
+            composio = next(s for s in payload if s["id"] == "composio")
+            self.assertEqual(composio["presence"], "saved")
+            self.assertEqual(composio["validity"], "untested")
+            self.assertIn("base_url", composio["saved_non_sensitive_field_ids"])
+            self.assertIn("entity_id", composio["saved_non_sensitive_field_ids"])
+            self.assertIn("setup_url_template", composio["saved_non_sensitive_field_ids"])
+            self.assertNotIn("redirect_url", composio["saved_non_sensitive_field_ids"])
+        finally:
+            for key, prior in previous.items():
+                if prior is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = prior
+
+    def test_connector_setup_transitions_to_setup_ready_when_composio_env_present(self):
+        # Slice 3 acceptance: with Diak-managed Composio env injected,
+        # /connectors/<id>/setup must move from configuration_required to
+        # awaiting_oauth (setup-ready). Mirrors the bridge env Slice 3 ships
+        # from the Keychain.
+        env_to_set = {
+            "COMPOSIO_API_KEY": "comp_live_setup_ready_GHI",
+            "DIAK_CONNECTOR_SETUP_URL_TEMPLATE": "https://connect.composio.test/oauth?toolkit={toolkit}&entity={entity_id}",
+        }
+        previous: dict[str, str | None] = {k: os.environ.get(k) for k in env_to_set}
+        for key, value in env_to_set.items():
+            os.environ[key] = value
+        try:
+            self.harness.close()
+            self.harness = BridgeHTTPHarness()
+            status, _, body = self.harness.request("POST", "/connectors/conn-notion/setup", {"acknowledged_daemon_handoff": True})
+            self.assertEqual(status, 200)
+            challenge = json.loads(body)
+            self.assertEqual(challenge["state"], "awaiting_oauth")
+            self.assertIn("setup_url", challenge)
+            # Boundary note no longer flags credentials as missing.
+            status, _, body = self.harness.request("GET", "/connectors")
+            self.assertEqual(status, 200)
+            self.assertNotIn("not configured", json.loads(body)["boundary_note"])
+        finally:
+            for key, prior in previous.items():
+                if prior is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = prior
+
     def test_connector_setup_uses_configured_oauth_template(self):
         template = "https://connect.example.test/oauth?toolkit={toolkit}&entity={entity_id}&connector={connector_id}"
         old_template = os.environ.get("DIAK_CONNECTOR_SETUP_URL_TEMPLATE")

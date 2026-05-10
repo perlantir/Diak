@@ -144,6 +144,7 @@ private struct RootView: View {
                 OnboardingShellView(viewModel: onboarding, daemon: daemon)
             }
         }
+        .task { await daemon.refresh() }
         .preferredColorScheme(nil)
     }
 }

@@ -298,6 +298,30 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, [AUTOMATION])
         if path == "/connectors":
             return self._send(200, {"connectors": [CONNECTOR], "boundary_note": "Compatibility daemon: no external writes without explicit separate approval."})
+        if path == "/settings/secrets":
+            # Compatibility daemon: report metadata-only secret slot state based
+            # on the bridge env. Mirrors the production bridge contract so the
+            # Settings UI can render Saved/Missing badges identically. Never
+            # echoes raw secret values.
+            api_key_present = bool(os.environ.get("COMPOSIO_API_KEY"))
+            non_sensitive_fields = [
+                field_id
+                for field_id, env_name in [
+                    ("base_url", "COMPOSIO_API_BASE_URL"),
+                    ("entity_id", "DIAK_CONNECTOR_ENTITY_ID"),
+                    ("redirect_url", "DIAK_CONNECTOR_REDIRECT_URL"),
+                    ("setup_url_template", "DIAK_CONNECTOR_SETUP_URL_TEMPLATE"),
+                ]
+                if (os.environ.get(env_name) or "").strip()
+            ]
+            return self._send(200, [
+                {
+                    "id": "composio",
+                    "presence": "saved" if api_key_present else "missing",
+                    "validity": "untested",
+                    "saved_non_sensitive_field_ids": non_sensitive_fields,
+                }
+            ])
         if path == f"/connectors/{CONNECTOR['id']}":
             return self._send(200, CONNECTOR)
         if path == "/skills":

@@ -70,14 +70,49 @@ public final class HermesBridgeProcessManager: HermesBridgeManaging {
         }
     }
 
+    /// Maps a Keychain secret account name (the `<descriptor>.<field>` scheme
+    /// written by Slice 2) to the env variable the Hermes Python bridge reads
+    /// at boot. The Composio API key is sensitive; the rest are non-sensitive
+    /// config the user can edit in Settings → API Keys & Integrations.
+    public struct BridgeSecretMapping: Equatable, Sendable {
+        public let account: String
+        public let envName: String
+        public let isSensitive: Bool
+
+        public init(account: String, envName: String, isSensitive: Bool) {
+            self.account = account
+            self.envName = envName
+            self.isSensitive = isSensitive
+        }
+    }
+
+    /// Default mappings for Slice 3. Composio API key + non-sensitive config
+    /// the bridge already parses (see `parse_args` in `diak_hermes_bridge.py`).
+    public nonisolated static let defaultSecretMappings: [BridgeSecretMapping] = [
+        .init(account: "composio.api_key", envName: "COMPOSIO_API_KEY", isSensitive: true),
+        .init(account: "composio.base_url", envName: "COMPOSIO_API_BASE_URL", isSensitive: false),
+        .init(account: "composio.entity_id", envName: "DIAK_CONNECTOR_ENTITY_ID", isSensitive: false),
+        .init(account: "composio.redirect_url", envName: "DIAK_CONNECTOR_REDIRECT_URL", isSensitive: false),
+        .init(account: "composio.setup_url_template", envName: "DIAK_CONNECTOR_SETUP_URL_TEMPLATE", isSensitive: false),
+    ]
+
     private var process: Process?
     private let configuration: Configuration
     private let fileManager: FileManager
+    private let secretStore: SecretStore?
+    private let secretMappings: [BridgeSecretMapping]
+    private let baseEnvironment: [String: String]
 
     public init(configuration: Configuration = Configuration(),
-                fileManager: FileManager = .default) {
+                fileManager: FileManager = .default,
+                secretStore: SecretStore? = nil,
+                secretMappings: [BridgeSecretMapping] = HermesBridgeProcessManager.defaultSecretMappings,
+                baseEnvironment: [String: String] = ProcessInfo.processInfo.environment) {
         self.configuration = configuration
         self.fileManager = fileManager
+        self.secretStore = secretStore
+        self.secretMappings = secretMappings
+        self.baseEnvironment = baseEnvironment
     }
 
     public func ensureRunning() async throws -> HermesBridgeLaunchResult {
@@ -94,18 +129,31 @@ public final class HermesBridgeProcessManager: HermesBridgeManaging {
         }
 
         let script = try resolveBridgeScript()
-        let launched = try launch(script: script)
-        process = launched
-        if await waitForEndpoint(process: launched) {
-            return HermesBridgeLaunchResult(started: true,
-                                           endpoint: configuration.endpoint,
-                                           note: "Started Diak Hermes bridge pid \(launched.processIdentifier).")
+        var lastLaunched: Process?
+        for attempt in 1...3 {
+            let launched = try launch(script: script)
+            lastLaunched = launched
+            process = launched
+            if await waitForEndpoint(process: launched) {
+                return HermesBridgeLaunchResult(started: true,
+                                               endpoint: configuration.endpoint,
+                                               note: "Started Diak Hermes bridge pid \(launched.processIdentifier).")
+            }
+            if await endpointResponds() {
+                return HermesBridgeLaunchResult(started: false,
+                                               endpoint: configuration.endpoint,
+                                               note: "Diak Hermes bridge became reachable while launch attempt \(attempt) was settling.")
+            }
+            if launched.isRunning {
+                launched.terminate()
+            }
+            try? await Task.sleep(nanoseconds: UInt64(0.75 * 1_000_000_000))
         }
 
-        if launched.isRunning {
-            launched.terminate()
+        if let lastLaunched, lastLaunched.isRunning {
+            lastLaunched.terminate()
         }
-        throw HermesBridgeLaunchError.launchFailed("Bridge process started but /health did not become ready within \(configuration.startupTimeoutSeconds)s. Check \(configuration.logPath.expandedTildePath).")
+        throw HermesBridgeLaunchError.launchFailed("Bridge process started but /health did not become ready within \(configuration.startupTimeoutSeconds)s after retrying. Check \(configuration.logPath.expandedTildePath).")
     }
 
     public func resolvedLaunchArguments(scriptURL: URL) -> [String] {
@@ -117,14 +165,38 @@ public final class HermesBridgeProcessManager: HermesBridgeManaging {
     }
 
     public func resolvedEnvironment() -> [String: String] {
-        var environment = ProcessInfo.processInfo.environment
+        var environment = baseEnvironment
         environment["DIAK_BRIDGE_HOST"] = configuration.host
         environment["DIAK_BRIDGE_PORT"] = String(configuration.port)
-        if let hermesAgentPath = configuration.hermesAgentPath?.expandedTildePath, !hermesAgentPath.isEmpty {
-            environment["HERMES_AGENT_PATH"] = hermesAgentPath
+        let resolvedHermesAgentPath = configuration.hermesAgentPath?.expandedTildePath
+            ?? NSString(string: "~/.hermes/hermes-agent").expandingTildeInPath
+        if !resolvedHermesAgentPath.isEmpty {
+            environment["HERMES_AGENT_PATH"] = resolvedHermesAgentPath
+        }
+        let hermesVenvBin = URL(fileURLWithPath: resolvedHermesAgentPath)
+            .appendingPathComponent("venv/bin")
+            .path
+        if fileManager.fileExists(atPath: URL(fileURLWithPath: hermesVenvBin).appendingPathComponent("python3").path),
+           let existingPath = environment["PATH"],
+           !existingPath.split(separator: ":").contains(Substring(hermesVenvBin)) {
+            environment["PATH"] = "\(hermesVenvBin):\(existingPath)"
         }
         if let statePath = configuration.statePath?.expandedTildePath, !statePath.isEmpty {
             environment["DIAK_BRIDGE_STATE"] = statePath
+        }
+        // Slice 3: pull saved Keychain secrets into the bridge process env so the
+        // user never has to set COMPOSIO_API_KEY / DIAK_CONNECTOR_* in a terminal.
+        // Raw values are never logged here — they only travel through the env
+        // handoff to the spawned bridge process.
+        if let secretStore {
+            for mapping in secretMappings {
+                guard let stored = (try? secretStore.getSecret(account: mapping.account)) ?? nil else {
+                    continue
+                }
+                let trimmed = stored.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { continue }
+                environment[mapping.envName] = trimmed
+            }
         }
         return environment
     }

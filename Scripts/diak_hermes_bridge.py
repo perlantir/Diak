@@ -556,12 +556,18 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
                 return self._send_json(200, {"status": "ok", "message": "Diak production Hermes bridge ready"})
             if path == "/version":
                 return self._send_json(200, self._version_payload())
+            if path == "/config":
+                return self._send_json(200, self._config_snapshot())
+            if path == "/daemon/logs":
+                return self._send_json(200, self._daemon_summary())
             if path == "/sessions":
                 return self._send_json(200, self.server.state.list_sessions())
             if path.startswith("/sessions/"):
                 return self._handle_get_session_path(path)
             if path == "/connectors":
                 return self._send_json(200, self.server.connectors.list())
+            if path == "/settings/secrets":
+                return self._send_json(200, self._settings_secrets_metadata())
             if path == "/approvals":
                 return self._send_json(200, self._list_approvals())
             match = re.fullmatch(r"/approvals/([^/]+)", path)
@@ -609,6 +615,10 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
         if body is None:
             return
         try:
+            if path == "/config":
+                return self._update_config(body)
+            if path in ("/daemon/restart", "/daemon/reconnect"):
+                return self._send_json(200, {"accepted": True, "note": "Diak production bridge accepted the lifecycle request. Restart/reconnect is managed by the macOS app launcher."})
             if path == "/sessions":
                 return self._create_session(body)
             match = re.fullmatch(r"/sessions/([^/]+)/messages", path)
@@ -759,6 +769,143 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             return {"success": False, "error": str(exc)}
 
+    def _daemon_summary(self) -> dict[str, Any]:
+        version = self._version_payload()
+        return {
+            "version": version.get("version"),
+            "build": version.get("build"),
+            "profile": version.get("profile"),
+            "uptime_seconds": None,
+            "log_path": str(self.server.config.state_path),
+            "recent_lines": [
+                "Diak production Hermes bridge ready",
+                f"state={self.server.config.state_path}",
+            ],
+            "last_checked_at": utc_now(),
+        }
+
+    def _default_config_snapshot(self) -> dict[str, Any]:
+        version = self._version_payload()
+        provider = version.get("provider") or os.getenv("HERMES_PROVIDER") or "configured"
+        model = version.get("model") or os.getenv("HERMES_MODEL") or "Hermes default"
+        return {
+            "profiles": [
+                {
+                    "id": "prof-default",
+                    "display_name": os.getenv("USER") or "Diak User",
+                    "role": "engineer",
+                    "default_project_label": "HermesDesktop",
+                    "is_active": True,
+                }
+            ],
+            "active_profile_id": "prof-default",
+            "providers": [
+                {
+                    "id": "prov-hermes-runtime",
+                    "display_name": "Hermes Runtime",
+                    "kind": "other",
+                    "status": "ready",
+                    "default_model": model,
+                    "available_models": [model] if model else [],
+                    "needs_api_key": False,
+                    "has_api_key": True,
+                    "restart_required": False,
+                }
+            ],
+            "tools": [
+                {
+                    "id": "tool-terminal",
+                    "name": "Terminal",
+                    "description": "Run local commands through Hermes Agent after approval gates.",
+                    "can_read": True,
+                    "can_write": True,
+                    "can_destroy": True,
+                    "policy": "always_ask",
+                    "is_enabled": True,
+                    "restart_required": False,
+                },
+                {
+                    "id": "tool-connectors",
+                    "name": "Connectors",
+                    "description": "Read connector status and queue writes behind Diak approval.",
+                    "can_read": True,
+                    "can_write": True,
+                    "can_destroy": False,
+                    "policy": "always_ask",
+                    "is_enabled": True,
+                    "restart_required": False,
+                },
+                {
+                    "id": "tool-automations",
+                    "name": "Automations",
+                    "description": "Create and run Hermes cron-backed automations.",
+                    "can_read": True,
+                    "can_write": True,
+                    "can_destroy": False,
+                    "policy": "always_ask",
+                    "is_enabled": True,
+                    "restart_required": False,
+                },
+            ],
+            "security": {
+                "trusted_folders": [
+                    {"id": "fold-hermes-desktop", "path": str(Path.cwd()), "allows_writes": True}
+                ],
+                "log_redaction": "strict",
+                "log_retention_days": 14,
+                "telemetry_enabled": False,
+                "offline_mode_enabled": False,
+                "restart_required": False,
+            },
+            "daemon": self._daemon_summary(),
+        }
+
+    def _config_snapshot(self) -> dict[str, Any]:
+        with self.server.state._lock:
+            stored = self.server.state._data.setdefault("config", {})
+            if not stored:
+                stored.update(self._default_config_snapshot())
+                self.server.state._save_locked()
+            snapshot = json.loads(json_dumps(stored))
+        snapshot["daemon"] = self._daemon_summary()
+        return snapshot
+
+    def _update_config(self, body: dict[str, Any]) -> None:
+        allowed = {"active_profile", "providers", "tools", "security"}
+        if not any(key in body for key in allowed):
+            return self._send_error(400, "Empty config update")
+        with self.server.state._lock:
+            current = self.server.state._data.setdefault("config", {})
+            if not current:
+                current.update(self._default_config_snapshot())
+            requires_restart = False
+            if isinstance(body.get("active_profile"), dict):
+                profile = dict(body["active_profile"])
+                profile["is_active"] = True
+                current["active_profile_id"] = profile.get("id") or current.get("active_profile_id")
+                profiles = [p for p in current.get("profiles", []) if p.get("id") != profile.get("id")]
+                for p in profiles:
+                    p["is_active"] = False
+                current["profiles"] = [profile] + profiles
+            if isinstance(body.get("providers"), list):
+                current["providers"] = body["providers"]
+                requires_restart = True
+            if isinstance(body.get("tools"), list):
+                current["tools"] = body["tools"]
+                requires_restart = True
+            if isinstance(body.get("security"), dict):
+                current["security"] = body["security"]
+                requires_restart = True
+            current["daemon"] = self._daemon_summary()
+            self.server.state._save_locked()
+            snapshot = json.loads(json_dumps(current))
+        snapshot["daemon"] = self._daemon_summary()
+        return self._send_json(200, {
+            "snapshot": snapshot,
+            "requires_restart": requires_restart,
+            "note": "Config saved in Diak bridge overlay; Hermes runtime remains daemon-owned.",
+        })
+
     def _list_automations(self) -> list[dict[str, Any]]:
         with self.server.state._lock:
             jobs = list(self.server.state._data.setdefault("automations", {}).values())
@@ -907,6 +1054,38 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
             self.server.state._data.setdefault("skills", {}).setdefault(skill_id, {})["is_enabled"] = enabled; self.server.state._save_locked()
         skill["is_enabled"] = enabled; skill["status"] = "active" if enabled else "disabled"
         return self._send_json(200, {"skill": skill, "note": "Skill enable state saved in Diak bridge overlay."})
+
+    def _settings_secrets_metadata(self) -> list[dict[str, Any]]:
+        """Return metadata only for known secret slots. Never returns raw values.
+
+        Slice 3 boundary: the bridge does not own the Keychain. Diak (the macOS
+        app) writes secrets to the Keychain and injects them into the bridge's
+        env at launch. This endpoint reports presence + non-sensitive fields the
+        bridge currently has, so the Settings UI can render "Saved" / "Missing"
+        badges without ever round-tripping a raw API key.
+        """
+        api_key_present = bool(os.getenv("COMPOSIO_API_KEY") or self.server.config.composio_api_key)
+        non_sensitive_fields: list[str] = []
+        # Mirror the field ids the Mac app's HermesSecretDescriptor exposes for
+        # the Composio slot. Each entry is metadata only.
+        non_sensitive_env_map = [
+            ("base_url", "COMPOSIO_API_BASE_URL"),
+            ("entity_id", "DIAK_CONNECTOR_ENTITY_ID"),
+            ("redirect_url", "DIAK_CONNECTOR_REDIRECT_URL"),
+            ("setup_url_template", "DIAK_CONNECTOR_SETUP_URL_TEMPLATE"),
+        ]
+        for field_id, env_name in non_sensitive_env_map:
+            value = os.getenv(env_name)
+            if value and value.strip():
+                non_sensitive_fields.append(field_id)
+        return [
+            {
+                "id": "composio",
+                "presence": "saved" if api_key_present else "missing",
+                "validity": "untested",
+                "saved_non_sensitive_field_ids": non_sensitive_fields,
+            }
+        ]
 
     def _version_payload(self) -> dict[str, Any]:
         provider = None
