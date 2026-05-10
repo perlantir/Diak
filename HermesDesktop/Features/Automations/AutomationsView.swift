@@ -26,14 +26,14 @@ struct AutomationsView: View {
             }
             Button("Cancel", role: .cancel) { viewModel.cancelDeleteConfirmation() }
         } message: {
-            Text("The daemon will remove this scheduled job. This cannot be undone from the desktop app.")
+            Text("Hermes Agent will remove this scheduled job. This cannot be undone from the desktop app.")
         }
     }
 
     private var automationList: some View {
         VStack(alignment: .leading, spacing: HermesSpacing.md) {
             HStack {
-                SectionHeader("Automations", subtitle: "Mock daemon boundary; no real cron is scheduled by the app.")
+                SectionHeader("Automations", subtitle: "Scheduled jobs the Hermes Agent runtime will execute on your behalf.")
                 Button { Task { await viewModel.refresh() } } label: {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -44,7 +44,7 @@ struct AutomationsView: View {
 
             switch viewModel.state {
             case .idle, .loading:
-                ProgressView("Loading automations…")
+                ProgressView("Loading automations\u{2026}")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .failed(let message):
                 ErrorStateView(title: "Could not load automations", message: message) {
@@ -55,7 +55,7 @@ struct AutomationsView: View {
                 if viewModel.jobs.isEmpty {
                     EmptyStateView(icon: "clock.badge.plus",
                                    title: "No automations yet",
-                                   message: "Create one from natural-language instructions and a cron schedule.")
+                                   message: "Create one with a schedule preset or a custom cron expression.")
                     .padding(HermesSpacing.lg)
                 } else {
                     ScrollView {
@@ -77,6 +77,7 @@ struct AutomationsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: HermesSpacing.lg) {
                 header
+                TestRunResultCard(viewModel: viewModel)
                 CreateAutomationCard(viewModel: viewModel)
                 if let job = viewModel.selectedJob {
                     AutomationDetailCard(job: job, viewModel: viewModel)
@@ -96,15 +97,14 @@ struct AutomationsView: View {
         VStack(alignment: .leading, spacing: HermesSpacing.sm) {
             HStack {
                 VStack(alignment: .leading, spacing: HermesSpacing.xs) {
-                    Text("Natural-language automation setup")
+                    Text("Guided automation setup")
                         .font(HermesTypography.title)
                         .foregroundStyle(HermesColors.text)
-                    Text("The app manages typed automation records through HermesAPIClient. The daemon remains responsible for any real cron execution.")
+                    Text("Pick a schedule preset, describe what Hermes Agent should do, then preview the run before creating it.")
                         .font(HermesTypography.body)
                         .foregroundStyle(HermesColors.muted)
                 }
                 Spacer()
-                StatusBadge("M4 mock/local", tone: .info)
             }
             ActionStateBanner(state: viewModel.actionState) {
                 viewModel.acknowledgeAction()
@@ -150,45 +150,132 @@ private struct CreateAutomationCard: View {
     var body: some View {
         HermesCard {
             VStack(alignment: .leading, spacing: HermesSpacing.md) {
-                SectionHeader("Create automation", subtitle: "Describe the job in natural language, then choose a cron expression.")
-                TextField("Title", text: $viewModel.draftTitle)
-                    .textFieldStyle(.roundedBorder)
-                TextEditor(text: $viewModel.draftPrompt)
-                    .font(HermesTypography.body)
-                    .frame(minHeight: 76)
-                    .padding(6)
-                    .background(HermesColors.field)
-                    .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
-                HStack(spacing: HermesSpacing.md) {
-                    VStack(alignment: .leading) {
-                        Text("Cron")
-                            .font(HermesTypography.caption)
-                            .foregroundStyle(HermesColors.muted)
-                        TextField("0 9 * * 1-5", text: $viewModel.draftCron)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(.body, design: .monospaced))
-                    }
-                    VStack(alignment: .leading) {
-                        Text("Schedule label")
-                            .font(HermesTypography.caption)
-                            .foregroundStyle(HermesColors.muted)
-                        TextField("Weekdays at 9:00 AM", text: $viewModel.draftScheduleDescription)
-                            .textFieldStyle(.roundedBorder)
+                SectionHeader("Create automation", subtitle: "Title and prompt are required. Pick a schedule preset or write a custom cron expression.")
+
+                fieldGroup(
+                    label: "Title",
+                    error: viewModel.fieldErrors[.title]
+                ) {
+                    TextField("Standup prep", text: $viewModel.draftTitle)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                fieldGroup(
+                    label: "Prompt",
+                    error: viewModel.fieldErrors[.prompt]
+                ) {
+                    TextEditor(text: $viewModel.draftPrompt)
+                        .font(HermesTypography.body)
+                        .frame(minHeight: 76)
+                        .padding(6)
+                        .background(HermesColors.field)
+                        .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
+                }
+
+                schedulePresetSection
+
+                if viewModel.draftSchedulePreset == .custom {
+                    HStack(alignment: .top, spacing: HermesSpacing.md) {
+                        fieldGroup(
+                            label: "Cron expression",
+                            error: viewModel.fieldErrors[.customCron]
+                        ) {
+                            TextField("0 9 * * 1-5", text: $viewModel.draftCustomCron)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(.body, design: .monospaced))
+                        }
+                        fieldGroup(
+                            label: "Schedule label",
+                            error: viewModel.fieldErrors[.customScheduleLabel]
+                        ) {
+                            TextField("Weekdays at 9:00 AM", text: $viewModel.draftCustomScheduleLabel)
+                                .textFieldStyle(.roundedBorder)
+                        }
                     }
                 }
+
                 ModelOverridePicker(
                     title: "Model for this automation",
                     selection: $viewModel.draftModelOverride,
                     options: viewModel.modelOptions,
-                    fallbackText: "Use Hermes default model"
+                    fallbackText: "Use the default Hermes model"
                 )
-                Toggle("Show notification delivery/status in UI", isOn: $viewModel.draftNotificationsEnabled)
+
+                Toggle("Show in-app delivery status when this runs", isOn: $viewModel.draftNotificationsEnabled)
                     .toggleStyle(.switch)
+
+                automationPreview
+
+                if !viewModel.canCreate {
+                    Text("Resolve the highlighted fields before creating this automation.")
+                        .font(HermesTypography.caption)
+                        .foregroundStyle(HermesColors.danger)
+                }
+
                 HermesButton("Create automation", kind: .primary) {
                     Task { await viewModel.createFromDraft() }
                 }
                 .disabled(!viewModel.canCreate)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func fieldGroup<Content: View>(
+        label: String,
+        error: String?,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: HermesSpacing.xs) {
+            Text(label)
+                .font(HermesTypography.caption)
+                .foregroundStyle(HermesColors.muted)
+            content()
+            if let error {
+                Text(error)
+                    .font(HermesTypography.caption)
+                    .foregroundStyle(HermesColors.danger)
+            }
+        }
+    }
+
+    private var schedulePresetSection: some View {
+        VStack(alignment: .leading, spacing: HermesSpacing.xs) {
+            Text("Schedule")
+                .font(HermesTypography.caption)
+                .foregroundStyle(HermesColors.muted)
+            Picker("Schedule preset", selection: Binding(
+                get: { viewModel.draftSchedulePreset },
+                set: { viewModel.selectPreset($0) }
+            )) {
+                ForEach(AutomationsViewModel.SchedulePreset.allCases) { preset in
+                    Text(preset.displayName).tag(preset)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            Text(viewModel.draftSchedulePreset.summary)
+                .font(HermesTypography.caption)
+                .foregroundStyle(HermesColors.muted)
+        }
+    }
+
+    private var automationPreview: some View {
+        VStack(alignment: .leading, spacing: HermesSpacing.xs) {
+            Text("Before you create")
+                .font(HermesTypography.caption)
+                .foregroundStyle(HermesColors.muted)
+            Text(viewModel.draftPreviewSummary)
+                .font(HermesTypography.body)
+                .foregroundStyle(HermesColors.text)
+                .padding(HermesSpacing.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(HermesColors.field)
+                .overlay(
+                    RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous)
+                        .strokeBorder(HermesColors.border, lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
         }
     }
 }
@@ -239,10 +326,10 @@ private struct AutomationDetailCard: View {
                         title: "Selected model",
                         selection: $selectedModelOverride,
                         options: viewModel.modelOptions,
-                        fallbackText: "Use Hermes default model"
+                        fallbackText: "Use the default Hermes model"
                     )
                     HStack(spacing: HermesSpacing.sm) {
-                        Text(job.modelOverride?.displayName ?? "Hermes default model")
+                        Text(job.modelOverride?.displayName ?? "Default Hermes model")
                             .font(HermesTypography.caption)
                             .foregroundStyle(HermesColors.muted)
                         Spacer()
@@ -255,7 +342,7 @@ private struct AutomationDetailCard: View {
                 Divider().background(HermesColors.border)
 
                 VStack(alignment: .leading, spacing: HermesSpacing.sm) {
-                    SectionHeader("Schedule editor", subtitle: "Edits are saved to the daemon API boundary, not to macOS cron directly.")
+                    SectionHeader("Schedule editor", subtitle: "Edits are saved through the Hermes Agent API boundary.")
                     HStack(spacing: HermesSpacing.md) {
                         TextField("Cron", text: $cron)
                             .textFieldStyle(.roundedBorder)
@@ -292,6 +379,79 @@ private struct AutomationDetailCard: View {
     }
 }
 
+private struct TestRunResultCard: View {
+    @ObservedObject var viewModel: AutomationsViewModel
+
+    var body: some View {
+        switch viewModel.testRunState {
+        case .idle:
+            EmptyView()
+        case .running(_, let title):
+            HermesCard {
+                VStack(alignment: .leading, spacing: HermesSpacing.sm) {
+                    HStack(spacing: HermesSpacing.sm) {
+                        ProgressView().controlSize(.small)
+                        Text("Test running for \(title)\u{2026}")
+                            .font(HermesTypography.bodyStrong)
+                            .foregroundStyle(HermesColors.text)
+                    }
+                    Text("Hermes Agent is executing this prompt against the configured model. Real connector side effects are skipped during a test run.")
+                        .font(HermesTypography.caption)
+                        .foregroundStyle(HermesColors.muted)
+                }
+            }
+        case .succeeded(_, let title, let run):
+            HermesCard {
+                VStack(alignment: .leading, spacing: HermesSpacing.sm) {
+                    HStack {
+                        StatusBadge(run.status.displayName, tone: run.status.tone)
+                        Text("Test run for \(title)")
+                            .font(HermesTypography.bodyStrong)
+                            .foregroundStyle(HermesColors.text)
+                        Spacer()
+                        Button("Dismiss") { viewModel.acknowledgeTestRun() }
+                            .buttonStyle(.plain)
+                            .font(HermesTypography.caption)
+                    }
+                    Text(run.summary)
+                        .font(HermesTypography.body)
+                        .foregroundStyle(HermesColors.text)
+                    if !run.logPreview.isEmpty {
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(run.logPreview, id: \.self) { line in
+                                Text("\u{2022} \(line)")
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundStyle(HermesColors.muted)
+                            }
+                        }
+                    }
+                    Text("Started \(run.startedAt.formatted(date: .abbreviated, time: .shortened))")
+                        .font(HermesTypography.caption)
+                        .foregroundStyle(HermesColors.muted)
+                }
+            }
+        case .failed(_, let title, let message):
+            HermesCard {
+                VStack(alignment: .leading, spacing: HermesSpacing.sm) {
+                    HStack {
+                        StatusBadge("Failed", tone: .danger)
+                        Text("Test run for \(title)")
+                            .font(HermesTypography.bodyStrong)
+                            .foregroundStyle(HermesColors.text)
+                        Spacer()
+                        Button("Dismiss") { viewModel.acknowledgeTestRun() }
+                            .buttonStyle(.plain)
+                            .font(HermesTypography.caption)
+                    }
+                    Text(message)
+                        .font(HermesTypography.body)
+                        .foregroundStyle(HermesColors.danger)
+                }
+            }
+        }
+    }
+}
+
 private struct ModelOverridePicker: View {
     let title: String
     @Binding var selection: HermesModelOverride?
@@ -322,7 +482,7 @@ private struct RunHistoryCard: View {
     var body: some View {
         HermesCard {
             VStack(alignment: .leading, spacing: HermesSpacing.md) {
-                SectionHeader("Run history", subtitle: "Latest test and mock daemon results.")
+                SectionHeader("Run history", subtitle: "Latest test and scheduled runs from the Hermes Agent runtime.")
                 if job.runHistory.isEmpty {
                     Text("No runs recorded yet. Use Test run to validate the automation prompt and schedule.")
                         .font(HermesTypography.body)
@@ -343,7 +503,7 @@ private struct RunHistoryCard: View {
                             if !run.logPreview.isEmpty {
                                 VStack(alignment: .leading, spacing: 2) {
                                     ForEach(run.logPreview, id: \.self) { line in
-                                        Text("• \(line)")
+                                        Text("\u{2022} \(line)")
                                             .font(.system(size: 11, design: .monospaced))
                                             .foregroundStyle(HermesColors.muted)
                                     }
