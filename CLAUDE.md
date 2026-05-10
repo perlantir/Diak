@@ -11,8 +11,8 @@ Hermes Desktop is a premium SwiftUI macOS app that acts as a native UI/control c
 ## Build discipline
 
 - Build in small verified milestones and do not jump ahead of the current milestone.
-- Completed locally: M0 app shell/design system/daemon status, M1 sessions/chat foundation, M2 approvals/action evidence, M3 settings/profiles/models/tools, M4 automations UI/API boundary, and M5 connectors UI/API boundary.
-- Current milestone: M6 skills/memory. Build skills library/detail/create-review and memory dashboard/edit-delete UI through typed API boundary/mock behavior; do not implement real skill execution, memory persistence internals, menu bar, global hotkey, packaging/updater, or native integrations yet.
+- Completed locally: M0 app shell/design system/daemon status, M1 sessions/chat foundation, M2 approvals/action evidence, M3 settings/profiles/models/tools, M4 automations UI/API boundary, M5 connectors UI/API boundary, and M6 skills/memory UI/API boundary.
+- Current milestone: M7 native Mac integrations. Build MenuBarExtra, global quick prompt window/state, notification deep-link behavior, and compact floating-window state using typed local services/mock behavior; do not implement packaging/updater, real external notifications without user intent, invasive event-tap/global-hotkey permission flows, or Hermes Agent internals.
 - Use reusable SwiftUI components and semantic design tokens.
 - Run `xcodebuild -list`, build, and tests before reporting done.
 - Do not commit generated build artifacts.
