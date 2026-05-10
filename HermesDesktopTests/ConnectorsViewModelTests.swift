@@ -19,7 +19,7 @@ final class ConnectorsViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testSetupRequiresAcknowledgementAndPersistsChallenge() async throws {
+    func testSetupStartsOAuthAndPersistsChallenge() async throws {
         let client = MockHermesAPIClient()
         client.resetConnectorState()
         let viewModel = ConnectorsViewModel(client: client)
@@ -27,24 +27,13 @@ final class ConnectorsViewModelTests: XCTestCase {
         let notion = try XCTUnwrap(viewModel.connectors.first { $0.id == "conn-notion" })
         viewModel.presentSetup(for: notion)
 
-        // Without acknowledgement, the boundary must reject.
-        await viewModel.confirmSetup()
-        XCTAssertEqual(client.beginConnectorSetupCallCount, 0)
-        if case .failed(let message) = viewModel.actionState {
-            XCTAssertTrue(message.contains("Acknowledge"))
-        } else {
-            XCTFail("Expected failed action state, got \(viewModel.actionState)")
-        }
-
-        // After acknowledgement, the mock returns a daemon-handoff challenge
-        // and updates the connector to .pending so the row reflects setup-in-flight.
-        viewModel.setupAcknowledged = true
         await viewModel.confirmSetup()
 
         XCTAssertEqual(client.beginConnectorSetupCallCount, 1)
         XCTAssertNotNil(viewModel.setupChallenge)
-        XCTAssertEqual(viewModel.setupChallenge?.state, .pendingDaemonHandoff)
+        XCTAssertEqual(viewModel.setupChallenge?.state, .awaitingOAuth)
         XCTAssertEqual(viewModel.setupChallenge?.connectorID, notion.id)
+        XCTAssertNotNil(viewModel.setupChallenge?.setupURL)
 
         let updated = try XCTUnwrap(viewModel.connectors.first { $0.id == notion.id })
         XCTAssertEqual(updated.status, .pending)
@@ -53,7 +42,8 @@ final class ConnectorsViewModelTests: XCTestCase {
         viewModel.dismissSetup()
         XCTAssertNil(viewModel.setupChallenge)
         XCTAssertNil(viewModel.setupConnector)
-        XCTAssertFalse(viewModel.setupAcknowledged)
+        XCTAssertTrue(viewModel.setupAcknowledged)
+    }
     }
 
     @MainActor

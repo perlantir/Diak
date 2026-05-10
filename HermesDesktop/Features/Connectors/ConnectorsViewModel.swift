@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 
@@ -54,13 +55,14 @@ public final class ConnectorsViewModel: ObservableObject {
     @Published public var pendingSafetyConfirmation: SafetyConfirmation?
 
     /// Latest setup challenge returned from `beginConnectorSetup`. Drives
-    /// the setup sheet — it intentionally never carries credentials.
+    /// the setup sheet and stores the OAuth URL opened by Diak. It
+    /// intentionally never carries credentials.
     @Published public var setupChallenge: HermesConnectorSetupChallenge?
     /// Connector being walked through setup. Held separately from
     /// `selectedConnector` so the sheet survives selection changes.
     @Published public var setupConnector: HermesConnector?
-    /// User must explicitly acknowledge that the daemon (not the Mac
-    /// app) handles the real provider exchange before we send setup.
+    /// User must explicitly acknowledge that the daemon (not the Mac app)
+    /// handles the real provider exchange before we send setup or open OAuth.
     @Published public var setupAcknowledged: Bool = false
 
     private let client: HermesAPIClient
@@ -118,26 +120,39 @@ public final class ConnectorsViewModel: ObservableObject {
         setupAcknowledged = false
     }
 
+    public func connect(_ connector: HermesConnector) async {
+        setupConnector = connector
+        setupChallenge = nil
+        await confirmSetup()
+    }
+
     public func confirmSetup() async {
         guard let connector = setupConnector else { return }
         guard setupAcknowledged else {
-            actionState = .failed("Acknowledge the daemon-owned handoff before continuing.")
+            actionState = .failed("Acknowledge that Hermes Agent handles connector authorization before continuing.")
             return
         }
-        actionState = .working("Requesting daemon handoff…")
+        actionState = .working("Starting connector setup…")
         do {
             let challenge = try await client.beginConnectorSetup(
                 HermesConnectorSetupRequest(connectorID: connector.id, acknowledgedDaemonHandoff: true)
             )
             setupChallenge = challenge
-            // Refresh the catalog so the row reflects the pending state.
+            if let setupURL = challenge.setupURL {
+                NSWorkspace.shared.open(setupURL)
+                actionState = .succeeded("Opened \(connector.displayName) authorization in your browser.")
+            } else if challenge.state == .configurationRequired {
+                actionState = .failed(challenge.message)
+            } else {
+                actionState = .succeeded(challenge.message)
+            }
+            // Refresh the catalog so the row reflects the pending/connected state.
             do {
                 let updated = try await client.connector(id: connector.id)
                 upsert(updated)
             } catch {
                 // Refresh failure is non-fatal; the next pull will reconcile.
             }
-            actionState = .succeeded(challenge.message)
         } catch let error as HermesAPIError {
             actionState = .failed(error.userFacingMessage)
         } catch {

@@ -40,7 +40,7 @@ struct ConnectorsView: View {
         VStack(alignment: .leading, spacing: HermesSpacing.md) {
             HStack {
                 SectionHeader("Connectors",
-                              subtitle: "Daemon-owned setup; no real OAuth runs from the desktop app.")
+                              subtitle: "Search services, pick one, then Connect to open provider OAuth in your browser.")
                 Spacer()
                 Button { Task { await viewModel.refresh() } } label: {
                     Image(systemName: "arrow.clockwise")
@@ -134,18 +134,18 @@ struct ConnectorsView: View {
                         .font(HermesTypography.title)
                         .foregroundStyle(HermesColors.text)
                     Text(viewModel.boundaryNote.isEmpty
-                         ? "Connector records are managed through the typed Hermes daemon API. Real OAuth and outbound writes never originate in the desktop app."
+                         ? "Connector records are managed through the typed Hermes bridge. OAuth opens in your browser; tokens stay out of the desktop app."
                          : viewModel.boundaryNote)
                         .font(HermesTypography.body)
                         .foregroundStyle(HermesColors.muted)
                 }
                 Spacer()
                 if let connector = viewModel.selectedConnector, !connector.status.isUsable {
-                    HermesButton("Add / Connect", kind: .primary) {
-                        viewModel.presentSetup(for: connector)
+                    HermesButton("Connect", kind: .primary) {
+                        Task { await viewModel.connect(connector) }
                     }
                 }
-                StatusBadge("M5 mock/local", tone: .info)
+                StatusBadge("Live bridge", tone: .info)
             }
             ConnectorActionStateBanner(state: viewModel.actionState) {
                 viewModel.acknowledgeAction()
@@ -264,15 +264,15 @@ private struct ConnectorDetailCard: View {
                 HStack(spacing: HermesSpacing.sm) {
                     if connector.status.isUsable {
                         HermesButton("Reauthorise") {
-                            viewModel.presentSetup(for: connector)
+                            Task { await viewModel.connect(connector) }
                         }
                         HermesButton("Disconnect", kind: .destructive) {
                             viewModel.requestDisconnect(connector)
                         }
                     } else {
-                        HermesButton(connector.status == .pending ? "Continue setup" : "Set up connector",
+                        HermesButton(connector.status == .pending ? "Continue setup" : "Connect",
                                      kind: .primary) {
-                            viewModel.presentSetup(for: connector)
+                            Task { await viewModel.connect(connector) }
                         }
                     }
                     Spacer()
@@ -524,7 +524,7 @@ private struct ConnectorSetupSheet: View {
                     .foregroundStyle(HermesColors.muted)
             }
             Spacer()
-            StatusBadge("Mock daemon boundary", tone: .info)
+            StatusBadge("OAuth handoff", tone: .info)
         }
     }
 
@@ -545,9 +545,9 @@ private struct ConnectorSetupSheet: View {
                 Text("What happens next")
                     .font(HermesTypography.section)
                     .foregroundStyle(HermesColors.text)
-                Bullet("The Hermes daemon — not this Mac app — performs the \(connector.setupKind.displayName) handoff with the provider.")
-                Bullet("Tokens, secrets, and refresh state stay inside the daemon. The desktop app only ever sees presence flags.")
-                Bullet("An approval entry is queued so the action centre records the setup attempt for audit.")
+                Bullet("Diak asks the Hermes bridge for a provider-owned authorization URL.")
+                Bullet("Your browser opens the provider OAuth page so you can approve scopes.")
+                Bullet("Tokens, secrets, and refresh state stay outside the desktop app; Diak only sees connection status.")
                 Bullet("Real outbound writes still require explicit approval according to this connector's policy.")
             }
             .padding(HermesSpacing.md)
@@ -556,7 +556,7 @@ private struct ConnectorSetupSheet: View {
             .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
 
             Toggle(isOn: $viewModel.setupAcknowledged) {
-                Text("I understand the desktop app does not contact the provider directly.")
+                Text("Open OAuth in my browser when the provider is configured.")
                     .font(HermesTypography.body)
                     .foregroundStyle(HermesColors.text)
             }
@@ -579,6 +579,14 @@ private struct ConnectorSetupSheet: View {
                 .padding(HermesSpacing.md)
                 .background(HermesColors.field)
                 .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
+            if let setupURL = challenge.setupURL {
+                HStack(spacing: HermesSpacing.sm) {
+                    Image(systemName: "safari")
+                        .foregroundStyle(HermesColors.info)
+                    Link("Open authorization page", destination: setupURL)
+                        .font(HermesTypography.bodyStrong)
+                }
+            }
             if let approvalID = challenge.approvalID {
                 HStack(spacing: HermesSpacing.sm) {
                     Image(systemName: "tray.full")
@@ -596,7 +604,7 @@ private struct ConnectorSetupSheet: View {
             Spacer()
             HermesButton("Close") { viewModel.dismissSetup() }
             if viewModel.setupChallenge == nil {
-                HermesButton("Hand off to daemon", kind: .primary) {
+                HermesButton("Connect", kind: .primary) {
                     Task { await viewModel.confirmSetup() }
                 }
                 .disabled(!viewModel.setupAcknowledged)

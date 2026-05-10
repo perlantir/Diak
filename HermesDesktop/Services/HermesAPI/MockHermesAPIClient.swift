@@ -570,11 +570,13 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
 
         switch connector.setupKind {
         case .oauth, .deviceCode:
+            let setupURL = URL(string: "https://connect.diak.local/oauth/authorize?connector_id=\(connector.id)&approval_id=\(approvalID)")
             challenge = HermesConnectorSetupChallenge(
                 connectorID: connector.id,
                 setupKind: connector.setupKind,
-                state: .pendingDaemonHandoff,
-                message: "The daemon will perform the \(connector.setupKind.displayName) handoff. The Mac app does not open a browser or store tokens.",
+                state: .awaitingOAuth,
+                message: "Open the provider authorization page to approve requested scopes. Tokens stay outside the desktop app.",
+                setupURL: setupURL,
                 approvalID: approvalID
             )
             connector.status = .pending

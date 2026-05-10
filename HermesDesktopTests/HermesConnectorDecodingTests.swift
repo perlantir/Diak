@@ -87,6 +87,29 @@ final class HermesConnectorDecodingTests: XCTestCase {
         XCTAssertEqual(challenge.state, .unknown)
         XCTAssertEqual(challenge.setupKind, .oauth)
         XCTAssertEqual(challenge.approvalID, "appr-1")
+        XCTAssertNil(challenge.setupURL)
+    }
+
+    func testSetupChallengeDecodesOAuthURLAndNewStates() throws {
+        let data = Data("""
+        {
+          "connector_id": "conn-oauth",
+          "setup_kind": "oauth",
+          "state": "awaiting_oauth",
+          "message": "Open provider authorization.",
+          "setup_url": "https://provider.example/oauth/start?state=abc",
+          "approval_id": "appr-oauth"
+        }
+        """.utf8)
+
+        let challenge = try JSONDecoder().decode(HermesConnectorSetupChallenge.self, from: data)
+        XCTAssertEqual(challenge.state, .awaitingOAuth)
+        XCTAssertEqual(challenge.state.displayName, "OAuth approval required")
+        XCTAssertEqual(challenge.state.tone, .info)
+        XCTAssertEqual(challenge.setupURL?.absoluteString, "https://provider.example/oauth/start?state=abc")
+        XCTAssertEqual(challenge.approvalID, "appr-oauth")
+        XCTAssertEqual(HermesConnectorSetupChallenge.State.configurationRequired.tone, .warning)
+        XCTAssertEqual(HermesConnectorSetupChallenge.State.connected.tone, .success)
     }
 
     func testRoundTripPreservesPolicyAndScopes() throws {

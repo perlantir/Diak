@@ -265,11 +265,11 @@ public enum HermesConnectorWritePolicy: String, Codable, Equatable, Sendable, Ha
     }
 }
 
-// MARK: - Setup steps (boundary-only)
+// MARK: - Setup steps
 
 /// Description of how this connector is wired up. Surfaces what the
 /// daemon needs (OAuth, API key presence flag, manual config, etc.) so
-/// the UI can describe the path without ever performing it.
+/// the UI can start a real provider handoff without ever storing tokens.
 public enum HermesConnectorSetupKind: String, Codable, Equatable, Sendable, Hashable {
     case oauth
     case apiKey = "api_key"
@@ -293,13 +293,16 @@ public enum HermesConnectorSetupKind: String, Codable, Equatable, Sendable, Hash
     }
 }
 
-/// Setup challenge returned from `beginConnectorSetup`. Intentionally
-/// limited to mock/pending boundary state — the desktop app never opens
-/// a browser to a real provider in M5.
+/// Setup challenge returned from `beginConnectorSetup`. The daemon remains
+/// the source of truth for provider credentials; the desktop app may open
+/// a provider-supplied OAuth URL but never receives tokens or refresh state.
 public struct HermesConnectorSetupChallenge: Codable, Equatable, Sendable, Hashable {
     public enum State: String, Codable, Equatable, Sendable, Hashable {
         case pendingDaemonHandoff = "pending_daemon_handoff"
+        case awaitingOAuth = "awaiting_oauth"
         case awaitingApproval = "awaiting_approval"
+        case configurationRequired = "configuration_required"
+        case connected
         case unsupportedInDesktop = "unsupported_in_desktop"
         case unknown
 
@@ -311,7 +314,10 @@ public struct HermesConnectorSetupChallenge: Codable, Equatable, Sendable, Hasha
         public var displayName: String {
             switch self {
             case .pendingDaemonHandoff: return "Daemon handoff pending"
+            case .awaitingOAuth:        return "OAuth approval required"
             case .awaitingApproval:     return "Awaiting your approval"
+            case .configurationRequired:return "Configuration required"
+            case .connected:            return "Connected"
             case .unsupportedInDesktop: return "Mac app cannot complete this"
             case .unknown:              return "Unknown state"
             }
@@ -320,7 +326,10 @@ public struct HermesConnectorSetupChallenge: Codable, Equatable, Sendable, Hasha
         public var tone: HermesStatusTone {
             switch self {
             case .pendingDaemonHandoff: return .info
+            case .awaitingOAuth:        return .info
             case .awaitingApproval:     return .warning
+            case .configurationRequired:return .warning
+            case .connected:            return .success
             case .unsupportedInDesktop: return .danger
             case .unknown:              return .neutral
             }
@@ -330,10 +339,11 @@ public struct HermesConnectorSetupChallenge: Codable, Equatable, Sendable, Hasha
     public let connectorID: String
     public let setupKind: HermesConnectorSetupKind
     public let state: State
-    /// Human-readable explanation of what the daemon will (and will not)
-    /// do next. The UI shows this so users understand we are not opening
-    /// a real provider browser flow.
+    /// Human-readable explanation of what the daemon will do next.
     public let message: String
+    /// Provider/daemon-owned OAuth URL. Diak may open this URL in the
+    /// user's browser; tokens remain inside the provider/daemon exchange.
+    public let setupURL: URL?
     /// Optional approval id created so users can audit the setup attempt
     /// in the action centre, mirroring how connector writes already work.
     public let approvalID: String?
@@ -342,11 +352,13 @@ public struct HermesConnectorSetupChallenge: Codable, Equatable, Sendable, Hasha
                 setupKind: HermesConnectorSetupKind,
                 state: State,
                 message: String,
+                setupURL: URL? = nil,
                 approvalID: String? = nil) {
         self.connectorID = connectorID
         self.setupKind = setupKind
         self.state = state
         self.message = message
+        self.setupURL = setupURL
         self.approvalID = approvalID
     }
 
@@ -355,6 +367,7 @@ public struct HermesConnectorSetupChallenge: Codable, Equatable, Sendable, Hasha
         case setupKind = "setup_kind"
         case state
         case message
+        case setupURL = "setup_url"
         case approvalID = "approval_id"
     }
 }
