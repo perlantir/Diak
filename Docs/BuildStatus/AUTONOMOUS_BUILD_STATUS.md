@@ -1,73 +1,80 @@
 # Hermes Desktop / Diak Autonomous Build Status
 
-Updated: 2026-05-10 09:39 CDT
+Updated: 2026-05-10 10:26 CDT
 
 ## Current milestone
 
-M10 — Chat + Canvas / model-routing Phase 2 canvas artifacts boundary is implemented and independently verified locally.
+M11 — Production Hermes bridge proof is implemented locally and verified. Diak now has a separate production bridge path for real Hermes Agent/runtime execution, distinct from the safe fixture-only compatibility daemon.
 
-M0–M9 remain implemented. M10 Phase 1 remains verified locally. This run found the prior Claude Code M10 Phase 2 builder had exited, inspected its repo changes, regenerated the Xcode project, ran build/tests/release gate, and prepared the verified increment for commit. No new builder was started because this slice is green and should be checkpointed before advancing.
+M0–M10 remain implemented. The prior M10 Phase 4 Claude Code builder was stopped before completion; no builder output was adopted blindly. Hermes implemented the production bridge directly with tests and provider E2E proof.
 
 ## Completed / confirmed this run
 
-- Confirmed no active Claude Code builder was running for `/Users/perlantir/Projects/HermesDesktop`.
-- Confirmed project shape: `project.yml` and `HermesDesktop.xcodeproj` are present; scheme is `HermesDesktop`.
-- Reviewed current changes from the completed M10 Phase 2 builder:
-  - Added typed `HermesCanvasArtifact` model/decoding boundary.
-  - Added API client canvas artifact endpoint support.
-  - Added mock session-scoped canvas artifact fixtures and offline/blank-session behavior.
-  - Wired Chat + Canvas view model/UI to load and surface session-scoped artifacts in canvas tabs.
-  - Added M10 artifact decoding/API/mock/workspace tests.
-- Confirmed branch status before commit: `main...origin/main [ahead 10]`; no push was performed.
+- Added production bridge: `Scripts/diak_hermes_bridge.py`.
+  - Binds locally by default.
+  - Exposes Diak's `/health`, `/version`, `/sessions`, `/sessions/{id}`, `/sessions/{id}/messages`, `/sessions/{id}/stream`, and `POST /sessions/{id}/messages` contract.
+  - Uses Hermes Agent gateway runtime resolution instead of hardcoded provider credentials.
+  - Reports `/version.mode = production_bridge` and `/version.runtime = hermes-agent`.
+  - Captures real Hermes streaming deltas and replays them as Diak SSE events.
+  - Persists session/message/event state atomically to JSON unless disabled for tests.
+  - Supports optional bearer token via `DIAK_BRIDGE_TOKEN`.
+- Added repeatable provider E2E probe: `Scripts/diak_provider_e2e_probe.sh`.
+  - Refuses fixture daemon responses.
+  - Verifies nonce in assistant messages and SSE stream.
+  - Captures bridge/provider/session evidence under `qa/diak-provider-e2e-*`.
+- Added TDD coverage: `Tests/diak_hermes_bridge_tests.py`.
+- Extended `HermesVersion` decoding with optional production bridge metadata: `mode`, `runtime`, `provider`, `model`.
+- Added QA/runbook docs:
+  - `Docs/Plans/M11_PRODUCTION_HERMES_BRIDGE.md`
+  - `Docs/QA/M11_PRODUCTION_HERMES_BRIDGE_QA.md`
 
 ## Verification evidence
 
 Commands run from `/Users/perlantir/Projects/HermesDesktop`:
 
 ```bash
-git status --short
-ps -axo pid,ppid,stat,etime,command | grep -i '[c]laude' | grep 'HermesDesktop' || true
-xcodebuild -list
+python3 -m unittest Tests.diak_hermes_bridge_tests
+xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -only-testing:HermesDesktopTests/HermesAPIDecodingTests test
+Scripts/diak_provider_e2e_probe.sh
 xcodegen generate
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -configuration Debug build
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' test
 git diff --check
-Scripts/m9_release_gate.sh
 ```
 
 Results:
 
-- Existing Claude builder check: **PASS / none active**.
-- `xcodebuild -list`: **PASS** — scheme `HermesDesktop` discovered.
+- Python bridge unit tests: **PASS — 4 tests**.
+- Targeted Swift decoding tests: **PASS — 5 tests**.
+- Provider E2E probe: **PASS**.
+  - Evidence report: `qa/diak-provider-e2e-20260510-102811/DIAK_PROVIDER_E2E_PROBE_20260510-102811.md`.
+  - Bridge mode: `production_bridge`.
+  - Runtime: `hermes-agent`.
+  - Provider: `openai-codex`.
+  - Model: `gpt-5.5`.
+  - Diak session: `sess-diak-4d326638140d4613`.
+  - Hermes session: `20260510_102812_ac9682`.
 - `xcodegen generate`: **PASS**.
-- Debug macOS build: **PASS**. Log: `build/m10_phase2_debug_build_20260510-093833.log`.
-- Full macOS XCTest suite: **PASS — 152 tests, 0 failures**. Log: `build/m10_phase2_full_test_20260510-093835.log`.
-- Latest direct passing test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_09-38-35--0500.xcresult`.
+- Debug macOS build: **PASS**.
+- Full macOS XCTest suite: **PASS — 162 tests, 0 failures**.
+- Latest full test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_10-25-52--0500.xcresult`.
 - `git diff --check`: **PASS**.
-- `Scripts/m9_release_gate.sh`: **PASS**.
-- Latest release-gate report: `build/m9/M9_RELEASE_GATE_20260510-093844.md`.
-
-## Active builder
-
-- Builder: **none active**.
-- Previous builder: Claude Code print mode for `Docs/Prompts/CLAUDE_CODE_M10_PHASE2_CANVAS_ARTIFACTS_KICKOFF.md` completed and left verified local changes.
-- No second builder was started in this run.
 
 ## Working tree / branch status
 
 - Branch: `main`.
-- Remote status before commit: `main...origin/main [ahead 10]`.
-- Changed implementation/test files are the M10 Phase 2 canvas artifacts slice plus this status file and the kickoff prompt.
-- This run does not push to GitHub and does not modify cron jobs.
+- Current local commit: `feat: add Diak production Hermes bridge` at `HEAD`.
+- Remote status after commit: `main...origin/main [ahead 14]`.
+- Remaining untracked file is the pre-existing M10 Phase 4 Claude prompt: `Docs/Prompts/CLAUDE_CODE_M10_PHASE4_VISUAL_DAEMON_QA_KICKOFF.md`.
+- This run did not push to GitHub and did not modify cron jobs.
 
 ## Readiness verdict
 
-- M9 internal dogfood/private beta: **PARTIAL PASS / DOGFOOD-READY WITH CAVEATS** — app builds/tests/packages, clean first-run visual QA previously passed, and local daemon-contract evidence exists through the QA compatibility daemon.
-- M10 Phase 1: **PASS locally** — Chat + Canvas and automation model routing are wired at the SwiftUI/API boundary with tests.
-- M10 stream boundary slice: **PASS locally** — URLSession SSE parsing for daemon chat/canvas/tool/session events is implemented with contract tests.
-- M10 Phase 2 canvas artifacts/documents boundary: **PASS locally** — typed artifacts endpoint/model/mock/UI workspace and regression tests are green.
-- External/public distribution: **BLOCKED** — still requires Developer ID signing, notarization, stapling, Gatekeeper validation, production Hermes Agent daemon execution evidence, and explicit approval before any real connector writes.
+- M9 internal dogfood/private beta: **PASS WITH CAVEATS** — app builds/tests and local fixture daemon proof remain available.
+- M10 Chat + Canvas/local UI increments: **PASS locally**.
+- M11 production Hermes bridge proof: **PASS locally** — Diak can now be tested against a real Hermes Agent/provider-backed bridge instead of only `diak-dev-daemon` fixtures.
+- External/public distribution: **STILL BLOCKED** — requires Developer ID signing, notarization, stapling, Gatekeeper validation, packaged bridge/daemon launch strategy, and explicit approval before any real connector writes.
 
 ## Next action
 
-Commit the verified M10 Phase 2 canvas artifacts increment locally. On the next autonomous run, if the tree is clean and no builder is active, advance to the next bounded M10 slice only after creating a focused prompt and preserving the app/daemon boundary.
+Decide packaging strategy for the production bridge before external distribution: whether Diak launches/manages `Scripts/diak_hermes_bridge.py`, connects to a separately managed Hermes service, or embeds a signed helper. Then run Developer ID/notary/Gatekeeper release validation.

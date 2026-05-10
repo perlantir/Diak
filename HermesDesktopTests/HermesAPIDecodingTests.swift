@@ -28,12 +28,24 @@ final class HermesAPIDecodingTests: XCTestCase {
 
     func testVersionDecodes() throws {
         let json = #"""
-        { "version": "0.42.0", "build": "2026.05.09", "profile": "local-dev" }
+        {
+            "version": "diak-hermes-bridge-1.0.0",
+            "build": "2026.05.09",
+            "profile": "production",
+            "mode": "production_bridge",
+            "runtime": "hermes-agent",
+            "provider": "openai-codex",
+            "model": "gpt-5.5"
+        }
         """#.data(using: .utf8)!
         let v = try JSONDecoder().decode(HermesVersion.self, from: json)
-        XCTAssertEqual(v.version, "0.42.0")
+        XCTAssertEqual(v.version, "diak-hermes-bridge-1.0.0")
         XCTAssertEqual(v.build, "2026.05.09")
-        XCTAssertEqual(v.profile, "local-dev")
+        XCTAssertEqual(v.profile, "production")
+        XCTAssertEqual(v.mode, "production_bridge")
+        XCTAssertEqual(v.runtime, "hermes-agent")
+        XCTAssertEqual(v.provider, "openai-codex")
+        XCTAssertEqual(v.model, "gpt-5.5")
     }
 
     func testVersionTolerantOfMissingOptionalFields() throws {
@@ -42,5 +54,9 @@ final class HermesAPIDecodingTests: XCTestCase {
         XCTAssertEqual(v.version, "0.42.0")
         XCTAssertNil(v.build)
         XCTAssertNil(v.profile)
+        XCTAssertNil(v.mode)
+        XCTAssertNil(v.runtime)
+        XCTAssertNil(v.provider)
+        XCTAssertNil(v.model)
     }
 }
