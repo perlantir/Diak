@@ -1,48 +1,63 @@
 # Hermes Desktop Autonomous Build Status
 
-Updated: 2026-05-09 22:31 CT
+Updated: 2026-05-09 22:50 CDT
 
 ## Current milestone
 
-M0 complete and locally committed.
+M2 — approvals/action evidence is now in progress.
 
-## M0 result
+## Builder status
 
-Commit: `389c3d1` — `M0 SwiftUI app shell and design system`
+Claude Code print-mode builder is running for M2.
 
-Claude Code built:
+- Hermes process session: `proc_ed932d11dff1`
+- OS pid: `26193`
+- Prompt used: `Docs/Prompts/CLAUDE_CODE_M2_PROMPT.md`
+- Permission mode: `acceptEdits`
+- Max turns: `80`
 
-- SwiftUI macOS app scaffold
-- XcodeGen project configuration
-- design system tokens/components
-- app shell with sidebar/content/inspector
-- onboarding foundation
-- Hermes daemon health/version API boundary
-- mock and URLSession API clients
-- daemon status/offline UI
-- Settings > Hermes Engine
-- XCTest coverage for decoding, mock client, daemon status view model, onboarding view model
+## Repository state observed this run
 
-## Verification
+- No active Claude Code builder was found before starting M2.
+- Project files present: `project.yml`, `HermesDesktop.xcodeproj`.
+- Recent commits:
+  - `2c632a4` — `M1 sessions and chat foundation`
+  - `757196c` — `Add M1 build prompt and status`
+  - `389c3d1` — `M0 SwiftUI app shell and design system`
+
+## Verification before M2 kickoff
 
 Commands run from `/Users/perlantir/Projects/HermesDesktop`:
 
 ```bash
-/opt/homebrew/bin/xcodegen generate
+xcodebuild -list
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -configuration Debug build
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' test
 ```
 
 Results:
 
-- Xcode project generated successfully.
-- Build succeeded.
-- Tests succeeded: 17 tests, 0 failures.
+- `xcodebuild -list` succeeded; scheme: `HermesDesktop`.
+- Debug macOS build succeeded.
+- Tests succeeded: 24 tests, 0 failures.
 
-## Local fix applied after Claude Code
+## Local management updates before starting M2
 
-Claude Code could not run xcodegen/xcodebuild due its permission sandbox. Hermes ran verification directly and fixed `project.yml` by adding `GENERATE_INFOPLIST_FILE: YES` to the `HermesDesktopTests` target.
+- Added `Docs/Prompts/CLAUDE_CODE_M2_PROMPT.md`.
+- Updated `CLAUDE.md` build discipline from M0-only language to current M2 scope guardrails.
+
+## M2 scope guardrails
+
+Claude is constrained to approvals/action evidence only:
+
+- approval/action-evidence models and API-boundary methods
+- mock pending approvals and decision transitions
+- `ApprovalCard`, `ApprovalSheet`, command/diff/connector preview UI
+- Action Center route and inspector evidence panes
+- tests for decoding, mock API transitions, and view models
+
+Explicitly out of scope: real command execution, real connector writes, OAuth, automations, skills, memory, menu bar/global hotkey/native integrations, and Hermes internals.
 
 ## Next action
 
-Start M1: sessions + chat foundation using mock/local API boundary. Do not implement approvals/connectors/automations yet.
+Next cron run should detect whether `proc_ed932d11dff1`/pid `26193` is still running. If finished, inspect repo changes and Claude output, run `xcodegen generate`, `xcodebuild -list`, build, and tests, then either repair M2 or progress to M3 only after M2 is verified green.
