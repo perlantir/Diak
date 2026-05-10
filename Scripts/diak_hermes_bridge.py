@@ -27,7 +27,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Iterable
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 BRIDGE_VERSION = "diak-hermes-bridge-1.0.0"
 DEFAULT_HOST = "127.0.0.1"
@@ -73,6 +73,10 @@ class BridgeConfig:
     token: str | None = None
     hermes_agent_path: Path = Path.home() / ".hermes" / "hermes-agent"
     max_iterations: int = 90
+    composio_api_key: str | None = None
+    composio_api_base_url: str = "https://backend.composio.dev/api/v1"
+    connector_entity_id: str = "diak-local-user"
+    connector_redirect_url: str | None = None
 
 
 class BridgeState:
@@ -82,7 +86,7 @@ class BridgeState:
         self.path = path or DEFAULT_STATE_PATH
         self.persist = persist
         self._lock = threading.RLock()
-        self._data: dict[str, Any] = {"sessions": {}, "messages": {}, "events": {}}
+        self._data: dict[str, Any] = {"sessions": {}, "messages": {}, "events": {}, "connectors": {}}
         if persist:
             self._load()
 
@@ -94,10 +98,11 @@ class BridgeState:
                     self._data["sessions"] = loaded.get("sessions", {}) if isinstance(loaded.get("sessions", {}), dict) else {}
                     self._data["messages"] = loaded.get("messages", {}) if isinstance(loaded.get("messages", {}), dict) else {}
                     self._data["events"] = loaded.get("events", {}) if isinstance(loaded.get("events", {}), dict) else {}
+                    self._data["connectors"] = loaded.get("connectors", {}) if isinstance(loaded.get("connectors", {}), dict) else {}
         except Exception:
             # Corrupt state must not prevent the bridge from starting.  Keep the
             # bad file for forensic inspection and begin with empty state.
-            self._data = {"sessions": {}, "messages": {}, "events": {}}
+            self._data = {"sessions": {}, "messages": {}, "events": {}, "connectors": {}}
 
     def _save_locked(self) -> None:
         if not self.persist:
@@ -153,6 +158,172 @@ class BridgeState:
         with self._lock:
             self._data["events"].setdefault(session_id, []).extend(events)
             self._save_locked()
+
+
+CONNECTOR_CATALOG: list[dict[str, Any]] = [
+    {
+        "id": "conn-notion", "kind": "notion", "display_name": "Notion",
+        "summary": "Read and update Notion pages/databases after OAuth approval.",
+        "status": "not_connected", "sync_status": "never_synced", "write_policy": "always_ask",
+        "capabilities": ["read", "write"], "setup_kind": "oauth",
+        "scopes": [
+            {"id": "notion.read", "display_name": "Read pages", "detail": "Read workspace pages selected during OAuth.", "is_granted": False, "is_required": True},
+            {"id": "notion.write", "display_name": "Update pages", "detail": "Create/update pages selected during OAuth.", "is_granted": False, "is_required": False},
+        ],
+    },
+    {
+        "id": "conn-slack", "kind": "slack", "display_name": "Slack",
+        "summary": "Search Slack and send messages only after Diak approval policy allows it.",
+        "status": "not_connected", "sync_status": "never_synced", "write_policy": "always_ask",
+        "capabilities": ["read", "send"], "setup_kind": "oauth",
+        "scopes": [
+            {"id": "channels:history", "display_name": "Read channel history", "detail": "Search/read channels approved in Slack OAuth.", "is_granted": False, "is_required": True},
+            {"id": "chat:write", "display_name": "Send messages", "detail": "Send messages after Diak approval.", "is_granted": False, "is_required": False},
+        ],
+    },
+    {
+        "id": "conn-github", "kind": "github", "display_name": "GitHub",
+        "summary": "Read repositories and open issues/PR comments behind approval gates.",
+        "status": "not_connected", "sync_status": "never_synced", "write_policy": "always_ask",
+        "capabilities": ["read", "write"], "setup_kind": "oauth",
+        "scopes": [
+            {"id": "repo:read", "display_name": "Read repositories", "detail": "Read repositories approved during OAuth.", "is_granted": False, "is_required": True},
+            {"id": "pull_requests:write", "display_name": "Write PR comments", "detail": "Comment or create PR artifacts after approval.", "is_granted": False, "is_required": False},
+        ],
+    },
+    {
+        "id": "conn-gmail", "kind": "gmail", "display_name": "Gmail",
+        "summary": "Read Gmail context and draft/send email only through explicit approval.",
+        "status": "not_connected", "sync_status": "never_synced", "write_policy": "always_ask",
+        "capabilities": ["read", "send"], "setup_kind": "oauth",
+        "scopes": [
+            {"id": "gmail.readonly", "display_name": "Read mail", "detail": "Search/read mail approved during OAuth.", "is_granted": False, "is_required": True},
+            {"id": "gmail.send", "display_name": "Send mail", "detail": "Send email after explicit Diak approval.", "is_granted": False, "is_required": False},
+        ],
+    },
+    {
+        "id": "conn-linear", "kind": "linear", "display_name": "Linear",
+        "summary": "Read and update Linear issues after OAuth approval.",
+        "status": "not_connected", "sync_status": "never_synced", "write_policy": "always_ask",
+        "capabilities": ["read", "write"], "setup_kind": "oauth",
+        "scopes": [
+            {"id": "linear.read", "display_name": "Read workspace", "detail": "Read teams/issues approved during OAuth.", "is_granted": False, "is_required": True},
+            {"id": "linear.write", "display_name": "Update issues", "detail": "Create/update issues after approval.", "is_granted": False, "is_required": False},
+        ],
+    },
+]
+
+
+def connector_toolkit(connector_id: str) -> str:
+    return connector_id.removeprefix("conn-").upper().replace("-", "_")
+
+
+class ConnectorRegistry:
+    def __init__(self, state: BridgeState, config: BridgeConfig):
+        self.state = state
+        self.config = config
+
+    def _overlay(self) -> dict[str, dict[str, Any]]:
+        with self.state._lock:
+            return self.state._data.setdefault("connectors", {})
+
+    def _merged(self, connector_id: str) -> dict[str, Any] | None:
+        base = next((dict(c) for c in CONNECTOR_CATALOG if c["id"] == connector_id), None)
+        if not base:
+            return None
+        with self.state._lock:
+            overlay = dict(self.state._data.setdefault("connectors", {}).get(connector_id, {}))
+        base.update(overlay)
+        return base
+
+    def list(self) -> dict[str, Any]:
+        connectors = [self._merged(c["id"]) for c in CONNECTOR_CATALOG]
+        connectors = [c for c in connectors if c]
+        connectors.sort(key=lambda c: (0 if c.get("status") == "connected" else 1, c.get("display_name", "")))
+        configured = bool(self.config.composio_api_key or os.getenv("DIAK_CONNECTOR_SETUP_URL_TEMPLATE"))
+        note = "Connectors are wired to the production Diak bridge. Click Connect to open provider OAuth; tokens never enter the desktop app."
+        if not configured:
+            note += " Provider credentials are not configured yet, so setup will report configuration-required instead of faking success."
+        return {"connectors": connectors, "boundary_note": note}
+
+    def get(self, connector_id: str) -> dict[str, Any] | None:
+        return self._merged(connector_id)
+
+    def update_policy(self, connector_id: str, policy: str) -> dict[str, Any] | None:
+        connector = self._merged(connector_id)
+        if not connector:
+            return None
+        with self.state._lock:
+            self.state._data.setdefault("connectors", {}).setdefault(connector_id, {})["write_policy"] = policy
+            self.state._save_locked()
+        connector["write_policy"] = policy
+        return {"connector": connector, "note": f"Write policy set to {policy}. High-risk writes remain approval gated."}
+
+    def disconnect(self, connector_id: str) -> dict[str, Any] | None:
+        connector = self._merged(connector_id)
+        if not connector:
+            return None
+        with self.state._lock:
+            self.state._data.setdefault("connectors", {})[connector_id] = {
+                "status": "not_connected", "sync_status": "never_synced", "account_label": None,
+                "last_synced_at": None, "last_error": None, "pending_approval_id": None,
+            }
+            self.state._save_locked()
+        return {"disconnected": True, "id": connector_id, "note": "Connector disconnected in Diak bridge state. Revoke provider tokens in the provider dashboard if needed."}
+
+    def begin_setup(self, connector_id: str) -> tuple[int, dict[str, Any]]:
+        connector = self._merged(connector_id)
+        if not connector:
+            return 404, {"error": {"message": "Connector not found", "type": "not_found"}}
+        approval_id = make_id("appr-conn-setup")
+        setup_url = self._configured_setup_url(connector)
+        if not setup_url:
+            with self.state._lock:
+                self.state._data.setdefault("connectors", {}).setdefault(connector_id, {}).update({
+                    "status": "error", "sync_status": "error",
+                    "last_error": "Connector provider not configured. Set COMPOSIO_API_KEY plus a Composio setup URL/template, or DIAK_CONNECTOR_SETUP_URL_TEMPLATE.",
+                    "pending_approval_id": approval_id,
+                })
+                self.state._save_locked()
+            return 200, {
+                "connector_id": connector_id,
+                "setup_kind": connector.get("setup_kind", "oauth"),
+                "state": "configuration_required",
+                "message": "Connector provider is not configured on this Mac. Diak did not fake an OAuth flow.",
+                "approval_id": approval_id,
+            }
+        with self.state._lock:
+            self.state._data.setdefault("connectors", {}).setdefault(connector_id, {}).update({
+                "status": "pending", "sync_status": "syncing", "last_error": None, "pending_approval_id": approval_id,
+            })
+            self.state._save_locked()
+        return 200, {
+            "connector_id": connector_id,
+            "setup_kind": connector.get("setup_kind", "oauth"),
+            "state": "awaiting_oauth",
+            "message": "Approve the provider OAuth request in your browser. Diak will refresh connection status from the bridge after authorization.",
+            "setup_url": setup_url,
+            "approval_id": approval_id,
+        }
+
+    def _configured_setup_url(self, connector: dict[str, Any]) -> str | None:
+        connector_id = connector["id"]
+        toolkit = connector_toolkit(connector_id)
+        direct = os.getenv(f"DIAK_CONNECTOR_SETUP_URL_{connector_id.upper().replace('-', '_')}")
+        template = os.getenv("DIAK_CONNECTOR_SETUP_URL_TEMPLATE")
+        if direct:
+            return direct
+        if template:
+            return template.format(
+                connector_id=connector_id,
+                toolkit=toolkit,
+                entity_id=self.config.connector_entity_id,
+                redirect_url=self.config.connector_redirect_url or "",
+            )
+        # Composio's hosted-connect URL format varies by account/API version. Keep
+        # this explicit instead of guessing a fake OAuth URL when no template has
+        # been provided by release configuration.
+        return None
 
 
 class HermesAgentRuntime:
@@ -221,6 +392,7 @@ class DiakHermesBridgeServer(ThreadingHTTPServer):
         self.runtime = runtime
         self.state = state
         self.config = config
+        self.connectors = ConnectorRegistry(state, config)
         super().__init__(server_address, DiakHermesBridgeHandler)
 
 
@@ -293,6 +465,14 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
                 return self._send_json(200, self.server.state.list_sessions())
             if path.startswith("/sessions/"):
                 return self._handle_get_session_path(path)
+            if path == "/connectors":
+                return self._send_json(200, self.server.connectors.list())
+            match = re.fullmatch(r"/connectors/([^/]+)", path)
+            if match:
+                connector = self.server.connectors.get(match.group(1))
+                if not connector:
+                    return self._send_error(404, "Connector not found")
+                return self._send_json(200, connector)
             return self._send_error(404, "Not found")
         except BrokenPipeError:
             return
@@ -313,10 +493,42 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
             match = re.fullmatch(r"/sessions/([^/]+)/messages", path)
             if match:
                 return self._continue_session(match.group(1), body)
+            match = re.fullmatch(r"/connectors/([^/]+)/setup", path)
+            if match:
+                status, payload = self.server.connectors.begin_setup(match.group(1))
+                return self._send_json(status, payload)
             return self._send_error(404, "Not found")
         except Exception as exc:
             traceback.print_exc()
             return self._send_error(500, "Hermes runtime request failed", details=str(exc))
+
+    def do_PATCH(self) -> None:  # noqa: N802
+        if not self._authorized():
+            return
+        path = urlparse(self.path).path.rstrip("/") or "/"
+        body = self._read_json_body()
+        if body is None:
+            return
+        match = re.fullmatch(r"/connectors/([^/]+)/policy", path)
+        if match:
+            policy = str(body.get("write_policy") or "always_ask")
+            result = self.server.connectors.update_policy(match.group(1), policy)
+            if not result:
+                return self._send_error(404, "Connector not found")
+            return self._send_json(200, result)
+        return self._send_error(404, "Not found")
+
+    def do_DELETE(self) -> None:  # noqa: N802
+        if not self._authorized():
+            return
+        path = urlparse(self.path).path.rstrip("/") or "/"
+        match = re.fullmatch(r"/connectors/([^/]+)", path)
+        if match:
+            result = self.server.connectors.disconnect(match.group(1))
+            if not result:
+                return self._send_error(404, "Connector not found")
+            return self._send_json(200, result)
+        return self._send_error(404, "Not found")
 
     def _version_payload(self) -> dict[str, Any]:
         provider = None
@@ -485,6 +697,10 @@ def parse_args(argv: Iterable[str] | None = None) -> BridgeConfig:
     parser.add_argument("--token", default=os.getenv("DIAK_BRIDGE_TOKEN") or None)
     parser.add_argument("--hermes-agent-path", default=os.getenv("HERMES_AGENT_PATH", str(Path.home() / ".hermes" / "hermes-agent")))
     parser.add_argument("--max-iterations", type=int, default=int(os.getenv("DIAK_BRIDGE_MAX_ITERATIONS", "90")))
+    parser.add_argument("--composio-api-key", default=os.getenv("COMPOSIO_API_KEY") or None)
+    parser.add_argument("--composio-api-base-url", default=os.getenv("COMPOSIO_API_BASE_URL", "https://backend.composio.dev/api/v1"))
+    parser.add_argument("--connector-entity-id", default=os.getenv("DIAK_CONNECTOR_ENTITY_ID", "diak-local-user"))
+    parser.add_argument("--connector-redirect-url", default=os.getenv("DIAK_CONNECTOR_REDIRECT_URL") or None)
     args = parser.parse_args(list(argv) if argv is not None else None)
     if args.host not in ("127.0.0.1", "localhost", "::1") and not args.token:
         parser.error("Non-local bind requires DIAK_BRIDGE_TOKEN/--token")
@@ -496,6 +712,10 @@ def parse_args(argv: Iterable[str] | None = None) -> BridgeConfig:
         token=args.token,
         hermes_agent_path=Path(args.hermes_agent_path).expanduser(),
         max_iterations=args.max_iterations,
+        composio_api_key=args.composio_api_key,
+        composio_api_base_url=args.composio_api_base_url,
+        connector_entity_id=args.connector_entity_id,
+        connector_redirect_url=args.connector_redirect_url,
     )
 
 

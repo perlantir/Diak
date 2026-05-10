@@ -61,14 +61,16 @@ public final class ConnectorsViewModel: ObservableObject {
     /// Connector being walked through setup. Held separately from
     /// `selectedConnector` so the sheet survives selection changes.
     @Published public var setupConnector: HermesConnector?
-    /// User must explicitly acknowledge that the daemon (not the Mac app)
-    /// handles the real provider exchange before we send setup or open OAuth.
-    @Published public var setupAcknowledged: Bool = false
+    /// Deprecated compatibility flag for older previews. Real setup no
+    /// longer requires an extra acknowledgement before opening OAuth.
+    @Published public var setupAcknowledged: Bool = true
 
     private let client: HermesAPIClient
+    private let openURL: (URL) -> Void
 
-    public init(client: HermesAPIClient) {
+    public init(client: HermesAPIClient, openURL: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }) {
         self.client = client
+        self.openURL = openURL
     }
 
     public var filteredConnectors: [HermesConnector] {
@@ -111,13 +113,13 @@ public final class ConnectorsViewModel: ObservableObject {
     public func presentSetup(for connector: HermesConnector) {
         setupConnector = connector
         setupChallenge = nil
-        setupAcknowledged = false
+        setupAcknowledged = true
     }
 
     public func dismissSetup() {
         setupConnector = nil
         setupChallenge = nil
-        setupAcknowledged = false
+        setupAcknowledged = true
     }
 
     public func connect(_ connector: HermesConnector) async {
@@ -128,10 +130,6 @@ public final class ConnectorsViewModel: ObservableObject {
 
     public func confirmSetup() async {
         guard let connector = setupConnector else { return }
-        guard setupAcknowledged else {
-            actionState = .failed("Acknowledge that Hermes Agent handles connector authorization before continuing.")
-            return
-        }
         actionState = .working("Starting connector setup…")
         do {
             let challenge = try await client.beginConnectorSetup(
@@ -139,7 +137,7 @@ public final class ConnectorsViewModel: ObservableObject {
             )
             setupChallenge = challenge
             if let setupURL = challenge.setupURL {
-                NSWorkspace.shared.open(setupURL)
+                openURL(setupURL)
                 actionState = .succeeded("Opened \(connector.displayName) authorization in your browser.")
             } else if challenge.state == .configurationRequired {
                 actionState = .failed(challenge.message)

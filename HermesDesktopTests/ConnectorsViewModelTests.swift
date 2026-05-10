@@ -22,7 +22,8 @@ final class ConnectorsViewModelTests: XCTestCase {
     func testSetupStartsOAuthAndPersistsChallenge() async throws {
         let client = MockHermesAPIClient()
         client.resetConnectorState()
-        let viewModel = ConnectorsViewModel(client: client)
+        var openedURLs: [URL] = []
+        let viewModel = ConnectorsViewModel(client: client, openURL: { openedURLs.append($0) })
         await viewModel.refresh()
         let notion = try XCTUnwrap(viewModel.connectors.first { $0.id == "conn-notion" })
         viewModel.presentSetup(for: notion)
@@ -34,6 +35,7 @@ final class ConnectorsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.setupChallenge?.state, .awaitingOAuth)
         XCTAssertEqual(viewModel.setupChallenge?.connectorID, notion.id)
         XCTAssertNotNil(viewModel.setupChallenge?.setupURL)
+        XCTAssertEqual(openedURLs, [try XCTUnwrap(viewModel.setupChallenge?.setupURL)])
 
         let updated = try XCTUnwrap(viewModel.connectors.first { $0.id == notion.id })
         XCTAssertEqual(updated.status, .pending)
@@ -43,7 +45,6 @@ final class ConnectorsViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.setupChallenge)
         XCTAssertNil(viewModel.setupConnector)
         XCTAssertTrue(viewModel.setupAcknowledged)
-    }
     }
 
     @MainActor

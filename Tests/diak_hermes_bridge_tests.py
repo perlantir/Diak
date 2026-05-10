@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import threading
 import time
@@ -125,6 +126,46 @@ class DiakHermesBridgeTests(unittest.TestCase):
         self.assertEqual(second["prompt"], "second")
         self.assertEqual(second["preferred_session_id"], "hermes-session-1")
         self.assertEqual([m["role"] for m in second["history"]], ["user", "assistant"])
+    def test_connector_setup_reports_configuration_required_without_provider(self):
+        status, _, body = self.harness.request("GET", "/connectors")
+        self.assertEqual(status, 200)
+        catalog = json.loads(body)
+        self.assertGreaterEqual(len(catalog["connectors"]), 5)
+        self.assertIn("not configured", catalog["boundary_note"])
+
+        status, _, body = self.harness.request("POST", "/connectors/conn-notion/setup", {"acknowledged_daemon_handoff": True})
+        self.assertEqual(status, 200)
+        challenge = json.loads(body)
+        self.assertEqual(challenge["state"], "configuration_required")
+        self.assertNotIn("setup_url", challenge)
+
+        status, _, body = self.harness.request("GET", "/connectors/conn-notion")
+        self.assertEqual(status, 200)
+        connector = json.loads(body)
+        self.assertEqual(connector["status"], "error")
+        self.assertIn("not configured", connector["last_error"])
+
+    def test_connector_setup_uses_configured_oauth_template(self):
+        template = "https://connect.example.test/oauth?toolkit={toolkit}&entity={entity_id}&connector={connector_id}"
+        old_template = os.environ.get("DIAK_CONNECTOR_SETUP_URL_TEMPLATE")
+        os.environ["DIAK_CONNECTOR_SETUP_URL_TEMPLATE"] = template
+        try:
+            self.harness.close()
+            self.harness = BridgeHTTPHarness()
+            status, _, body = self.harness.request("POST", "/connectors/conn-github/setup", {"acknowledged_daemon_handoff": True})
+            self.assertEqual(status, 200)
+            challenge = json.loads(body)
+            self.assertEqual(challenge["state"], "awaiting_oauth")
+            self.assertEqual(challenge["setup_url"], "https://connect.example.test/oauth?toolkit=GITHUB&entity=diak-local-user&connector=conn-github")
+
+            status, _, body = self.harness.request("PATCH", "/connectors/conn-github/policy", {"write_policy": "blocked"})
+            self.assertEqual(status, 200)
+            self.assertEqual(json.loads(body)["connector"]["write_policy"], "blocked")
+        finally:
+            if old_template is None:
+                os.environ.pop("DIAK_CONNECTOR_SETUP_URL_TEMPLATE", None)
+            else:
+                os.environ["DIAK_CONNECTOR_SETUP_URL_TEMPLATE"] = old_template
 
 
 if __name__ == "__main__":
