@@ -1,33 +1,31 @@
 # Hermes Desktop Autonomous Build Status
 
-Updated: 2026-05-10 01:34 CDT
+Updated: 2026-05-10 02:08 CDT
 
 ## Current milestone
 
-M7 — native Mac integrations is active.
+M7 — native Mac integrations is verified complete locally. M0–M7 are now implemented through typed SwiftUI/local API boundaries.
 
 ## Completed this run
 
-Claude Code's prior M6 builder had finished; no active Claude process was found for `/Users/perlantir/Projects/HermesDesktop` at the start of this run.
+No active Claude Code process was found for `/Users/perlantir/Projects/HermesDesktop` at the start of this run, so I inspected the M7 changes left by the prior builder and ran independent verification.
 
-Verified and committed the M6 increment:
+Recovered one deterministic test-compile issue from the agent-produced M7 work:
 
-- Commit: `dc6d811 Implement M6 skills memory`
-- Added Skills library/detail/create-from-session review surface through `HermesAPIClient` typed boundary and mock URLSession/client behavior.
-- Added Memory dashboard/edit/delete surface through typed API boundary and mock URLSession/client behavior.
-- Wired Skills and Memory into `ContentRouter` through reusable view models.
-- Added M6 model decoding, view-model, and URLSession endpoint tests.
-- Fixed a deterministic test-build break by updating `RestartOnlyConfigClient` test double with M6 protocol stubs.
+- `HermesDesktopTests/MenuBarViewModelTests.swift` expected `MockHermesAPIClient.resetMenuBarState()` for the idle menu-bar path.
+- Added `resetMenuBarState()` to `HermesDesktop/Services/HermesAPI/MockHermesAPIClient.swift`; it clears pending approvals and returns an empty session override without touching global fixtures.
 
-Prepared and committed M7 milestone context:
+M7 implemented surfaces now present:
 
-- Commit: `51bc368 Prepare M7 native Mac milestone`
-- Updated `CLAUDE.md` to mark M0–M6 complete and M7 active.
-- Created `Docs/Prompts/CLAUDE_CODE_M7_NATIVE_MAC_KICKOFF.md`.
+- `MenuBarExtra` app entry integration with badge label and window-style popover.
+- `MenuBarViewModel` + `MenuBarPopoverView` for pending approvals, running/waiting sessions, quick actions, local notification inbox, and compact-window toggle.
+- Global quick prompt scene/view/view-model with typed destination/context state and daemon-boundary `createSession` call only.
+- `AppRouter` shared navigation/deep-link state.
+- `HermesNotificationDeepLink` model and `LocalNotificationCenter` typed local/mock notification routing.
+- `CompactWindowViewModel` + compact layout state in `AppShellView`.
+- M7 unit tests for router, quick prompt, menu bar, notifications, deep links, and compact window state.
 
-M7 scope: `MenuBarExtra`, quick prompt UI/state, notification deep-link routing, and compact floating-window state. No packaging/updater, no privileged event-tap/global-hotkey permission flow, no real external notifications from tests, and no Hermes internals in the Swift app.
-
-## M6 verification evidence
+## Verification evidence
 
 Commands run from `/Users/perlantir/Projects/HermesDesktop`:
 
@@ -44,22 +42,20 @@ Results:
 - `xcodegen generate`: succeeded.
 - `xcodebuild -list`: succeeded; scheme `HermesDesktop`.
 - Debug macOS build: succeeded.
-- First full test attempt found one compile issue in `SettingsViewModelTestDoubles.swift` after `HermesAPIClient` gained M6 requirements.
-- Fixed the test double with no-op/throwing M6 API stubs.
-- Re-run tests: succeeded — 97 tests, 0 failures.
-- Latest passing test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_01-33-49--0500.xcresult`.
+- First full test attempt failed to compile because `MockHermesAPIClient` was missing `resetMenuBarState()`.
+- Fixed the deterministic test helper gap.
+- Re-run tests: succeeded — 125 tests, 0 failures.
+- Latest passing test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_02-07-46--0500.xcresult`.
 - `git diff --check`: succeeded.
 
 ## Builder status
 
-Started exactly one Claude Code print-mode builder for M7.
+Claude Code is not currently running for this project. I did not start a duplicate or new builder.
 
-- Hermes process session: `proc_db64985a41aa`
-- Shell PID: `38825`
-- Claude child PID observed by `pgrep -P 38825`: `38830`
-- Prompt: `Docs/Prompts/CLAUDE_CODE_M7_NATIVE_MAC_KICKOFF.md`
-- Process state at update: running.
+## Commit status
+
+M7 changes verified and ready to commit in this run.
 
 ## Next action
 
-Next cron run should not start a duplicate builder while the above Claude process is active. If it has finished, inspect repo state, run XcodeGen/build/tests, fix deterministic failures if safe, and commit only a verified M7 increment.
+After the M7 commit, there is no next authorized milestone in the current M0–M7 plan. Next cron run should avoid starting new scope unless a new milestone/package/update task has been explicitly defined.

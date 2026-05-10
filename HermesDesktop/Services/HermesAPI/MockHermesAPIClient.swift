@@ -83,6 +83,12 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     /// `createSession` so tests/previews can pin the id.
     public var nextCreatedSession: HermesSession?
 
+    /// Optional override for `sessions()`. When non-nil the override
+    /// replaces the static fixture, which lets M7 menu-bar tests
+    /// exercise the "no work in flight" copy without rewriting the
+    /// global fixture.
+    public var sessionsOverride: [HermesSession]?
+
     /// Streaming cadence (in nanoseconds) between mock events. Set to
     /// 0 in tests for instant playback.
     public var streamingDelayNanos: UInt64 = 30_000_000
@@ -124,7 +130,7 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     public func sessions() async throws -> [HermesSession] {
         sessionsCallCount += 1
         if case .offline = outcome { throw HermesAPIError.notReachable }
-        return MockHermesData.sessions
+        return sessionsOverride ?? MockHermesData.sessions
     }
 
     public func session(id: String) async throws -> HermesSession {
@@ -232,6 +238,15 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     public func resetApprovalState() {
         approvals = MockHermesData.approvalIndex
         evidence = MockHermesData.actionEvidence
+    }
+
+    /// Test affordance for the M7 menu-bar surface: make the daemon
+    /// appear idle without changing global fixtures. This clears pending
+    /// approvals and returns an empty session list so the menu-bar
+    /// aggregate can exercise its idle copy path deterministically.
+    public func resetMenuBarState() {
+        approvals = [:]
+        sessionsOverride = []
     }
 
     // MARK: Settings / config (M3)
