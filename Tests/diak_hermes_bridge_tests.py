@@ -184,9 +184,14 @@ class DiakHermesBridgeTests(unittest.TestCase):
         status, _, body = self.harness.request("GET", "/settings/secrets")
         self.assertEqual(status, 200)
         payload = json.loads(body)
-        self.assertIsInstance(payload, list)
-        composio = next((s for s in payload if s["id"] == "composio"), None)
-        self.assertIsNotNone(composio, "Composio metadata slot must be present")
+        self.assertIn("descriptors", payload)
+        self.assertIn("statuses", payload)
+        descriptor = next((s for s in payload["descriptors"] if s["id"] == "composio"), None)
+        self.assertIsNotNone(descriptor, "Composio descriptor slot must be present")
+        self.assertEqual(descriptor["display_name"], "Composio")
+        self.assertTrue(descriptor["fields"])
+        composio = next((s for s in payload["statuses"] if s["id"] == "composio"), None)
+        self.assertIsNotNone(composio, "Composio status slot must be present")
         self.assertEqual(composio["presence"], "missing")
         self.assertEqual(composio["validity"], "untested")
         self.assertEqual(composio["saved_non_sensitive_field_ids"], [])
@@ -213,7 +218,7 @@ class DiakHermesBridgeTests(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertNotIn(api_key, body, "Raw Composio API key leaked through /settings/secrets")
             payload = json.loads(body)
-            composio = next(s for s in payload if s["id"] == "composio")
+            composio = next(s for s in payload["statuses"] if s["id"] == "composio")
             self.assertEqual(composio["presence"], "saved")
             self.assertEqual(composio["validity"], "untested")
             self.assertIn("base_url", composio["saved_non_sensitive_field_ids"])
@@ -343,8 +348,50 @@ class DiakHermesBridgeTests(unittest.TestCase):
             self.assertEqual(decided["status"], "approved")
             self.assertEqual(sent, [("telegram", "Diak QA approval gate")])
             self.assertTrue(decided["execution_result"]["success"])
+
+            status, _, body = self.harness.request("GET", "/evidence")
+            self.assertEqual(status, 200)
+            evidence = json.loads(body)
+            self.assertEqual(len(evidence), 1)
+            self.assertEqual(evidence[0]["approval_id"], approval["id"])
+            self.assertEqual(evidence[0]["status"], "completed")
+            self.assertEqual(evidence[0]["artifacts"][0]["kind"], "message")
         finally:
             DiakHermesBridgeHandler._send_telegram_via_hermes = original
+
+    def test_session_evidence_filters_by_session_id(self):
+        with self.harness.server.state._lock:
+            self.harness.server.state._data.setdefault("sessions", {})["sess-one"] = {"id": "sess-one", "title": "One"}
+            self.harness.server.state._data.setdefault("sessions", {})["sess-two"] = {"id": "sess-two", "title": "Two"}
+            self.harness.server.state._data.setdefault("approvals", {})["appr-one"] = {
+                "id": "appr-one",
+                "title": "One action",
+                "summary": "Completed for session one",
+                "risk": "medium",
+                "status": "approved",
+                "created_at": "2026-01-01T00:00:00Z",
+                "updated_at": "2026-01-01T00:00:01Z",
+                "session_id": "sess-one",
+                "action_type": "connector_send",
+                "payload_preview": {"target": "telegram", "message": "one"},
+            }
+            self.harness.server.state._data.setdefault("approvals", {})["appr-two"] = {
+                "id": "appr-two",
+                "title": "Two action",
+                "summary": "Completed for session two",
+                "risk": "medium",
+                "status": "denied",
+                "created_at": "2026-01-02T00:00:00Z",
+                "updated_at": "2026-01-02T00:00:01Z",
+                "session_id": "sess-two",
+                "action_type": "connector_send",
+                "payload_preview": {"target": "telegram", "message": "two"},
+            }
+        status, _, body = self.harness.request("GET", "/sessions/sess-one/evidence")
+        self.assertEqual(status, 200)
+        evidence = json.loads(body)
+        self.assertEqual([item["approval_id"] for item in evidence], ["appr-one"])
+        self.assertEqual(evidence[0]["session_id"], "sess-one")
 
     def test_memory_create_update_pin_delete_persists(self):
         tmp = tempfile.TemporaryDirectory()

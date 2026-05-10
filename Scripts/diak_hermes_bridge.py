@@ -570,6 +570,8 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
                 return self._send_json(200, self._settings_secrets_metadata())
             if path == "/approvals":
                 return self._send_json(200, self._list_approvals())
+            if path == "/evidence":
+                return self._send_json(200, self._list_evidence())
             match = re.fullmatch(r"/approvals/([^/]+)", path)
             if match:
                 approval = self._get_approval(match.group(1))
@@ -703,6 +705,61 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
         with self.server.state._lock:
             approval = self.server.state._data.setdefault("approvals", {}).get(approval_id)
             return dict(approval) if isinstance(approval, dict) else None
+
+    def _list_evidence(self, session_id: str | None = None) -> list[dict[str, Any]]:
+        with self.server.state._lock:
+            approvals = list(self.server.state._data.setdefault("approvals", {}).values())
+        evidence: list[dict[str, Any]] = []
+        for approval in approvals:
+            if not isinstance(approval, dict):
+                continue
+            status = str(approval.get("status") or "pending").lower()
+            if status == "pending":
+                continue
+            if session_id is not None and approval.get("session_id") != session_id:
+                continue
+            action_type = str(approval.get("action_type") or "action")
+            title = str(approval.get("title") or "Action")
+            occurred_at = str(approval.get("updated_at") or approval.get("created_at") or utc_now())
+            evidence_status = {
+                "approved": "completed",
+                "denied": "denied",
+                "failed": "failed",
+                "cancelled": "cancelled",
+            }.get(status, "completed")
+            payload_preview = approval.get("payload_preview") if isinstance(approval.get("payload_preview"), dict) else {}
+            artifacts = []
+            execution_result = approval.get("execution_result") if isinstance(approval.get("execution_result"), dict) else {}
+            provider_result = execution_result.get("provider_result") if isinstance(execution_result.get("provider_result"), dict) else {}
+            if action_type == "connector_send":
+                target = str(payload_preview.get("target") or "telegram")
+                artifacts.append({
+                    "id": f"artifact-{approval.get('id')}-message",
+                    "kind": "message",
+                    "title": target,
+                    "detail": "Queued and executed through Hermes send_message after Diak approval" if evidence_status == "completed" else "Connector action did not complete",
+                })
+            if provider_result.get("url"):
+                artifacts.append({
+                    "id": f"artifact-{approval.get('id')}-link",
+                    "kind": "link",
+                    "title": "Provider result",
+                    "detail": str(provider_result.get("url")),
+                })
+            evidence.append({
+                "id": f"ev-{approval.get('id')}",
+                "title": title,
+                "summary": approval.get("summary") or approval.get("decision_note"),
+                "status": evidence_status,
+                "occurred_at": occurred_at,
+                "actor": "Diak",
+                "tool_name": action_type,
+                "approval_id": approval.get("id"),
+                "session_id": approval.get("session_id"),
+                "artifacts": artifacts,
+            })
+        evidence.sort(key=lambda item: item.get("occurred_at", ""), reverse=True)
+        return evidence
 
     def _store_approval(self, approval: dict[str, Any]) -> dict[str, Any]:
         with self.server.state._lock:
@@ -1055,13 +1112,13 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
         skill["is_enabled"] = enabled; skill["status"] = "active" if enabled else "disabled"
         return self._send_json(200, {"skill": skill, "note": "Skill enable state saved in Diak bridge overlay."})
 
-    def _settings_secrets_metadata(self) -> list[dict[str, Any]]:
-        """Return metadata only for known secret slots. Never returns raw values.
+    def _settings_secrets_metadata(self) -> dict[str, Any]:
+        """Return the Settings secrets catalog. Never returns raw values.
 
         Slice 3 boundary: the bridge does not own the Keychain. Diak (the macOS
         app) writes secrets to the Keychain and injects them into the bridge's
-        env at launch. This endpoint reports presence + non-sensitive fields the
-        bridge currently has, so the Settings UI can render "Saved" / "Missing"
+        env at launch. This endpoint reports descriptor + presence metadata so
+        the Settings UI can render editable fields and "Saved" / "Missing"
         badges without ever round-tripping a raw API key.
         """
         api_key_present = bool(os.getenv("COMPOSIO_API_KEY") or self.server.config.composio_api_key)
@@ -1078,14 +1135,32 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
             value = os.getenv(env_name)
             if value and value.strip():
                 non_sensitive_fields.append(field_id)
-        return [
-            {
-                "id": "composio",
-                "presence": "saved" if api_key_present else "missing",
-                "validity": "untested",
-                "saved_non_sensitive_field_ids": non_sensitive_fields,
-            }
-        ]
+
+        descriptor = {
+            "id": "composio",
+            "kind": "composio",
+            "display_name": "Composio",
+            "help_text": "API key + connector config Hermes uses to talk to Composio integrations. Stored in macOS Keychain on this Mac; never synced to iCloud.",
+            "test_action_available": True,
+            "fields": [
+                {"id": "api_key", "kind": "api_key", "label": "API key", "placeholder": "comp_live_…", "help_text": "Found in your Composio dashboard. Required.", "is_required": True},
+                {"id": "base_url", "kind": "plain_text", "label": "Base URL", "placeholder": "https://backend.composio.dev", "help_text": "Override only if you self-host Composio.", "is_required": False},
+                {"id": "entity_id", "kind": "plain_text", "label": "Entity ID", "placeholder": "default", "help_text": "Composio account/entity scoping. Optional.", "is_required": False},
+                {"id": "redirect_url", "kind": "plain_text", "label": "Redirect URL", "placeholder": "diak://composio/callback", "help_text": "Where the daemon should send users after OAuth.", "is_required": False},
+                {"id": "setup_url_template", "kind": "plain_text", "label": "Setup URL template", "placeholder": "https://composio.dev/connect/{connector}", "help_text": "Template used when the daemon hands off connector setup.", "is_required": False},
+            ],
+        }
+        status = {
+            "id": "composio",
+            "presence": "saved" if api_key_present else "missing",
+            "validity": "untested",
+            "saved_non_sensitive_field_ids": non_sensitive_fields,
+        }
+        return {
+            "descriptors": [descriptor],
+            "statuses": [status],
+            "boundary_note": "Diak stores API keys and integration config in macOS Keychain on this Mac. Hermes Engine reads them from Keychain at bridge launch — they are never written to plain config files or synced to iCloud.",
+        }
 
     def _version_payload(self) -> dict[str, Any]:
         provider = None
@@ -1130,6 +1205,12 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
                 "boundary_note": "Production bridge: artifacts are captured from real Hermes Agent runtime output; execution remains in Hermes Agent.",
                 "artifacts": self.server.state.get_artifacts(session_id),
             })
+        evidence_match = re.fullmatch(r"/sessions/([^/]+)/evidence", path)
+        if evidence_match:
+            session_id = evidence_match.group(1)
+            if not self.server.state.get_session(session_id):
+                return self._send_error(404, "Session not found")
+            return self._send_json(200, self._list_evidence(session_id=session_id))
         session_match = re.fullmatch(r"/sessions/([^/]+)", path)
         if session_match:
             session = self.server.state.get_session(session_match.group(1))

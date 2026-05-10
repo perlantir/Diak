@@ -156,8 +156,20 @@ public final class HermesBridgeProcessManager: HermesBridgeManaging {
         throw HermesBridgeLaunchError.launchFailed("Bridge process started but /health did not become ready within \(configuration.startupTimeoutSeconds)s after retrying. Check \(configuration.logPath.expandedTildePath).")
     }
 
+    public func resolvedPythonExecutablePath() -> String {
+        let resolvedHermesAgentPath = configuration.hermesAgentPath?.expandedTildePath
+            ?? NSString(string: "~/.hermes/hermes-agent").expandingTildeInPath
+        let hermesVenvPython = URL(fileURLWithPath: resolvedHermesAgentPath)
+            .appendingPathComponent("venv/bin/python3")
+            .path
+        if fileManager.isExecutableFile(atPath: hermesVenvPython) {
+            return hermesVenvPython
+        }
+        return "/usr/bin/python3"
+    }
+
     public func resolvedLaunchArguments(scriptURL: URL) -> [String] {
-        var args = ["python3", scriptURL.path, "--host", configuration.host, "--port", String(configuration.port)]
+        var args = [scriptURL.path, "--host", configuration.host, "--port", String(configuration.port)]
         if let statePath = configuration.statePath?.expandedTildePath, !statePath.isEmpty {
             args += ["--state", statePath]
         }
@@ -246,7 +258,7 @@ public final class HermesBridgeProcessManager: HermesBridgeManaging {
 
     private func launch(script: URL) throws -> Process {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.executableURL = URL(fileURLWithPath: resolvedPythonExecutablePath())
         process.arguments = resolvedLaunchArguments(scriptURL: script)
         process.environment = resolvedEnvironment()
         process.standardOutput = logFileHandle()

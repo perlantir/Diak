@@ -14,7 +14,6 @@ final class HermesBridgeProcessManagerTests: XCTestCase {
                                                                        logPath: "~/.hermes/diak/test_bridge.log"))
 
         XCTAssertEqual(manager.resolvedLaunchArguments(scriptURL: script), [
-            "python3",
             script.path,
             "--host",
             "127.0.0.1",
@@ -145,6 +144,7 @@ final class HermesBridgeProcessManagerTests: XCTestCase {
     func testEnvironmentPrependsHermesVenvPythonWhenPathIsAvailable() {
         let hermesAgentPath = NSString(string: "~/.hermes/hermes-agent").expandingTildeInPath
         let venvBin = URL(fileURLWithPath: hermesAgentPath).appendingPathComponent("venv/bin").path
+        let venvPython = URL(fileURLWithPath: venvBin).appendingPathComponent("python3").path
         let manager = HermesBridgeProcessManager(configuration: .init(scriptURL: nil,
                                                                        hermesAgentPath: hermesAgentPath,
                                                                        statePath: nil,
@@ -152,10 +152,12 @@ final class HermesBridgeProcessManagerTests: XCTestCase {
                                                   baseEnvironment: ["PATH": "/usr/bin:/bin"])
 
         let environment = manager.resolvedEnvironment()
-        if FileManager.default.fileExists(atPath: URL(fileURLWithPath: venvBin).appendingPathComponent("python3").path) {
+        if FileManager.default.fileExists(atPath: venvPython) {
             XCTAssertEqual(environment["PATH"], "\(venvBin):/usr/bin:/bin")
+            XCTAssertEqual(manager.resolvedPythonExecutablePath(), venvPython)
         } else {
             XCTAssertEqual(environment["PATH"], "/usr/bin:/bin")
+            XCTAssertEqual(manager.resolvedPythonExecutablePath(), "/usr/bin/python3")
         }
     }
 }
