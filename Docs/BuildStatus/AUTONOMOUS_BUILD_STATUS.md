@@ -1,73 +1,76 @@
 # Autonomous Build Status
 
-Last updated: 2026-05-10 16:34:48 CDT
+Last updated: 2026-05-10 17:07:50 CDT
 
 ## Current milestone
 
-- Active milestone: M12 — In-app setup and core UX fixes.
-- Completed this run: M12 Slice 6 — Direct Add Skill UX.
+- Active milestone: M12 — In-app setup and core UX fixes / live dogfood hardening.
+- Completed this run: focused stale-bridge lifecycle recovery after the direct Add Skill slice exposed the need for an exact bridge contract gate.
 - Latest local commits:
+  - `f4ca14d fix: reject stale Diak bridge listeners`
+  - `3b872d7 docs: update autonomous M12 build status`
   - `4a10844 feat: add direct skill creation UX`
   - `25cb9f0 fix: make canvas tabs interactive controls`
   - `5d0bfd9 feat: add guided automation setup UX`
-  - `69aa2c1 fix: harden bridge evidence and metadata boundary`
-  - `d5cd02f feat: add chat workspace recent rail`
 - Product boundary remains unchanged: SwiftUI owns Diak UI/control center; Hermes Agent / Hermes Engine remains behind the local daemon/API boundary.
 
 ## Builder status
 
 - Claude Code builder status: NOT RUNNING for `/Users/perlantir/Projects/HermesDesktop`.
-- Previous Slice 6 builder had finished and left implementation changes for inspection.
-- No new Claude Code builder was started this run because M12 Slice 6 now verifies green and the next gate is M12 live dogfood/release QA, not another implementation slice.
+- No new Claude Code builder was started this run. The repo had a completed focused bridge-lifecycle implementation ready for independent verification, and M12’s next broad gate remains live dogfood/release QA rather than another implementation slice.
 - No push performed from cron.
 
 ## This cron run
 
 1. Confirmed no active HermesDesktop Claude CLI builder was running.
-2. Inspected repo state and found completed Slice 6 changes in the Skills UI/view model/API/bridge boundary.
-3. Ran the broad verification gate once; it passed.
-4. Added missing deterministic Python bridge coverage for the new direct `/skills/draft` boundary:
-   - rejects missing `acknowledged_daemon_install` / missing required fields,
-   - persists a direct draft without a chat session,
-   - shows the draft in `/skills` catalog,
-   - confirms Hermes Agent owns install/execution copy.
-5. Re-ran the full broad verification gate successfully.
-6. Removed generated Python `__pycache__` artifacts from `Scripts/` and `Tests/` after verification.
-7. Secret-like leakage scan over added implementation/test/prompt lines: PASS; no matches.
-8. Committed M12 Slice 6 locally as `4a10844 feat: add direct skill creation UX`.
+2. Inspected repo state and found uncommitted bridge contract/lifecycle changes in:
+   - `HermesDesktop/Models/HermesVersion.swift`
+   - `HermesDesktop/Services/Bridge/HermesBridgeManager.swift`
+   - `HermesDesktopTests/HermesBridgeProcessManagerTests.swift`
+   - `Scripts/diak_hermes_bridge.py`
+   - `Tests/diak_hermes_bridge_tests.py`
+3. Independently verified the implementation with the regenerated-project release gate.
+4. Confirmed no generated Python cache artifacts were left in the repo.
+5. Ran `git diff --check`: PASS.
+6. Ran secret-like leakage scan over added implementation/test lines: PASS; no matches.
+7. Committed the verified recovery locally as `f4ca14d fix: reject stale Diak bridge listeners`.
 
-## Verification evidence for committed `4a10844`
+## Verification evidence for committed `f4ca14d`
 
 - `python3 -m unittest Tests.diak_hermes_bridge_tests`: PASS, 17 tests.
 - `xcodegen generate`: PASS; regenerated `HermesDesktop.xcodeproj`.
 - `xcodebuild -list`: PASS; scheme `HermesDesktop`; targets `HermesDesktop`, `HermesDesktopTests`.
 - `xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -configuration Debug build`: PASS.
-- `xcodebuild -scheme HermesDesktop -destination 'platform=macOS' test`: PASS, 237 tests, 0 failures. Result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_16-34-00--0500.xcresult`.
+- `xcodebuild -scheme HermesDesktop -destination 'platform=macOS' test`: PASS, 239 tests, 0 failures. Result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_17-07-14--0500.xcresult`.
 - `git diff --check`: PASS.
-- Secret-like leakage check over added implementation/test/prompt lines: PASS; no matches.
+- Secret-like leakage check over added implementation/test lines: PASS; no matches.
 
 ## Committed behavior summary
 
-### `4a10844 feat: add direct skill creation UX`
+### `f4ca14d fix: reject stale Diak bridge listeners`
 
-- Added visible **Add Skill** affordance on the Skills screen.
-- Added a direct add sheet/form for name, summary, trigger, category, risk style, and optional instructions.
-- Added view-model-owned validation/error state before submission.
-- Requires explicit acknowledgement that Hermes Agent owns install/execution before submission.
-- Added typed `HermesSkillDirectDraftRequest` and `createSkillDraft` API boundary.
-- Wired URLSession, mock client, and Python bridge `/skills/draft` support.
-- Direct skill drafts do not require an existing chat session and appear back in the skills catalog.
-- Added Swift view-model tests and Python bridge contract tests.
+- Added bridge compatibility metadata decoding to `HermesVersion`:
+  - `bridge_contract_version`
+  - `supported_routes`
+- Added required Diak bridge contract checks in `HermesBridgeProcessManager` for:
+  - `mode == production_bridge`
+  - `runtime == hermes-agent`
+  - `bridge_contract_version == m12-slice6`
+  - required routes including `/version`, `/skills`, and `/skills/draft`.
+- Replaced generic `/health` readiness with exact `/version` compatibility probing so stale/orphan bridge processes cannot mask missing new routes.
+- Added local stale-listener cleanup for Diak-like incompatible bridge listeners on localhost before launching the bundled bridge.
+- Preserves safety around non-Diak services by treating them as occupied/incompatible instead of killing them.
+- Added Python `/version` metadata coverage and Swift process-manager tests for compatibility and stale bridge rejection behavior.
 
 ## Current git state
 
-- Local `main` latest verified implementation commit: `4a10844 feat: add direct skill creation UX`.
-- Latest local `main` also includes a docs/status evidence commit for this run; see `git log -1` for the exact current HEAD.
-- Remaining uncommitted items are only exploratory/live QA helper scripts and screenshots under `qa/` from prior visual dogfood; they are not part of the committed Slice 6 implementation or status evidence.
+- Local `main` latest verified implementation commit: `f4ca14d fix: reject stale Diak bridge listeners`.
+- Working tree after the implementation commit contains only this status-file update until it is committed separately.
+- `main...origin/main` was not pushed from cron by policy.
 
 ## Known limits / blocked items
 
-- M12 implementation slices 1–6 are now build/test verified locally.
+- M12 implementation slices are build/test verified locally, including direct Add Skill and stale bridge lifecycle hardening.
 - M12 live dogfood checklist is still not fully executed in this cron run:
   - Settings: save/remove/test Composio key without terminal env vars — NOT TESTED here.
   - Connectors: setup no longer blocked when Composio key exists — bridge/unit verified, live app dogfood NOT TESTED here.
@@ -78,7 +81,7 @@ Last updated: 2026-05-10 16:34:48 CDT
 
 ## Next action
 
-1. Commit this status/prompt evidence separately if desired; do not include exploratory `qa/` helper/screenshot artifacts unless they are intentionally curated.
+1. Commit this status/evidence update separately.
 2. Run the M12 live dogfood checklist in a clean app session with screenshots/AX evidence before calling M12 product-ready.
 3. If live dogfood finds a deterministic code issue, start a focused Claude Code recovery prompt for that issue only.
 4. Do not start another broad implementation builder until M12 live dogfood gaps are triaged.
