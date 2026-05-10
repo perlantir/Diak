@@ -32,7 +32,7 @@ struct SidebarView: View {
         HStack(spacing: HermesSpacing.sm) {
             Image(systemName: "sparkles")
                 .foregroundStyle(HermesColors.accent)
-            Text("Hermes")
+            Text(AppBrand.sidebarTitle)
                 .font(HermesTypography.bodyStrong)
                 .foregroundStyle(HermesColors.text)
             Spacer()

@@ -6,7 +6,7 @@ The app brand is **Diak**. The underlying local runtime remains **Hermes Agent**
 
 ## Current status
 
-M0–M8 are implemented locally:
+M0–M9 are implemented locally:
 
 - M0 app shell, design system, daemon health/status, onboarding foundation, Settings > Hermes Engine.
 - M1 sessions/chat foundation.
@@ -17,6 +17,9 @@ M0–M8 are implemented locally:
 - M6 skills and memory.
 - M7 native Mac integrations: menu bar, quick prompt, compact window, local notification/deep-link model.
 - M8 release readiness: Diak branding, packaging scripts/docs, updater strategy, QA checklist.
+- M9 beta hardening: in-app Beta Readiness, repeatable release-gate script, beta QA checklist/report, product polish.
+
+M9 is an internal dogfood/private-beta checkpoint, not a public distribution signoff. Public/external distribution still requires Developer ID signing, notarization, stapling, Gatekeeper validation, and a clean manual UI QA pass.
 
 ## Requirements
 

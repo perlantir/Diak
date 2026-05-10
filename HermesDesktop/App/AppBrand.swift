@@ -6,6 +6,7 @@ enum AppBrand {
     static let engineShortName = "Hermes"
     static let appDescription = "A Mac-native control center for agentic work."
     static let windowTitle = appName
+    static let sidebarTitle = appName
     static let quickPromptTitle = "Diak Quick Prompt"
     static let copyright = "© 2026 Diak"
 

@@ -12,6 +12,7 @@ struct SettingsView: View {
         case modelsProviders
         case toolsPermissions
         case securityPrivacy
+        case betaReadiness
 
         var id: String { rawValue }
 
@@ -22,6 +23,7 @@ struct SettingsView: View {
             case .modelsProviders:   return "Models & Providers"
             case .toolsPermissions:  return "Tools & Permissions"
             case .securityPrivacy:   return "Security & Privacy"
+            case .betaReadiness:     return "Beta Readiness"
             }
         }
 
@@ -32,6 +34,7 @@ struct SettingsView: View {
             case .modelsProviders:   return "cpu"
             case .toolsPermissions:  return "wrench.and.screwdriver"
             case .securityPrivacy:   return "lock.shield"
+            case .betaReadiness:     return "checkmark.seal"
             }
         }
     }
@@ -76,6 +79,8 @@ struct SettingsView: View {
                     ToolsPermissionsView(viewModel: settings)
                 case .securityPrivacy:
                     SecurityPrivacyView(viewModel: settings)
+                case .betaReadiness:
+                    BetaReadinessView(viewModel: settings)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

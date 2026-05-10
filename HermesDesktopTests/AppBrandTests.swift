@@ -5,6 +5,7 @@ final class AppBrandTests: XCTestCase {
     func testPublicAppBrandUsesDiak() {
         XCTAssertEqual(AppBrand.appName, "Diak")
         XCTAssertEqual(AppBrand.windowTitle, "Diak")
+        XCTAssertEqual(AppBrand.sidebarTitle, "Diak")
         XCTAssertEqual(AppBrand.quickPromptTitle, "Diak Quick Prompt")
         XCTAssertEqual(AppBrand.copyright, "© 2026 Diak")
     }

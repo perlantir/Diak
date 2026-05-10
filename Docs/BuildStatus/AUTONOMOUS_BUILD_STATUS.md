@@ -1,35 +1,25 @@
 # Hermes Desktop / Diak Autonomous Build Status
 
-Updated: 2026-05-10 04:59 CDT
+Updated: 2026-05-10 05:16 CDT
 
 ## Current milestone
 
-M8 — packaging/release readiness, visual/product QA foundations, and Hermes Desktop → Diak branding pass is implemented and verified locally.
+M9 — beta hardening, readiness transparency, repeatable release-gate evidence, and final product-polish pass is implemented and verified locally.
 
-M0–M8 are implemented through typed SwiftUI/local API boundaries.
+M0–M9 are implemented through typed SwiftUI/local API boundaries.
 
 ## Completed this run
 
-- Added GitHub remote `origin` for `https://github.com/perlantir/Diak.git` and pushed the existing verified `main` backup before M8 changes.
-- Added M8 implementation plan: `Docs/Plans/M8_RELEASE_READINESS_BRANDING_QA.md`.
-- Added app brand constants in `HermesDesktop/App/AppBrand.swift`.
-- Updated public app surfaces from Hermes Desktop to **Diak** while preserving Hermes Agent / Hermes Engine terminology for the underlying runtime.
-- Updated bundle display/product identity:
-  - `CFBundleDisplayName`: `Diak`
-  - `PRODUCT_NAME`: `Diak`
-  - `PRODUCT_MODULE_NAME`: `HermesDesktop`
-  - Bundle ID: `com.uberkiwi.diak`
-- Added release scripts:
-  - `Scripts/build_release.sh`
-  - `Scripts/create_dmg.sh`
-- Added release docs:
-  - `Docs/Release/M8_RELEASE_READINESS.md`
-  - `Docs/Release/UPDATER_STRATEGY.md`
-- Added QA docs:
-  - `Docs/QA/M8_TRUE_E2E_QA_CHECKLIST.md`
-  - `Docs/QA/M8_QA_REPORT.md`
-- Updated README and CLAUDE.md for Diak/M8 status.
-- Added `HermesDesktopTests/AppBrandTests.swift`.
+- Added M9 implementation plan: `Docs/Plans/M9_BETA_HARDENING.md`.
+- Added typed beta readiness model: `HermesDesktop/Models/BetaReadiness.swift`.
+- Added Settings > **Beta Readiness** screen: `HermesDesktop/Features/Settings/BetaReadinessView.swift`.
+- Added readiness tests: `HermesDesktopTests/BetaReadinessTests.swift`.
+- Polished stale app-facing branding: sidebar header now uses `AppBrand.sidebarTitle` / `Diak` while preserving Hermes Agent / Hermes Engine runtime copy.
+- Added repeatable release gate script: `Scripts/m9_release_gate.sh`.
+- Added M9 QA docs:
+  - `Docs/QA/M9_BETA_CHECKLIST.md`
+  - `Docs/QA/M9_QA_REPORT.md`
+- Updated README current status to M9.
 
 ## Verification evidence
 
@@ -37,50 +27,42 @@ Commands run from `/Users/perlantir/Projects/HermesDesktop`:
 
 ```bash
 xcodegen generate
-xcodebuild -list
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -configuration Debug build
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' test
-git diff --check
-Scripts/build_release.sh
-Scripts/create_dmg.sh build/Diak.xcarchive/Products/Applications/Diak.app
-/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' build/Diak.xcarchive/Products/Applications/Diak.app/Contents/Info.plist
-/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' build/Diak.xcarchive/Products/Applications/Diak.app/Contents/Info.plist
-codesign -dv --verbose=2 build/Diak.xcarchive/Products/Applications/Diak.app
+Scripts/m9_release_gate.sh
 ```
 
 Results:
 
 - `xcodegen generate`: succeeded.
-- `xcodebuild -list`: succeeded; project `HermesDesktop`, scheme `HermesDesktop`, targets `HermesDesktop` and `HermesDesktopTests`.
 - Debug macOS build: succeeded.
-- Full macOS test suite: succeeded — **128 tests, 0 failures**.
-- Latest passing test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_04-55-33--0500.xcresult`.
-- `git diff --check`: succeeded.
-- Release build/archive script: succeeded.
+- Full macOS test suite: succeeded — **132 tests, 0 failures**.
+- Latest direct passing test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_05-15-56--0500.xcresult`.
+- M9 release gate: succeeded.
+- M9 release gate report: `build/m9/M9_RELEASE_GATE_20260510-051605.md`.
 - Release archive app: `build/Diak.xcarchive/Products/Applications/Diak.app`.
-- DMG creation: succeeded.
 - DMG: `build/dist/Diak-0.1.0.dmg`.
-- DMG SHA-256: `b98f70fa6c6dd7aad70ac76f6edd74b0ebe4ce99efdb6bececebe3ead0ba7c41`.
+- DMG SHA-256: `f1e2dd1a6fcaf161eed148f862429bfaf6971fe8eb0bece81ff712ec893dbb31`.
 - Built app display name: `Diak`.
 - Built bundle identifier: `com.uberkiwi.diak`.
-- Current archive signing: ad-hoc local signing with hardened runtime; Developer ID/notarization remains blocked until credentials are configured outside git.
+- Built executable: `Diak`.
+- Current archive signing: ad-hoc local signing. Developer ID/notarization remains blocked until credentials are configured outside git.
 
-## Visual/product QA evidence
+## Readiness verdict
 
-- First-launch screenshot captured at `/tmp/diak-m8-first-launch.png`.
-- Screenshot verifies visible Diak branding in menu bar, window title, onboarding header, and `Welcome to Diak` headline.
-- Visual QA was partially obstructed by unrelated Weather/Python system dialogs; see `Docs/QA/M8_QA_REPORT.md`.
+- Internal dogfood/private beta: **PARTIAL PASS** — ready to continue dogfooding with clearly tracked live-E2E caveats.
+- External/public distribution: **BLOCKED** — requires Developer ID signing, notarization, stapling, Gatekeeper validation, and clean manual UI QA.
 
 ## Builder status
 
-No external Claude Code builder is currently required for M8. Hermes implemented and verified this milestone directly.
+No external Claude Code builder is currently required for M9. Hermes implemented and verified this milestone directly.
 
 ## Commit status
 
-M8 changes are pending commit/push at the time this status file was updated.
+M9 changes are pending commit/push at the time this status file was updated.
 
 ## Next action
 
-Commit M8 changes and push to `https://github.com/perlantir/Diak.git`.
+Commit M9 changes and push to `https://github.com/perlantir/Diak.git`.
 
-Before any external/public distribution, configure Developer ID signing/notarization outside git and run a clean manual UI QA pass using `Docs/QA/M8_TRUE_E2E_QA_CHECKLIST.md`.
+After M9 is committed, Nick's requested new additions should be planned as M10+ feature work rather than mixed into the beta-hardening checkpoint.
