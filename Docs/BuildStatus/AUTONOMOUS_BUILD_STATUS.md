@@ -1,10 +1,10 @@
 # Hermes Desktop / Diak Autonomous Build Status
 
-Updated: 2026-05-10 06:55 CDT
+Updated: 2026-05-10 07:27 CDT
 
 ## Current milestone
 
-M9 — beta hardening, readiness transparency, repeatable release-gate evidence, final product-polish pass, and local Diak-compatible daemon fixture are implemented and verified locally.
+M9 — beta hardening, readiness transparency, repeatable release-gate evidence, final product-polish pass, and local Diak-compatible daemon fixture remain implemented and verified locally.
 
 M0–M9 are implemented through typed SwiftUI/local API boundaries. No next code milestone was started because the remaining gates are distribution/environment/human-approval gates, not safe autonomous implementation work.
 
@@ -15,8 +15,7 @@ M0–M9 are implemented through typed SwiftUI/local API boundaries. No next code
 - Re-generated the Xcode project with `xcodegen generate`.
 - Re-ran project discovery, Debug macOS build, and full macOS XCTest gate.
 - Re-checked local daemon port `127.0.0.1:8765`; a Python `DiakDevDaemon/0.1` compatibility daemon is listening.
-- Probed the Diak-shaped daemon contract at `/health`, `/version`, `/sessions`, `/automations`, `/connectors`, `/skills`, and `/memory`; all returned HTTP 200 via the local compatibility daemon.
-- Re-ran `Scripts/diak_live_probe.sh build/m9`; latest probe evidence was generated locally.
+- Re-probed the Diak-shaped daemon contract at `/health`, `/version`, `/sessions`, `/automations`, `/connectors`, `/skills`, and `/memory`; all returned HTTP 200 via the local compatibility daemon.
 - Did not start Claude Code because the codebase is already past M0–M9 and current verification is green.
 
 ## Verification evidence
@@ -25,33 +24,33 @@ Commands run from `/Users/perlantir/Projects/HermesDesktop`:
 
 ```bash
 git status --short
-ps aux | grep -i '[c]laude' | grep -i 'HermesDesktop' || true
+ps aux | grep -i '[c]laude' | grep -i HermesDesktop || true
 xcodebuild -list
+command -v xcodegen && xcodegen --version || true
 xcodegen generate
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -configuration Debug build
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' test
-date '+%Y-%m-%d %H:%M %Z'
-git status -sb
-git diff --check
+git status --short && git diff --check
 lsof -nP -iTCP:8765 -sTCP:LISTEN || true
 for path in /health /version /sessions /automations /connectors /skills /memory; do curl -sS -m 2 -i "http://127.0.0.1:8765$path"; done
-Scripts/diak_live_probe.sh build/m9
-git log --oneline -5
+git log --oneline -3 && git status -sb
 ```
 
 Results:
 
 - Claude Code project builder: **not running**.
 - Project discovery: `project.yml`, `HermesDesktop.xcodeproj`, and scheme `HermesDesktop` present.
+- `xcodegen`: present at `/opt/homebrew/bin/xcodegen`, version `2.45.4`.
 - `xcodebuild -list`: succeeded; project `HermesDesktop`, scheme `HermesDesktop`, targets `HermesDesktop` and `HermesDesktopTests`.
 - `xcodegen generate`: succeeded.
 - Debug macOS build: succeeded.
 - Full macOS test suite: succeeded — **132 tests, 0 failures**.
-- Latest direct passing test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_06-55-33--0500.xcresult`.
+- Latest direct passing test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_07-27-29--0500.xcresult`.
 - `git diff --check`: succeeded.
+- Working tree before status-file refresh: clean.
 - Local daemon listener: `Python` process on `127.0.0.1:8765`.
 - Diak-shaped local daemon contract: **PASS WITH COMPATIBILITY DAEMON** for `/health`, `/version`, `/sessions`, `/automations`, `/connectors`, `/skills`, and `/memory`.
-- Latest local live daemon probe: `build/m9/DIAK_LIVE_DAEMON_PROBE_20260510-065546.md`.
+- Latest local live daemon probe from prior run: `build/m9/DIAK_LIVE_DAEMON_PROBE_20260510-065546.md`.
 - Latest durable QA evidence: `qa/diak-m9-dogfood-20260510-054048/`.
 - M9 release gate from prior verified pass: `build/m9/M9_RELEASE_GATE_20260510-051715.md`.
 - DMG from prior verified pass: `build/dist/Diak-0.1.0.dmg`.
@@ -84,8 +83,8 @@ No Claude Code builder started this run. Starting another coding agent would be 
 
 ## Commit / branch status
 
-- Current commit before this status-file refresh: `f32b175` (`Update autonomous build status after daemon probe`).
-- Branch: `main...origin/main [ahead 5]` before this status-file refresh.
+- Current commit before this status-file refresh: `f1b4a3a` (`Update autonomous build status after verification`).
+- Branch: `main...origin/main [ahead 6]` before this status-file refresh.
 - This cron run did not push.
 - Working tree status before this status-file refresh was clean.
 
