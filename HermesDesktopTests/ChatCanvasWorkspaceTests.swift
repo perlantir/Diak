@@ -17,6 +17,16 @@ final class ChatCanvasWorkspaceTests: XCTestCase {
         XCTAssertEqual(state.activities.first?.title, "Updated document")
     }
 
+    func testChatViewModelSelectCanvasTabUsesCanvasReducer() {
+        let viewModel = ChatViewModel(client: MockHermesAPIClient())
+
+        XCTAssertEqual(viewModel.canvas.activeTab, .document)
+        viewModel.selectCanvasTab(.browser)
+        XCTAssertEqual(viewModel.canvas.activeTab, .browser)
+        viewModel.selectCanvasTab(.board)
+        XCTAssertEqual(viewModel.canvas.activeTab, .board)
+    }
+
     func testChatViewModelCanvasUpdatesFromStreamEvents() async throws {
         let client = MockHermesAPIClient()
         client.streamingDelayNanos = 0

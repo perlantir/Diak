@@ -165,6 +165,12 @@ public final class ChatViewModel: ObservableObject {
         if isStreaming { phase = .completed }
     }
 
+    /// User-driven canvas tab selection. The canvas model already owns the
+    /// reducer so stream events and UI clicks share one path.
+    public func selectCanvasTab(_ tab: HermesCanvasTab) {
+        canvas.apply(.selectTab(tab))
+    }
+
     /// Reset the chat workspace to an unbound, empty state so the user can
     /// begin a fresh chat. Cancels any in-flight stream/artifact load,
     /// drops the active session, and clears messages, draft text, canvas,

@@ -4,6 +4,7 @@ struct ChatCanvasView: View {
     let canvas: HermesCanvasState
     var artifactLoadError: String? = nil
     var isLoadingArtifacts: Bool = false
+    var onSelectTab: (HermesCanvasTab) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -62,17 +63,21 @@ struct ChatCanvasView: View {
     private var tabStrip: some View {
         HStack(spacing: HermesSpacing.xs) {
             ForEach(HermesCanvasTab.allCases) { tab in
-                Label(tab.displayName, systemImage: tab.iconName)
-                    .font(HermesTypography.caption)
-                    .foregroundStyle(tab == canvas.activeTab ? HermesColors.text : HermesColors.muted)
-                    .padding(.horizontal, HermesSpacing.sm)
-                    .padding(.vertical, HermesSpacing.xs)
-                    .background(tab == canvas.activeTab ? HermesColors.accent.opacity(0.12) : Color.clear)
-                    .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
-                    .accessibilityElement()
-                    .accessibilityLabel(Text(tab.displayName))
-                    .accessibilityIdentifier(CanvasAccessibilityID.canvasTab(tab))
-                    .accessibilityAddTraits(tab == canvas.activeTab ? [.isSelected, .isStaticText] : [.isStaticText])
+                Button {
+                    onSelectTab(tab)
+                } label: {
+                    Label(tab.displayName, systemImage: tab.iconName)
+                        .font(HermesTypography.caption)
+                        .foregroundStyle(tab == canvas.activeTab ? HermesColors.text : HermesColors.muted)
+                        .padding(.horizontal, HermesSpacing.sm)
+                        .padding(.vertical, HermesSpacing.xs)
+                        .background(tab == canvas.activeTab ? HermesColors.accent.opacity(0.12) : Color.clear)
+                        .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text(tab.displayName))
+                .accessibilityIdentifier(CanvasAccessibilityID.canvasTab(tab))
+                .accessibilityAddTraits(tab == canvas.activeTab ? [.isSelected] : [])
             }
             Spacer()
         }

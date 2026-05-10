@@ -34,7 +34,8 @@ struct ChatRootView: View {
             ChatCanvasView(
                 canvas: viewModel.canvas,
                 artifactLoadError: viewModel.artifactLoadError,
-                isLoadingArtifacts: viewModel.isLoadingArtifacts
+                isLoadingArtifacts: viewModel.isLoadingArtifacts,
+                onSelectTab: viewModel.selectCanvasTab
             )
             .frame(minWidth: 360, idealWidth: 460)
             .accessibilityElement(children: .contain)
