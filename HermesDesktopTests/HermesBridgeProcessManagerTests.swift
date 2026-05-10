@@ -40,6 +40,29 @@ final class HermesBridgeProcessManagerTests: XCTestCase {
         XCTAssertEqual(environment["HERMES_AGENT_PATH"], NSString(string: "~/.hermes/hermes-agent").expandingTildeInPath)
     }
 
+    func testBridgeContractRejectsLegacyBridgeWithoutRequiredRoutes() {
+        let legacyBridge = HermesVersion(version: "diak-hermes-bridge-1.0.0",
+                                         build: "local",
+                                         profile: "production",
+                                         mode: "production_bridge",
+                                         runtime: "hermes-agent")
+
+        XCTAssertFalse(HermesBridgeProcessManager.isCompatibleBridgeVersion(legacyBridge),
+                       "A stale bridge can report healthy production mode while missing newer routes like /skills/draft.")
+    }
+
+    func testBridgeContractAcceptsCurrentBridgeWithRequiredRoutes() {
+        let currentBridge = HermesVersion(version: "diak-hermes-bridge-1.0.0",
+                                          build: "local",
+                                          profile: "production",
+                                          mode: "production_bridge",
+                                          runtime: "hermes-agent",
+                                          bridgeContractVersion: HermesBridgeProcessManager.requiredBridgeContractVersion,
+                                          supportedRoutes: ["/health", "/version", "/skills", "/skills/draft"])
+
+        XCTAssertTrue(HermesBridgeProcessManager.isCompatibleBridgeVersion(currentBridge))
+    }
+
     // MARK: - M12 Slice 3 — bridge secret env injection
 
     func testEnvironmentInjectsComposioSecretsFromSecretStore() {

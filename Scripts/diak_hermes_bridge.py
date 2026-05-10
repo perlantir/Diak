@@ -31,6 +31,22 @@ from typing import Any, Callable, Iterable
 from urllib.parse import urlencode, urlparse
 
 BRIDGE_VERSION = "diak-hermes-bridge-1.0.0"
+BRIDGE_CONTRACT_VERSION = "m12-slice6"
+SUPPORTED_ROUTES = [
+    "/health",
+    "/version",
+    "/config",
+    "/daemon/logs",
+    "/sessions",
+    "/automations",
+    "/connectors",
+    "/skills",
+    "/skills/draft",
+    "/memory",
+    "/approvals",
+    "/evidence",
+    "/settings/secrets",
+]
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 DEFAULT_STATE_PATH = Path.home() / ".hermes" / "diak" / "bridge_state.json"
@@ -1245,6 +1261,8 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
             "profile": "production",
             "mode": "production_bridge",
             "runtime": "hermes-agent",
+            "bridge_contract_version": BRIDGE_CONTRACT_VERSION,
+            "supported_routes": SUPPORTED_ROUTES,
             "provider": provider,
             "model": model,
         }

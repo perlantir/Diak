@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 public struct HermesBridgeLaunchResult: Equatable, Sendable {
@@ -15,6 +16,7 @@ public struct HermesBridgeLaunchResult: Equatable, Sendable {
 public enum HermesBridgeLaunchError: Error, Equatable, LocalizedError, Sendable {
     case scriptNotFound
     case launchFailed(String)
+    case incompatibleBridge(String)
 
     public var errorDescription: String? {
         switch self {
@@ -22,6 +24,8 @@ public enum HermesBridgeLaunchError: Error, Equatable, LocalizedError, Sendable 
             return "Could not find the bundled Diak Hermes bridge script."
         case .launchFailed(let detail):
             return "Could not start the local Hermes bridge: \(detail)"
+        case .incompatibleBridge(let detail):
+            return "The local Hermes bridge is incompatible with this Diak build: \(detail)"
         }
     }
 }
@@ -96,6 +100,31 @@ public final class HermesBridgeProcessManager: HermesBridgeManaging {
         .init(account: "composio.setup_url_template", envName: "DIAK_CONNECTOR_SETUP_URL_TEMPLATE", isSensitive: false),
     ]
 
+    public nonisolated static let requiredBridgeContractVersion = "m12-slice6"
+    public nonisolated static let requiredSupportedRoutes: Set<String> = [
+        "/health",
+        "/version",
+        "/skills",
+        "/skills/draft",
+    ]
+
+    public nonisolated static func isCompatibleBridgeVersion(_ version: HermesVersion) -> Bool {
+        guard version.mode == "production_bridge",
+              version.runtime == "hermes-agent",
+              version.bridgeContractVersion == requiredBridgeContractVersion,
+              let supportedRoutes = version.supportedRoutes else {
+            return false
+        }
+        return requiredSupportedRoutes.isSubset(of: Set(supportedRoutes))
+    }
+
+    private enum EndpointProbeResult: Equatable {
+        case unavailable
+        case compatible
+        case incompatibleDiakBridge(String)
+        case occupiedByOtherService(String)
+    }
+
     private var process: Process?
     private let configuration: Configuration
     private let fileManager: FileManager
@@ -122,10 +151,29 @@ public final class HermesBridgeProcessManager: HermesBridgeManaging {
                                            note: "Diak Hermes bridge is already managed by this app process.")
         }
 
-        if await endpointResponds() {
+        switch await probeEndpointCompatibility() {
+        case .compatible:
             return HermesBridgeLaunchResult(started: false,
                                            endpoint: configuration.endpoint,
-                                           note: "Existing Diak Hermes bridge is already reachable.")
+                                           note: "Existing Diak Hermes bridge is already reachable and compatible.")
+        case .incompatibleDiakBridge(let detail):
+            terminateLocalBridgeListener()
+            try? await Task.sleep(nanoseconds: UInt64(0.5 * 1_000_000_000))
+            if case .compatible = await probeEndpointCompatibility() {
+                return HermesBridgeLaunchResult(started: false,
+                                               endpoint: configuration.endpoint,
+                                               note: "Existing Diak Hermes bridge became compatible after stale listener cleanup.")
+            }
+            if case .occupiedByOtherService(let occupiedDetail) = await probeEndpointCompatibility() {
+                throw HermesBridgeLaunchError.incompatibleBridge(occupiedDetail)
+            }
+            if case .incompatibleDiakBridge = await probeEndpointCompatibility() {
+                throw HermesBridgeLaunchError.incompatibleBridge("Could not replace stale Diak bridge on port \(configuration.port): \(detail)")
+            }
+        case .occupiedByOtherService(let detail):
+            throw HermesBridgeLaunchError.incompatibleBridge(detail)
+        case .unavailable:
+            break
         }
 
         let script = try resolveBridgeScript()
@@ -139,7 +187,7 @@ public final class HermesBridgeProcessManager: HermesBridgeManaging {
                                                endpoint: configuration.endpoint,
                                                note: "Started Diak Hermes bridge pid \(launched.processIdentifier).")
             }
-            if await endpointResponds() {
+            if case .compatible = await probeEndpointCompatibility() {
                 return HermesBridgeLaunchResult(started: false,
                                                endpoint: configuration.endpoint,
                                                note: "Diak Hermes bridge became reachable while launch attempt \(attempt) was settling.")
@@ -153,7 +201,7 @@ public final class HermesBridgeProcessManager: HermesBridgeManaging {
         if let lastLaunched, lastLaunched.isRunning {
             lastLaunched.terminate()
         }
-        throw HermesBridgeLaunchError.launchFailed("Bridge process started but /health did not become ready within \(configuration.startupTimeoutSeconds)s after retrying. Check \(configuration.logPath.expandedTildePath).")
+        throw HermesBridgeLaunchError.launchFailed("Bridge process started but the Diak bridge contract did not become ready within \(configuration.startupTimeoutSeconds)s after retrying. Check \(configuration.logPath.expandedTildePath).")
     }
 
     public func resolvedPythonExecutablePath() -> String {
@@ -213,17 +261,33 @@ public final class HermesBridgeProcessManager: HermesBridgeManaging {
         return environment
     }
 
-    private func endpointResponds() async -> Bool {
-        guard let healthURL = URL(string: "/health", relativeTo: configuration.endpoint) else { return false }
-        var request = URLRequest(url: healthURL)
+    private func probeEndpointCompatibility() async -> EndpointProbeResult {
+        guard let versionURL = URL(string: "/version", relativeTo: configuration.endpoint) else { return .unavailable }
+        var request = URLRequest(url: versionURL)
         request.timeoutInterval = 0.75
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse else { return false }
-            return (200..<300).contains(http.statusCode)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { return .unavailable }
+            guard (200..<300).contains(http.statusCode) else { return .unavailable }
+            let version = try JSONDecoder().decode(HermesVersion.self, from: data)
+            if Self.isCompatibleBridgeVersion(version) {
+                return .compatible
+            }
+            if isDiakBridgeLike(version) {
+                let contract = version.bridgeContractVersion ?? "missing bridge_contract_version"
+                let routes = version.supportedRoutes?.joined(separator: ",") ?? "missing supported_routes"
+                return .incompatibleDiakBridge("version=\(version.version), mode=\(version.mode ?? "nil"), runtime=\(version.runtime ?? "nil"), contract=\(contract), routes=\(routes)")
+            }
+            return .occupiedByOtherService("Port \(configuration.port) is occupied by a non-Diak service reporting version \(version.version).")
         } catch {
-            return false
+            return .unavailable
         }
+    }
+
+    private func isDiakBridgeLike(_ version: HermesVersion) -> Bool {
+        version.version.localizedCaseInsensitiveContains("diak")
+            || version.mode == "production_bridge"
+            || version.runtime == "hermes-agent"
     }
 
     private func waitForEndpoint(process: Process) async -> Bool {
@@ -232,13 +296,16 @@ public final class HermesBridgeProcessManager: HermesBridgeManaging {
             if !process.isRunning {
                 return false
             }
-            if await endpointResponds() {
+            if case .compatible = await probeEndpointCompatibility() {
                 return true
             }
             let delay = UInt64(configuration.readinessPollIntervalSeconds * 1_000_000_000)
             try? await Task.sleep(nanoseconds: delay)
         }
-        return await endpointResponds()
+        if case .compatible = await probeEndpointCompatibility() {
+            return true
+        }
+        return false
     }
 
     private func resolveBridgeScript() throws -> URL {
@@ -268,6 +335,32 @@ public final class HermesBridgeProcessManager: HermesBridgeManaging {
             return process
         } catch {
             throw HermesBridgeLaunchError.launchFailed(error.localizedDescription)
+        }
+    }
+
+    private func terminateLocalBridgeListener() {
+        guard configuration.host == "127.0.0.1" || configuration.host == "localhost" else { return }
+        let lsof = Process()
+        lsof.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        lsof.arguments = ["-nP", "-t", "-iTCP:\(configuration.port)", "-sTCP:LISTEN"]
+        let pipe = Pipe()
+        lsof.standardOutput = pipe
+        lsof.standardError = Pipe()
+        do {
+            try lsof.run()
+            lsof.waitUntilExit()
+        } catch {
+            return
+        }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let raw = String(data: data, encoding: .utf8) else { return }
+        let currentPID = Int32(ProcessInfo.processInfo.processIdentifier)
+        let pids = raw
+            .split(whereSeparator: { $0 == "\n" || $0 == " " || $0 == "\t" })
+            .compactMap { Int32($0) }
+            .filter { $0 > 0 && $0 != currentPID }
+        for pid in Set(pids) {
+            kill(pid, SIGTERM)
         }
     }
 

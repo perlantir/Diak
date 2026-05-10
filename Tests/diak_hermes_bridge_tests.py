@@ -86,6 +86,8 @@ class DiakHermesBridgeTests(unittest.TestCase):
         payload = json.loads(body)
         self.assertEqual(payload["mode"], "production_bridge")
         self.assertEqual(payload["runtime"], "hermes-agent")
+        self.assertEqual(payload["bridge_contract_version"], bridge.BRIDGE_CONTRACT_VERSION)
+        self.assertIn("/skills/draft", payload["supported_routes"])
         self.assertNotIn("diak-dev-daemon", payload["version"])
 
     def test_create_session_calls_runtime_and_stores_messages(self):
