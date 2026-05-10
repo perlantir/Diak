@@ -1,6 +1,6 @@
 # Hermes Desktop / Diak Autonomous Build Status
 
-Updated: 2026-05-10 07:27 CDT
+Updated: 2026-05-10 07:59 CDT
 
 ## Current milestone
 
@@ -25,15 +25,16 @@ Commands run from `/Users/perlantir/Projects/HermesDesktop`:
 ```bash
 git status --short
 ps aux | grep -i '[c]laude' | grep -i HermesDesktop || true
+pgrep -af claude | grep -i HermesDesktop || true
 xcodebuild -list
 command -v xcodegen && xcodegen --version || true
 xcodegen generate
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -configuration Debug build
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' test
-git status --short && git diff --check
 lsof -nP -iTCP:8765 -sTCP:LISTEN || true
-for path in /health /version /sessions /automations /connectors /skills /memory; do curl -sS -m 2 -i "http://127.0.0.1:8765$path"; done
-git log --oneline -3 && git status -sb
+for path in /health /version /sessions /automations /connectors /skills /memory; do curl -sS -m 2 -o /tmp/diak_probe.out -w '%{http_code}' "http://127.0.0.1:8765$path"; done
+git status --short && git diff --check && git status -sb
+git log --oneline -5
 ```
 
 Results:
@@ -45,7 +46,7 @@ Results:
 - `xcodegen generate`: succeeded.
 - Debug macOS build: succeeded.
 - Full macOS test suite: succeeded — **132 tests, 0 failures**.
-- Latest direct passing test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_07-27-29--0500.xcresult`.
+- Latest direct passing test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_07-59-26--0500.xcresult`.
 - `git diff --check`: succeeded.
 - Working tree before status-file refresh: clean.
 - Local daemon listener: `Python` process on `127.0.0.1:8765`.
@@ -83,8 +84,8 @@ No Claude Code builder started this run. Starting another coding agent would be 
 
 ## Commit / branch status
 
-- Current commit before this status-file refresh: `f1b4a3a` (`Update autonomous build status after verification`).
-- Branch: `main...origin/main [ahead 6]` before this status-file refresh.
+- Current commit before this status-file refresh: `80f9d5a` (`Update autonomous build status after verification`).
+- Branch: `main...origin/main [ahead 7]` before this status-file refresh.
 - This cron run did not push.
 - Working tree status before this status-file refresh was clean.
 
