@@ -10,7 +10,7 @@ struct HermesEngineSetupView: View {
                 Text("Connect to Hermes Engine")
                     .font(HermesTypography.title)
                     .foregroundStyle(HermesColors.text)
-                Text("Hermes Desktop talks to your local Hermes Agent daemon over a stable API. The engine remains a separate, updatable component.")
+                Text("Diak talks to your local Hermes Agent daemon over a stable API. The engine remains a separate, updatable component.")
                     .font(HermesTypography.body)
                     .foregroundStyle(HermesColors.muted)
                     .frame(maxWidth: 540)

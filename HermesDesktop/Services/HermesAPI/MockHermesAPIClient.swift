@@ -1026,7 +1026,7 @@ public enum MockHermesData {
             id: "msg-stream-user",
             sessionID: "sess-streaming",
             role: .user,
-            content: "Draft release notes for the Hermes Desktop permissions system and include the approval UX improvements.",
+            content: "Draft release notes for the Diak permissions system and include the approval UX improvements.",
             createdAt: referenceDate.addingTimeInterval(-30)
         )
     ]
@@ -1141,7 +1141,7 @@ public enum MockHermesData {
                 method: "POST",
                 recipient: "#release",
                 bodyPreview: """
-                Heads up team — Hermes Desktop M2 has a migration ready to apply.
+                Heads up team — Diak M2 has a migration ready to apply.
                 I’ll wait for an explicit approval before running it on staging.
                 """
             ))
@@ -1457,7 +1457,7 @@ public enum MockHermesData {
 
     // MARK: Connectors (M5 fixtures)
 
-    public static let connectorBoundaryNote: String = "Hermes Desktop only manages connector records through the daemon API boundary. Real OAuth, credential storage, and outbound writes remain daemon-owned and audited through the approval system."
+    public static let connectorBoundaryNote: String = "Diak only manages connector records through the daemon API boundary. Real OAuth, credential storage, and outbound writes remain daemon-owned and audited through the approval system."
 
     public static let connectors: [HermesConnector] = [
         HermesConnector(
@@ -1582,7 +1582,7 @@ public enum MockHermesData {
 
     // MARK: Skills (M6 fixtures)
 
-    public static let skillBoundaryNote: String = "Hermes Desktop manages skill records through the daemon API. Real installation, sandboxing, and execution remain daemon-owned and audited through the approval system."
+    public static let skillBoundaryNote: String = "Diak manages skill records through the daemon API. Real installation, sandboxing, and execution remain daemon-owned and audited through the approval system."
 
     public static let skills: [HermesSkill] = [
         HermesSkill(
@@ -1729,7 +1729,7 @@ public enum MockHermesData {
 
     // MARK: Memory (M6 fixtures)
 
-    public static let memoryBoundaryNote: String = "Hermes Desktop reads and edits memory entries through the typed daemon API. Real persistence, embedding, and indexing remain daemon-owned. Edits and deletes always queue a review step before applying."
+    public static let memoryBoundaryNote: String = "Diak reads and edits memory entries through the typed daemon API. Real persistence, embedding, and indexing remain daemon-owned. Edits and deletes always queue a review step before applying."
 
     public static let memoryItems: [HermesMemoryItem] = [
         HermesMemoryItem(

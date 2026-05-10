@@ -23,6 +23,12 @@ Package.resolved
 *.xcresult
 TestResults/
 
+# Local release/signing inputs and generated packages
+ExportOptions.plist
+*.dmg
+*.dmg.sha256
+*.xcarchive/
+
 # IDE
 .idea/
 .vscode/

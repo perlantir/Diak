@@ -12,12 +12,12 @@ struct OnboardingCompleteView: View {
             Text("You're all set")
                 .font(HermesTypography.title)
                 .foregroundStyle(HermesColors.text)
-            Text("More features will appear here as Hermes milestones land.")
+            Text(AppBrand.onboardingCompletionMessage)
                 .font(HermesTypography.body)
                 .foregroundStyle(HermesColors.muted)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 480)
-            HermesButton("Open Hermes Desktop", kind: .primary) { viewModel.next() }
+            HermesButton("Open Diak", kind: .primary) { viewModel.next() }
             Spacer()
         }
         .padding(HermesSpacing.xxl)

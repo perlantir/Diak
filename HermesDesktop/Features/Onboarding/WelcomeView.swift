@@ -7,10 +7,10 @@ struct WelcomeView: View {
         VStack(spacing: HermesSpacing.xl) {
             Spacer()
             VStack(spacing: HermesSpacing.md) {
-                Text("Welcome to Hermes")
+                Text(AppBrand.onboardingWelcomeTitle)
                     .font(HermesTypography.display)
                     .foregroundStyle(HermesColors.text)
-                Text("Your Mac-native control center for the Hermes Agent.")
+                Text(AppBrand.onboardingWelcomeSubtitle)
                     .font(HermesTypography.body)
                     .foregroundStyle(HermesColors.muted)
                     .multilineTextAlignment(.center)

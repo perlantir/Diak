@@ -117,7 +117,7 @@ public struct ApprovalSheet: View {
                 case .connectorSend(let payload):
                     ConnectorSendPreviewView(payload: payload)
                 case .unknown:
-                    Text("Hermes Desktop doesn’t know how to preview this action yet. Approve only if you trust the agent in this session.")
+                    Text("Diak doesn’t know how to preview this action yet. Approve only if you trust the agent in this session.")
                         .font(HermesTypography.body)
                         .foregroundStyle(HermesColors.muted)
                 }

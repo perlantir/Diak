@@ -34,7 +34,7 @@ public struct OnboardingShellView: View {
             Image(systemName: "sparkles")
                 .font(.system(size: 18, weight: .regular))
                 .foregroundStyle(HermesColors.accent)
-            Text("Hermes Desktop")
+            Text(AppBrand.appName)
                 .font(HermesTypography.bodyStrong)
                 .foregroundStyle(HermesColors.text)
             Spacer()

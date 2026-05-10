@@ -9,7 +9,7 @@ struct SafetyPermissionsView: View {
                 Text("Safety & permissions")
                     .font(HermesTypography.title)
                     .foregroundStyle(HermesColors.text)
-                Text("Hermes Desktop previews every side effect, asks before running risky actions, and never bypasses Hermes safety semantics.")
+                Text("Diak previews every side effect, asks before running risky actions, and never bypasses Hermes safety semantics.")
                     .font(HermesTypography.body)
                     .foregroundStyle(HermesColors.muted)
                     .frame(maxWidth: 540)

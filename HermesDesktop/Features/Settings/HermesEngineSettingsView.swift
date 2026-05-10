@@ -9,7 +9,7 @@ struct HermesEngineSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: HermesSpacing.lg) {
                 SectionHeader("Hermes Engine",
-                              subtitle: "The agent runtime that powers Hermes Desktop.")
+                              subtitle: "The agent runtime that powers Diak.")
 
                 if settings.savedRequiresRestart {
                     RestartRequiredBanner(
@@ -56,7 +56,7 @@ struct HermesEngineSettingsView: View {
                         Text("Endpoint")
                             .font(HermesTypography.bodyStrong)
                             .foregroundStyle(HermesColors.text)
-                        Text("Hermes Desktop talks to the daemon over a local HTTP API.")
+                        Text("Diak talks to the daemon over a local HTTP API.")
                             .font(HermesTypography.caption)
                             .foregroundStyle(HermesColors.muted)
                         TextField("Endpoint", text: $viewModel.endpoint)

@@ -33,7 +33,7 @@ struct HermesDesktopApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("Hermes Desktop") {
+        WindowGroup(AppBrand.windowTitle) {
             RootView(daemon: daemon,
                      engineViewModel: engineViewModel,
                      onboarding: onboarding,
@@ -60,7 +60,7 @@ struct HermesDesktopApp: App {
             }
         }
 
-        Window("Hermes Quick Prompt", id: HermesDesktopApp.quickPromptWindowID) {
+        Window(AppBrand.quickPromptTitle, id: HermesDesktopApp.quickPromptWindowID) {
             QuickPromptView(viewModel: quickPrompt) {
                 quickPrompt.dismiss()
             }

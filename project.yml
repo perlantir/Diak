@@ -1,6 +1,6 @@
 name: HermesDesktop
 options:
-  bundleIdPrefix: com.uberkiwi.hermes
+  bundleIdPrefix: com.uberkiwi.diak
   deploymentTarget:
     macOS: "13.0"
   createIntermediateGroups: true
@@ -32,12 +32,12 @@ targets:
       path: HermesDesktop/Resources/Info.plist
       properties:
         CFBundleName: $(PRODUCT_NAME)
-        CFBundleDisplayName: Hermes Desktop
+        CFBundleDisplayName: Diak
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
         LSMinimumSystemVersion: "13.0"
         LSApplicationCategoryType: public.app-category.productivity
-        NSHumanReadableCopyright: "© 2026 Hermes"
+        NSHumanReadableCopyright: "© 2026 Diak"
         NSHighResolutionCapable: true
     entitlements:
       path: HermesDesktop/Resources/HermesDesktop.entitlements
@@ -47,8 +47,9 @@ targets:
         com.apple.security.files.user-selected.read-only: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.uberkiwi.hermes.desktop
-        PRODUCT_NAME: HermesDesktop
+        PRODUCT_BUNDLE_IDENTIFIER: com.uberkiwi.diak
+        PRODUCT_NAME: Diak
+        PRODUCT_MODULE_NAME: HermesDesktop
         GENERATE_INFOPLIST_FILE: NO
         COMBINE_HIDPI_IMAGES: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -64,10 +65,10 @@ targets:
       - target: HermesDesktop
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.uberkiwi.hermes.desktop.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.uberkiwi.diak.tests
         GENERATE_INFOPLIST_FILE: YES
         BUNDLE_LOADER: "$(TEST_HOST)"
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/HermesDesktop.app/Contents/MacOS/HermesDesktop"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Diak.app/Contents/MacOS/Diak"
 
 schemes:
   HermesDesktop:

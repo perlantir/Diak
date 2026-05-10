@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-/// Typed local "notification inbox" for M7. The Hermes Desktop app
+/// Typed local "notification inbox" for M7. The Diak app
 /// does **not** send real macOS notifications from this code path —
 /// real banners remain a packaging/M8 concern. This service models
 /// the deep-link surface only:

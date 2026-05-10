@@ -477,7 +477,7 @@ public struct HermesDaemonLogSummary: Codable, Equatable, Sendable, Hashable {
 
 // MARK: - Top-level snapshot + draft update
 
-/// What Hermes Desktop reads from the daemon as a single config "snapshot".
+/// What Diak reads from the daemon as a single config "snapshot".
 /// View models pin a draft copy of the parts the user can edit and diff
 /// it against the saved snapshot to drive `hasUnsavedChanges` /
 /// restart-required indicators.
