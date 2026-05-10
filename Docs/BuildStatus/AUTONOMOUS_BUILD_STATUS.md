@@ -1,6 +1,6 @@
 # Hermes Desktop / Diak Autonomous Build Status
 
-Updated: 2026-05-10 10:43 CDT
+Updated: 2026-05-10 10:48 CDT
 
 ## Current milestone
 
@@ -46,9 +46,10 @@ xcodegen generate
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -only-testing:HermesDesktopTests/DaemonStatusViewModelTests -only-testing:HermesDesktopTests/HermesBridgeProcessManagerTests test
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -configuration Debug build
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' test
-APP=$(echo ~/Library/Developer/Xcode/DerivedData/HermesDesktop-*/Build/Products/Debug/Diak.app | awk '{print $1}')
+APP=<latest DerivedData Debug Diak.app>
 test -f "$APP/Contents/Resources/diak_hermes_bridge.py"
 codesign --verify --strict --deep "$APP"
+codesign -d --entitlements :- "$APP"
 git diff --check
 ```
 
@@ -71,14 +72,14 @@ Results:
 - Bundled bridge resource check: **PASS** — `Diak.app/Contents/Resources/diak_hermes_bridge.py` exists.
 - Code-signature integrity check: **PASS** — `codesign --verify --strict --deep` for the Debug app bundle.
 - Debug entitlements confirm `com.apple.security.app-sandbox = false` for the local Hermes bridge path.
-- Latest full test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_10-43-13--0500.xcresult`.
+- Latest full test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_10-47-42--0500.xcresult`.
 - `git diff --check`: **PASS**.
 
 ## Working tree / branch status
 
 - Branch: `main`.
-- Current local commit: `feat: add Diak production Hermes bridge` at `HEAD`.
-- Remote status after commit: `main...origin/main [ahead 14]`.
+- Current local commit: `feat: launch Diak production bridge from app` (`8f609ce`) at `HEAD`.
+- Remote status after commit: `main...origin/main [ahead 15]`.
 - Remaining untracked file is the pre-existing M10 Phase 4 Claude prompt: `Docs/Prompts/CLAUDE_CODE_M10_PHASE4_VISUAL_DAEMON_QA_KICKOFF.md`.
 - This run did not push to GitHub and did not modify cron jobs.
 
