@@ -1,0 +1,13 @@
+{
+  "connectors": {
+    "conn-notion": {
+      "last_error": "Connector provider not configured. Set COMPOSIO_API_KEY plus a Composio setup URL/template, or DIAK_CONNECTOR_SETUP_URL_TEMPLATE.",
+      "pending_approval_id": "appr-conn-setup-8797cbc037b542d0",
+      "status": "error",
+      "sync_status": "error"
+    }
+  },
+  "events": {},
+  "messages": {},
+  "sessions": {}
+}

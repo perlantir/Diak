@@ -1,96 +1,51 @@
-# Hermes Desktop / Diak Autonomous Build Status
+# Autonomous Build Status
 
-Updated: 2026-05-10 10:48 CDT
+Last updated: 2026-05-10 12:03:04 CDT
 
 ## Current milestone
+- Active milestone: M10 Phase 4 local Chat + Canvas visual/daemon-contract QA close-out, with M11 production-bridge evidence refresh.
+- Prior milestones M0–M9 remain locally built and tested; current work is post-release-readiness live dogfood hardening without reimplementing Hermes Agent internals.
 
-M11 — Production Hermes bridge proof is implemented locally and verified. Diak now has a separate production bridge path for real Hermes Agent/runtime execution, distinct from the safe fixture-only compatibility daemon.
+## Builder status
+- Claude Code builder is NOT active for `/Users/perlantir/Projects/HermesDesktop` at this inspection.
+- Previous prompt inspected: `Docs/Prompts/CLAUDE_CODE_M10_PHASE4_VISUAL_DAEMON_QA_KICKOFF.md`.
+- No duplicate builder was started during verification.
 
-M0–M10 remain implemented. The prior M10 Phase 4 Claude Code builder was stopped before completion; no builder output was adopted blindly. Hermes implemented the production bridge directly with tests and provider E2E proof.
-
-## Completed / confirmed this run
-
-- Added production bridge: `Scripts/diak_hermes_bridge.py`.
-  - Binds locally by default.
-  - Exposes Diak's `/health`, `/version`, `/sessions`, `/sessions/{id}`, `/sessions/{id}/messages`, `/sessions/{id}/stream`, and `POST /sessions/{id}/messages` contract.
-  - Uses Hermes Agent gateway runtime resolution instead of hardcoded provider credentials.
-  - Reports `/version.mode = production_bridge` and `/version.runtime = hermes-agent`.
-  - Captures real Hermes streaming deltas and replays them as Diak SSE events.
-  - Persists session/message/event state atomically to JSON unless disabled for tests.
-  - Supports optional bearer token via `DIAK_BRIDGE_TOKEN`.
-- Added repeatable provider E2E probe: `Scripts/diak_provider_e2e_probe.sh`.
-  - Refuses fixture daemon responses.
-  - Verifies nonce in assistant messages and SSE stream.
-  - Captures bridge/provider/session evidence under `qa/diak-provider-e2e-*`.
-- Added TDD coverage: `Tests/diak_hermes_bridge_tests.py`.
-- Extended `HermesVersion` decoding with optional production bridge metadata: `mode`, `runtime`, `provider`, `model`.
-- Added app-managed bridge lifecycle for local/private distribution:
-  - `HermesDesktop/Services/Bridge/HermesBridgeManager.swift` launches the bundled bridge when `127.0.0.1:8765` is unreachable.
-  - `DaemonStatusViewModel` now probes, starts the bridge on `.notReachable`, waits for `/health`, retries health/version, and only then shows offline UI.
-  - `project.yml` copies `Scripts/diak_hermes_bridge.py` into `Diak.app/Contents/Resources/diak_hermes_bridge.py` during build.
-  - Bridge stdout/stderr logs to `~/.hermes/diak/bridge.log`.
-  - App Sandbox is disabled for this local-agent distribution path because Hermes runtime/provider config/tool access lives in normal user-local paths.
-- Added QA/runbook docs:
-  - `Docs/Plans/M11_PRODUCTION_HERMES_BRIDGE.md`
-  - `Docs/QA/M11_PRODUCTION_HERMES_BRIDGE_QA.md`
+## This cron run
+- Confirmed no Claude Code process was running for this repo.
+- Recovered and independently verified the completed M10 Phase 4 slice left uncommitted by the prior builder.
+- M10 Phase 4 changes verified locally:
+  - `Scripts/diak_dev_daemon.py` now exposes fixture-only typed canvas artifacts for canned and newly-created sessions and emits a `canvas_updated` SSE event.
+  - `Scripts/diak_m10_canvas_smoke.sh` records deterministic local daemon contract evidence plus manual light/dark visual QA checklist.
+  - `HermesDesktopTests/DaemonCanvasArtifactContractM10Tests.swift` pins the compatibility daemon canvas artifact and SSE wire shapes.
+  - `HermesDesktop/DesignSystem/Components/ChatComposer.swift` adds accessibility identifiers/labels and a Command-Return send shortcut for QA automation.
+  - `HermesDesktop/Services/HermesAPI/URLSessionHermesAPIClient.swift` uses a 30s request timeout so local/live bridge probes are less brittle.
+- Refreshed M11 QA docs with latest provider E2E PASS evidence and connector setup BLOCKED-as-expected evidence.
 
 ## Verification evidence
+- `ps -axo pid,ppid,stat,etime,command | grep -i '[c]laude' | grep 'HermesDesktop' || true`: no active Claude Code process.
+- `xcodegen generate`: PASS.
+- `xcodebuild -list`: PASS; scheme: `HermesDesktop`; targets: `HermesDesktop`, `HermesDesktopTests`.
+- `xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -configuration Debug build`: PASS.
+- `xcodebuild -scheme HermesDesktop -destination 'platform=macOS' test`: PASS, 170 tests, 0 failures. Result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_12-00-24--0500.xcresult`.
+- `python3 -m unittest -v Tests.diak_hermes_bridge_tests`: PASS, 6 tests, 0 failures.
+- `bash Scripts/diak_m10_canvas_smoke.sh build/m10-cron-20260510-1200`: PASS for deterministic contract probes against existing local compatibility daemon on `127.0.0.1:8765`; report: `build/m10-cron-20260510-1200/M10_CHAT_CANVAS_SMOKE_20260510-120109.md`.
+- `Scripts/m9_release_gate.sh`: PASS; report: `build/m9/M9_RELEASE_GATE_20260510-120118.md`; DMG/package path regenerated locally under `build/dist/`.
+- `git diff --check`: PASS.
+- Secret-like leakage check over new QA evidence: PASS; matches only documented placeholder/env-var names, no credential values.
 
-Commands run from `/Users/perlantir/Projects/HermesDesktop`:
+## Current git state
+- Local `main` before this run: `6128529 feat: serve connector setup from bridge`.
+- Verified changes are ready to commit as a local M10/M11 evidence increment.
+- No push performed from cron.
 
-```bash
-python3 -m unittest Tests.diak_hermes_bridge_tests
-xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -only-testing:HermesDesktopTests/HermesAPIDecodingTests test
-Scripts/diak_provider_e2e_probe.sh
-xcodegen generate
-xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -only-testing:HermesDesktopTests/DaemonStatusViewModelTests -only-testing:HermesDesktopTests/HermesBridgeProcessManagerTests test
-xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -configuration Debug build
-xcodebuild -scheme HermesDesktop -destination 'platform=macOS' test
-APP=<latest DerivedData Debug Diak.app>
-test -f "$APP/Contents/Resources/diak_hermes_bridge.py"
-codesign --verify --strict --deep "$APP"
-codesign -d --entitlements :- "$APP"
-git diff --check
-```
-
-Results:
-
-- Python bridge unit tests: **PASS — 4 tests**.
-- Targeted Swift decoding tests: **PASS — 5 tests**.
-- App-managed bridge lifecycle Swift tests: **PASS — 9 targeted tests**.
-- Provider E2E probe: **PASS**.
-  - Evidence report: `qa/diak-provider-e2e-20260510-102811/DIAK_PROVIDER_E2E_PROBE_20260510-102811.md`.
-  - Bridge mode: `production_bridge`.
-  - Runtime: `hermes-agent`.
-  - Provider: `openai-codex`.
-  - Model: `gpt-5.5`.
-  - Diak session: `sess-diak-4d326638140d4613`.
-  - Hermes session: `20260510_102812_ac9682`.
-- `xcodegen generate`: **PASS**.
-- Debug macOS build: **PASS**.
-- Full macOS XCTest suite: **PASS — 166 tests, 0 failures**.
-- Bundled bridge resource check: **PASS** — `Diak.app/Contents/Resources/diak_hermes_bridge.py` exists.
-- Code-signature integrity check: **PASS** — `codesign --verify --strict --deep` for the Debug app bundle.
-- Debug entitlements confirm `com.apple.security.app-sandbox = false` for the local Hermes bridge path.
-- Latest full test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_10-47-42--0500.xcresult`.
-- `git diff --check`: **PASS**.
-
-## Working tree / branch status
-
-- Branch: `main`.
-- Current milestone implementation commit: `feat: launch Diak production bridge from app` (`8f609ce`).
-- Latest local `main` also includes autonomous status/evidence refresh commits; local branch remains ahead of `origin/main` and was not pushed.
-- Remaining untracked file is the pre-existing M10 Phase 4 Claude prompt: `Docs/Prompts/CLAUDE_CODE_M10_PHASE4_VISUAL_DAEMON_QA_KICKOFF.md`.
-- This run did not push to GitHub and did not modify cron jobs.
-
-## Readiness verdict
-
-- M9 internal dogfood/private beta: **PASS WITH CAVEATS** — app builds/tests and local fixture daemon proof remain available.
-- M10 Chat + Canvas/local UI increments: **PASS locally**.
-- M11 production Hermes bridge proof: **PASS locally** — Diak can now be tested against a real Hermes Agent/provider-backed bridge instead of only `diak-dev-daemon` fixtures.
-- M11 app-managed bridge packaging: **PASS locally** — Debug app bundles the production bridge script, launches it on offline daemon refresh, waits for readiness, and passes code-signature/resource smoke checks.
-- External/public distribution: **STILL BLOCKED** — requires Developer ID signing, notarization, stapling, Gatekeeper validation, and explicit approval before any real connector writes.
+## Known limits / blocked items
+- Production Hermes runtime/provider E2E has PASS evidence from `qa/diak-provider-e2e-20260510-113524/`.
+- Connector OAuth setup is BLOCKED as expected until `COMPOSIO_API_KEY` and/or `DIAK_CONNECTOR_SETUP_URL_TEMPLATE` are configured outside cron; bridge returns `configuration_required` safely.
+- M10 visual light/dark screenshots remain operator-driven/manual; the smoke script provides the deterministic contract report and checklist, not automated screenshot assertions.
+- External Developer ID notarization/stapling remains NOT TESTED because signing/notary credentials are intentionally not used from cron.
 
 ## Next action
-
-Run the signed release/distribution lane with Developer ID credentials: `Scripts/build_release.sh`, `Scripts/create_dmg.sh`, Gatekeeper assessment, notarization submit/wait, stapler validation, then one installed-app smoke test that verifies the app starts the bundled bridge from `/Applications/Diak.app`.
+1. Commit the verified M10 Phase 4 + M11 QA evidence increment locally.
+2. If no builder is active after the commit, start one bounded next hardening prompt only if it can advance without external credentials or side effects.
+3. Do not start connector OAuth/live-write work until the required provider setup credentials are explicitly configured and approved outside this cron context.

@@ -1,0 +1,146 @@
+{
+  "connectors": {},
+  "events": {
+    "sess-diak-4c95cd05f44d4747": [
+      {
+        "message_id": "msg-3cf0642b6f354b97",
+        "role": "assistant",
+        "session_id": "sess-diak-4c95cd05f44d4747",
+        "type": "message_started"
+      },
+      {
+        "message_id": "msg-3cf0642b6f354b97",
+        "text_delta": "D",
+        "type": "message_delta"
+      },
+      {
+        "message_id": "msg-3cf0642b6f354b97",
+        "text_delta": "IA",
+        "type": "message_delta"
+      },
+      {
+        "message_id": "msg-3cf0642b6f354b97",
+        "text_delta": "K",
+        "type": "message_delta"
+      },
+      {
+        "message_id": "msg-3cf0642b6f354b97",
+        "text_delta": "_PROVIDER",
+        "type": "message_delta"
+      },
+      {
+        "message_id": "msg-3cf0642b6f354b97",
+        "text_delta": "_E",
+        "type": "message_delta"
+      },
+      {
+        "message_id": "msg-3cf0642b6f354b97",
+        "text_delta": "2",
+        "type": "message_delta"
+      },
+      {
+        "message_id": "msg-3cf0642b6f354b97",
+        "text_delta": "E",
+        "type": "message_delta"
+      },
+      {
+        "message_id": "msg-3cf0642b6f354b97",
+        "text_delta": "_",
+        "type": "message_delta"
+      },
+      {
+        "message_id": "msg-3cf0642b6f354b97",
+        "text_delta": "202",
+        "type": "message_delta"
+      },
+      {
+        "message_id": "msg-3cf0642b6f354b97",
+        "text_delta": "605",
+        "type": "message_delta"
+      },
+      {
+        "message_id": "msg-3cf0642b6f354b97",
+        "text_delta": "10",
+        "type": "message_delta"
+      },
+      {
+        "message_id": "msg-3cf0642b6f354b97",
+        "text_delta": "-",
+        "type": "message_delta"
+      },
+      {
+        "message_id": "msg-3cf0642b6f354b97",
+        "text_delta": "113",
+        "type": "message_delta"
+      },
+      {
+        "message_id": "msg-3cf0642b6f354b97",
+        "text_delta": "524",
+        "type": "message_delta"
+      },
+      {
+        "message_id": "msg-3cf0642b6f354b97",
+        "text_delta": "_",
+        "type": "message_delta"
+      },
+      {
+        "message_id": "msg-3cf0642b6f354b97",
+        "text_delta": "302",
+        "type": "message_delta"
+      },
+      {
+        "message_id": "msg-3cf0642b6f354b97",
+        "text_delta": "50",
+        "type": "message_delta"
+      },
+      {
+        "content": "DIAK_PROVIDER_E2E_20260510-113524_30250",
+        "message_id": "msg-3cf0642b6f354b97",
+        "type": "message_completed"
+      },
+      {
+        "session_id": "sess-diak-4c95cd05f44d4747",
+        "status": "completed",
+        "type": "session_ended"
+      }
+    ]
+  },
+  "messages": {
+    "sess-diak-4c95cd05f44d4747": [
+      {
+        "content": "Reply exactly with this nonce and no extra words: DIAK_PROVIDER_E2E_20260510-113524_30250",
+        "created_at": "2026-05-10T16:35:25Z",
+        "id": "msg-11781bc46d2f428a",
+        "is_streaming": false,
+        "role": "user",
+        "session_id": "sess-diak-4c95cd05f44d4747",
+        "tool_activities": []
+      },
+      {
+        "content": "DIAK_PROVIDER_E2E_20260510-113524_30250",
+        "created_at": "2026-05-10T16:35:28Z",
+        "id": "msg-3cf0642b6f354b97",
+        "is_streaming": false,
+        "role": "assistant",
+        "session_id": "sess-diak-4c95cd05f44d4747",
+        "tool_activities": []
+      }
+    ]
+  },
+  "sessions": {
+    "sess-diak-4c95cd05f44d4747": {
+      "created_at": "2026-05-10T16:35:25Z",
+      "has_artifacts": false,
+      "hermes_session_id": "20260510_113525_21c3bb",
+      "id": "sess-diak-4c95cd05f44d4747",
+      "model": "gpt-5.5",
+      "pending_approvals": 0,
+      "project": null,
+      "provider": "openai-codex",
+      "status": "completed",
+      "summary": "DIAK_PROVIDER_E2E_20260510-113524_30250",
+      "title": "Reply exactly with this nonce and no extra words: DIAK_PROVIDER_E2E_20260510-113",
+      "updated_at": "2026-05-10T16:35:28Z"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "body": {
+    "version": "diak-hermes-bridge-1.0.0",
+    "build": "local",
+    "profile": "production",
+    "mode": "production_bridge",
+    "runtime": "hermes-agent",
+    "provider": "openai-codex",
+    "model": "gpt-5.5"
+  }
+}

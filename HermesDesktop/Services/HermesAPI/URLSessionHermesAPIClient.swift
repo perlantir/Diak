@@ -359,7 +359,7 @@ public final class URLSessionHermesAPIClient: HermesAPIClient, @unchecked Sendab
         }
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.timeoutInterval = 3
+        request.timeoutInterval = 30
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
             request.httpBody = body

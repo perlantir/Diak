@@ -49,11 +49,18 @@ The probe refuses to pass if:
 
 Latest verified evidence:
 
-- `qa/diak-provider-e2e-20260510-102811/DIAK_PROVIDER_E2E_PROBE_20260510-102811.md`
+- `qa/diak-provider-e2e-20260510-113524/DIAK_PROVIDER_E2E_PROBE_20260510-113524.md`
 - Provider: `openai-codex`
 - Model: `gpt-5.5`
-- Diak session: `sess-diak-4d326638140d4613`
-- Hermes session: `20260510_102812_ac9682`
+- Diak session: `sess-diak-4c95cd05f44d4747`
+- Hermes session: `20260510_113525_21c3bb`
+- Nonce verified in assistant message and SSE stream: `DIAK_PROVIDER_E2E_20260510-113524_30250`
+
+Connector setup dogfood evidence:
+
+- `qa/diak-connector-dogfood-20260510-114012/DIAK_CONNECTOR_DOGFOOD_20260510-114012.md`
+- Result: **BLOCKED as expected/safe** because provider credentials/setup template are not configured in this shell.
+- Bridge returned typed `configuration_required` instead of faking OAuth success.
 
 ## Test gates run
 

@@ -55,6 +55,9 @@ public struct ChatComposer: View {
                     .foregroundStyle(HermesColors.text)
                     .scrollContentBackground(.hidden)
                     .frame(minHeight: 36, maxHeight: 96)
+                    .accessibilityLabel("Chat message input")
+                    .accessibilityHint("Type a request for Hermes")
+                    .accessibilityIdentifier("chat-composer-input")
             }
             primaryButton
         }
@@ -64,10 +67,16 @@ public struct ChatComposer: View {
     private var primaryButton: some View {
         if isStreaming {
             HermesButton("Stop", kind: .secondary, action: onStop)
+                .accessibilityLabel("Stop streaming")
+                .accessibilityIdentifier("chat-composer-stop")
         } else {
             HermesButton("Send", kind: .primary, action: onSend)
                 .opacity(canSend ? 1 : 0.5)
                 .disabled(!canSend)
+                .keyboardShortcut(.return, modifiers: [.command])
+                .accessibilityLabel("Send message")
+                .accessibilityHint(canSend ? "Send the current chat message" : "Enter a message before sending")
+                .accessibilityIdentifier("chat-composer-send")
         }
     }
 

@@ -1,0 +1,158 @@
+{
+  "status": 200,
+  "body": {
+    "connectors": [
+      {
+        "id": "conn-github",
+        "kind": "github",
+        "display_name": "GitHub",
+        "summary": "Read repositories and open issues/PR comments behind approval gates.",
+        "status": "not_connected",
+        "sync_status": "never_synced",
+        "write_policy": "always_ask",
+        "capabilities": [
+          "read",
+          "write"
+        ],
+        "setup_kind": "oauth",
+        "scopes": [
+          {
+            "id": "repo:read",
+            "display_name": "Read repositories",
+            "detail": "Read repositories approved during OAuth.",
+            "is_granted": false,
+            "is_required": true
+          },
+          {
+            "id": "pull_requests:write",
+            "display_name": "Write PR comments",
+            "detail": "Comment or create PR artifacts after approval.",
+            "is_granted": false,
+            "is_required": false
+          }
+        ]
+      },
+      {
+        "id": "conn-gmail",
+        "kind": "gmail",
+        "display_name": "Gmail",
+        "summary": "Read Gmail context and draft/send email only through explicit approval.",
+        "status": "not_connected",
+        "sync_status": "never_synced",
+        "write_policy": "always_ask",
+        "capabilities": [
+          "read",
+          "send"
+        ],
+        "setup_kind": "oauth",
+        "scopes": [
+          {
+            "id": "gmail.readonly",
+            "display_name": "Read mail",
+            "detail": "Search/read mail approved during OAuth.",
+            "is_granted": false,
+            "is_required": true
+          },
+          {
+            "id": "gmail.send",
+            "display_name": "Send mail",
+            "detail": "Send email after explicit Diak approval.",
+            "is_granted": false,
+            "is_required": false
+          }
+        ]
+      },
+      {
+        "id": "conn-linear",
+        "kind": "linear",
+        "display_name": "Linear",
+        "summary": "Read and update Linear issues after OAuth approval.",
+        "status": "not_connected",
+        "sync_status": "never_synced",
+        "write_policy": "always_ask",
+        "capabilities": [
+          "read",
+          "write"
+        ],
+        "setup_kind": "oauth",
+        "scopes": [
+          {
+            "id": "linear.read",
+            "display_name": "Read workspace",
+            "detail": "Read teams/issues approved during OAuth.",
+            "is_granted": false,
+            "is_required": true
+          },
+          {
+            "id": "linear.write",
+            "display_name": "Update issues",
+            "detail": "Create/update issues after approval.",
+            "is_granted": false,
+            "is_required": false
+          }
+        ]
+      },
+      {
+        "id": "conn-notion",
+        "kind": "notion",
+        "display_name": "Notion",
+        "summary": "Read and update Notion pages/databases after OAuth approval.",
+        "status": "not_connected",
+        "sync_status": "never_synced",
+        "write_policy": "always_ask",
+        "capabilities": [
+          "read",
+          "write"
+        ],
+        "setup_kind": "oauth",
+        "scopes": [
+          {
+            "id": "notion.read",
+            "display_name": "Read pages",
+            "detail": "Read workspace pages selected during OAuth.",
+            "is_granted": false,
+            "is_required": true
+          },
+          {
+            "id": "notion.write",
+            "display_name": "Update pages",
+            "detail": "Create/update pages selected during OAuth.",
+            "is_granted": false,
+            "is_required": false
+          }
+        ]
+      },
+      {
+        "id": "conn-slack",
+        "kind": "slack",
+        "display_name": "Slack",
+        "summary": "Search Slack and send messages only after Diak approval policy allows it.",
+        "status": "not_connected",
+        "sync_status": "never_synced",
+        "write_policy": "always_ask",
+        "capabilities": [
+          "read",
+          "send"
+        ],
+        "setup_kind": "oauth",
+        "scopes": [
+          {
+            "id": "channels:history",
+            "display_name": "Read channel history",
+            "detail": "Search/read channels approved in Slack OAuth.",
+            "is_granted": false,
+            "is_required": true
+          },
+          {
+            "id": "chat:write",
+            "display_name": "Send messages",
+            "detail": "Send messages after Diak approval.",
+            "is_granted": false,
+            "is_required": false
+          }
+        ]
+      }
+    ],
+    "boundary_note": "Connectors are wired to the production Diak bridge. Click Connect to open provider OAuth; tokens never enter the desktop app. Provider credentials are not configured yet, so setup will report configuration-required instead of faking success."
+  }
+}

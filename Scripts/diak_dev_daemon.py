@@ -114,6 +114,77 @@ MEMORY = {
     "is_pinned": False,
 }
 
+# Canvas artifact fixtures for M10 Phase 4. The compatibility daemon does not
+# generate, browse, or render anything — it just returns typed references so
+# the Diak chat+canvas split workspace has deterministic content during local
+# QA. The same fixtures are reused for the canned session id and any session
+# the app creates through POST /sessions, so visual smoke runs work end-to-end.
+CANVAS_ARTIFACT_BOUNDARY_NOTE = (
+    "Compatibility daemon: artifacts are typed references only. Real "
+    "browser/code/design execution stays in the production Hermes daemon."
+)
+CANVAS_ARTIFACTS_TEMPLATE = [
+    {
+        "id": "canvas-art-doc",
+        "kind": "document",
+        "title": "Diak QA notes",
+        "summary": "Document tab fixture used by the compatibility daemon.",
+        "preview": "Diak reads typed canvas artifacts through the Hermes Agent boundary; this fixture proves the wire shape.",
+        "created_at": NOW,
+        "ref": {"id": "file-qa-md", "kind": "file", "title": "qa-notes.md", "detail": "Docs/QA/qa-notes.md"},
+    },
+    {
+        "id": "canvas-art-code",
+        "kind": "code",
+        "title": "Diff fixture",
+        "summary": "Code tab fixture; the daemon does not execute or write code.",
+        "preview": "diff --git a/Diak.swift b/Diak.swift\n+ // compatibility daemon fixture",
+        "created_at": NOW,
+        "ref": {"id": "file-diak-diff", "kind": "file", "title": "Diak.swift", "detail": "HermesDesktop/Diak.swift"},
+    },
+    {
+        "id": "canvas-art-browser",
+        "kind": "browser",
+        "title": "Hermes Agent reference",
+        "summary": "Browser tab fixture; the daemon does not navigate or screenshot.",
+        "preview": "https://example.com/hermes-agent",
+        "created_at": NOW,
+        "ref": {"id": "link-hermes-agent", "kind": "link", "title": "Hermes Agent overview", "detail": "example.com"},
+    },
+    {
+        "id": "canvas-art-design",
+        "kind": "design",
+        "title": "Tab strip mock",
+        "summary": "Design tab fixture; the daemon does not render images.",
+        "preview": "Doc · Board · Browser · Code · Design",
+        "created_at": NOW,
+    },
+    {
+        "id": "canvas-art-board",
+        "kind": "board",
+        "title": "QA punch list",
+        "summary": "Board tab fixture; daemon does not mutate trackers.",
+        "preview": "5 fixture artifacts pinned across the canvas tabs.",
+        "created_at": NOW,
+    },
+]
+
+
+def canvas_artifact_payload(session_id: str) -> dict[str, Any]:
+    artifacts = []
+    for template in CANVAS_ARTIFACTS_TEMPLATE:
+        item = json.loads(json.dumps(template))
+        item["session_id"] = session_id
+        artifacts.append(item)
+    return {
+        "session_id": session_id,
+        "boundary_note": CANVAS_ARTIFACT_BOUNDARY_NOTE,
+        "artifacts": artifacts,
+    }
+
+
+CANVAS_ARTIFACT_SESSION_IDS = {SESSION["id"], "sess-diak-live-created"}
+
 CONFIG = {
     "profiles": [
         {"id": "prof-default", "display_name": "Nick", "role": "builder", "default_project_label": "Diak", "is_active": True}
@@ -201,13 +272,20 @@ class Handler(BaseHTTPRequestHandler):
         if path == f"/sessions/{SESSION['id']}/messages":
             return self._send(200, [MESSAGE_USER, MESSAGE_ASSISTANT])
         if path in (f"/sessions/{SESSION['id']}/stream", "/sessions/sess-diak-live-created/stream"):
+            stream_session_id = SESSION["id"] if path.startswith(f"/sessions/{SESSION['id']}") else "sess-diak-live-created"
             return self._send_sse([
-                {"type": "message_started", "message_id": "msg-assistant-stream", "session_id": SESSION["id"], "role": "assistant"},
+                {"type": "message_started", "message_id": "msg-assistant-stream", "session_id": stream_session_id, "role": "assistant"},
                 {"type": "message_delta", "message_id": "msg-assistant-stream", "text_delta": "Diak compatibility stream is working. "},
                 {"type": "message_delta", "message_id": "msg-assistant-stream", "text_delta": "No external side effects were performed."},
+                {"type": "canvas_updated", "update": {"type": "document_section_updated", "title": "Findings", "bullets": ["Compatibility daemon stream parsed by canvas reducer."]}},
                 {"type": "message_completed", "message_id": "msg-assistant-stream"},
-                {"type": "session_ended", "session_id": SESSION["id"], "status": "completed"},
+                {"type": "session_ended", "session_id": stream_session_id, "status": "completed"},
             ])
+        # M10 Phase 4: typed canvas-artifact endpoint. Compatibility fixture
+        # only — the daemon does not own real artifact storage.
+        for canvas_session_id in CANVAS_ARTIFACT_SESSION_IDS:
+            if path == f"/sessions/{canvas_session_id}/canvas/artifacts":
+                return self._send(200, canvas_artifact_payload(canvas_session_id))
         if path == f"/sessions/{SESSION['id']}/evidence" or path == "/evidence":
             return self._send(200, [])
         if path == "/approvals":

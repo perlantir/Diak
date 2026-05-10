@@ -1,0 +1,10 @@
+{
+  "status": 200,
+  "body": {
+    "connector_id": "conn-notion",
+    "setup_kind": "oauth",
+    "state": "configuration_required",
+    "message": "Connector provider is not configured on this Mac. Diak did not fake an OAuth flow.",
+    "approval_id": "appr-conn-setup-8797cbc037b542d0"
+  }
+}

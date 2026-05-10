@@ -1,0 +1,33 @@
+{
+  "status": 200,
+  "body": {
+    "id": "conn-notion",
+    "kind": "notion",
+    "display_name": "Notion",
+    "summary": "Read and update Notion pages/databases after OAuth approval.",
+    "status": "not_connected",
+    "sync_status": "never_synced",
+    "write_policy": "always_ask",
+    "capabilities": [
+      "read",
+      "write"
+    ],
+    "setup_kind": "oauth",
+    "scopes": [
+      {
+        "id": "notion.read",
+        "display_name": "Read pages",
+        "detail": "Read workspace pages selected during OAuth.",
+        "is_granted": false,
+        "is_required": true
+      },
+      {
+        "id": "notion.write",
+        "display_name": "Update pages",
+        "detail": "Create/update pages selected during OAuth.",
+        "is_granted": false,
+        "is_required": false
+      }
+    ]
+  }
+}
