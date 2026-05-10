@@ -54,8 +54,10 @@ Claude Code is not currently running for this project. I did not start a duplica
 
 ## Commit status
 
-M7 changes verified and ready to commit in this run.
+Verified M7 implementation commit:
+
+- `8435835 Implement M7 native Mac integrations`
 
 ## Next action
 
-After the M7 commit, there is no next authorized milestone in the current M0–M7 plan. Next cron run should avoid starting new scope unless a new milestone/package/update task has been explicitly defined.
+There is no next authorized milestone in the current M0–M7 plan. Next cron run should avoid starting new scope unless a new milestone/package/update task has been explicitly defined.
