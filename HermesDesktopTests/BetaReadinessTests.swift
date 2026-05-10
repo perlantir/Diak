@@ -10,17 +10,14 @@ final class BetaReadinessTests: XCTestCase {
         XCTAssertEqual(snapshot.externalDistributionVerdict, .blocked)
     }
 
-    func testM9DefaultTracksExpectedBlockedAndPartialGates() {
+    func testM9DefaultTracksExpectedBlockedGatesAfterCleanDogfoodPasses() {
         let snapshot = BetaReadinessSnapshot.m9Default
 
         XCTAssertEqual(snapshot.blockingGateTitles, [
             "Safe connector write validation",
             "Developer ID signing and notarization"
         ])
-        XCTAssertEqual(snapshot.partialGateTitles, [
-            "First-run visual QA",
-            "Live Hermes daemon E2E"
-        ])
+        XCTAssertTrue(snapshot.partialGateTitles.isEmpty)
     }
 
     func testExternalVerdictPassesOnlyWhenNoGateIsBlockedOrPartial() {

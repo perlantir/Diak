@@ -15,6 +15,8 @@ public enum HermesStreamEvent: Equatable, Sendable {
     case toolStarted(messageID: String, activity: HermesToolActivity)
     /// A tool activity changed status (e.g. running → completed).
     case toolUpdated(messageID: String, activity: HermesToolActivity)
+    /// Typed canvas/workspace update emitted by the daemon or mock stream.
+    case canvasUpdated(HermesCanvasUpdate)
     /// The whole session ended for any reason.
     case sessionEnded(sessionID: String, status: HermesSessionStatus)
 }

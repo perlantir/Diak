@@ -11,9 +11,14 @@ struct ChatRootView: View {
         if viewModel.messages.isEmpty {
             HomeNewChatView(viewModel: viewModel)
         } else {
-            ChatTranscriptView(viewModel: viewModel,
-                               approvals: approvals,
-                               title: viewModel.session?.title ?? "New chat")
+            HSplitView {
+                ChatTranscriptView(viewModel: viewModel,
+                                   approvals: approvals,
+                                   title: viewModel.session?.title ?? "New chat")
+                    .frame(minWidth: 460, idealWidth: 640)
+                ChatCanvasView(canvas: viewModel.canvas)
+                    .frame(minWidth: 360, idealWidth: 460)
+            }
         }
     }
 }

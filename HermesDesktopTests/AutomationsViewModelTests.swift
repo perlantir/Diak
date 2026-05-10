@@ -15,6 +15,7 @@ final class AutomationsViewModelTests: XCTestCase {
         viewModel.draftPrompt = "Every weekday, summarize yesterday's completed work and today's blockers."
         viewModel.draftCron = "30 8 * * 1-5"
         viewModel.draftScheduleDescription = "Weekdays at 8:30 AM"
+        viewModel.draftModelOverride = HermesModelOverride(providerID: "local", providerName: "Local DeepSeek", model: "deepseek-v4-flash-q2")
 
         await viewModel.createFromDraft()
 
@@ -24,6 +25,8 @@ final class AutomationsViewModelTests: XCTestCase {
         XCTAssertEqual(created.status, .active)
         XCTAssertEqual(created.schedule.cron, "30 8 * * 1-5")
         XCTAssertEqual(created.notificationStatus, .daemonUnsupported)
+        XCTAssertEqual(created.modelOverride?.providerID, "local")
+        XCTAssertEqual(created.modelOverride?.model, "deepseek-v4-flash-q2")
 
         await viewModel.testRunSelected()
         XCTAssertEqual(client.testRunAutomationCallCount, 1)
@@ -48,5 +51,20 @@ final class AutomationsViewModelTests: XCTestCase {
         XCTAssertEqual(client.updateAutomationCallCount, 1)
         XCTAssertEqual(viewModel.selectedJob?.schedule.cron, "0 10 * * 1-5")
         XCTAssertEqual(viewModel.selectedJob?.schedule.humanDescription, "Weekdays at 10:00 AM")
+    }
+
+    @MainActor
+    func testUpdateSelectedAutomationModelOverride() async throws {
+        let client = MockHermesAPIClient()
+        let viewModel = AutomationsViewModel(client: client)
+        await viewModel.refresh()
+        viewModel.selectedJobID = "auto-digest"
+        let job = try XCTUnwrap(viewModel.selectedJob)
+        let override = HermesModelOverride(providerID: "local", providerName: "Local DeepSeek", model: "deepseek-v4-flash-q2")
+
+        await viewModel.updateModelOverride(for: job, modelOverride: override)
+
+        XCTAssertEqual(client.updateAutomationCallCount, 1)
+        XCTAssertEqual(viewModel.selectedJob?.modelOverride, override)
     }
 }

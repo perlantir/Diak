@@ -1,0 +1,9 @@
+{
+  "name": "Diak Chat Canvas Import Helper",
+  "id": "diak-chat-canvas-import-helper",
+  "api": "1.0.0",
+  "main": "code.js",
+  "editorType": [
+    "figma"
+  ]
+}

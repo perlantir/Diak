@@ -382,7 +382,8 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
             notificationStatus: request.notificationsEnabled ? .daemonUnsupported : .disabled,
             notificationSummary: request.notificationsEnabled
                 ? "In-app status only: real desktop notifications require daemon/permission support."
-                : "Notifications disabled for this automation."
+                : "Notifications disabled for this automation.",
+            modelOverride: request.modelOverride
         )
         automationJobs[id] = job
         return HermesAutomationMutationResult(job: job, note: "Automation saved locally in mock daemon boundary.")
@@ -402,6 +403,8 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
                 ? "In-app status only: real desktop notifications require daemon/permission support."
                 : "Notifications disabled for this automation."
         }
+        if update.clearsModelOverride == true { job.modelOverride = nil }
+        if let modelOverride = update.modelOverride { job.modelOverride = modelOverride }
         job.updatedAt = Date()
         automationJobs[id] = job
         return HermesAutomationMutationResult(job: job, note: "Automation updated.")
@@ -1049,6 +1052,11 @@ public enum MockHermesData {
                                                                 name: "Read session context",
                                                                 status: .running,
                                                                 summary: "Loading prior chat and project metadata.")))
+        events.append(.canvasUpdated(.documentSectionUpdated(title: "Research & Findings", bullets: [
+            "Prior session context loaded into the workspace.",
+            "Approval UX changes should be summarized with clear evidence."
+        ])))
+        events.append(.canvasUpdated(.taskUpdated(title: "Draft release notes", status: .inProgress, assignee: "Diak", dueLabel: "Now")))
         for chunk in chunks {
             events.append(.messageDelta(messageID: messageID, textDelta: chunk))
         }

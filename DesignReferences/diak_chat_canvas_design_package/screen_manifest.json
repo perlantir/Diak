@@ -1,0 +1,52 @@
+[
+  {
+    "id": "01_01-chat-canvas-document",
+    "title": "Chat + Canvas \u2014 Document",
+    "description": "Dual-pane workspace with chat on the left and a structured project document canvas on the right.",
+    "category": "Chat + Canvas",
+    "width": 1586,
+    "height": 992,
+    "png": "artboards/png/01_01-chat-canvas-document.png",
+    "svg": "artboards/svg/01_01-chat-canvas-document.svg"
+  },
+  {
+    "id": "02_02-chat-canvas-browser",
+    "title": "Chat + Canvas \u2014 Browser",
+    "description": "Dual-pane workspace with live browser research, captured notes, and source links inside the canvas.",
+    "category": "Chat + Canvas",
+    "width": 1586,
+    "height": 992,
+    "png": "artboards/png/02_02-chat-canvas-browser.png",
+    "svg": "artboards/svg/02_02-chat-canvas-browser.svg"
+  },
+  {
+    "id": "03_03-chat-canvas-code",
+    "title": "Chat + Canvas \u2014 Code",
+    "description": "Developer-focused dual-pane workspace with a repository tree, editor tabs, and code diff view.",
+    "category": "Chat + Canvas",
+    "width": 1586,
+    "height": 992,
+    "png": "artboards/png/03_03-chat-canvas-code.png",
+    "svg": "artboards/svg/03_03-chat-canvas-code.svg"
+  },
+  {
+    "id": "04_04-chat-canvas-board",
+    "title": "Chat + Canvas \u2014 Board",
+    "description": "Project-planning board view with milestones in chat and kanban execution inside the canvas.",
+    "category": "Chat + Canvas",
+    "width": 1586,
+    "height": 992,
+    "png": "artboards/png/04_04-chat-canvas-board.png",
+    "svg": "artboards/svg/04_04-chat-canvas-board.svg"
+  },
+  {
+    "id": "05_05-chat-canvas-design",
+    "title": "Chat + Canvas \u2014 Design",
+    "description": "Design canvas view showing generated images, variations, prompt controls, and design-side properties.",
+    "category": "Chat + Canvas",
+    "width": 1586,
+    "height": 992,
+    "png": "artboards/png/05_05-chat-canvas-design.png",
+    "svg": "artboards/svg/05_05-chat-canvas-design.svg"
+  }
+]

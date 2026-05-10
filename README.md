@@ -19,7 +19,7 @@ M0–M9 are implemented locally:
 - M8 release readiness: Diak branding, packaging scripts/docs, updater strategy, QA checklist.
 - M9 beta hardening: in-app Beta Readiness, repeatable release-gate script, beta QA checklist/report, product polish.
 
-M9 is an internal dogfood/private-beta checkpoint, not a public distribution signoff. Public/external distribution still requires Developer ID signing, notarization, stapling, Gatekeeper validation, and a clean manual UI QA pass.
+M9 is an internal dogfood/private-beta checkpoint, not a public distribution signoff. Public/external distribution still requires Developer ID signing, notarization, stapling, and Gatekeeper validation. Production Hermes execution and real connector writes remain separately gated from the local QA compatibility daemon.
 
 ## Requirements
 

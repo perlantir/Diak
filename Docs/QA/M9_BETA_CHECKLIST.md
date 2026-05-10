@@ -40,7 +40,7 @@ Required outcomes:
 - [x] Internal beta verdict is not falsely marked full public release.
 - [x] External distribution remains BLOCKED unless signing/notary evidence exists.
 - [x] Safe connector writes are BLOCKED unless Nick provides safe destinations and explicit approval.
-- [x] Live daemon E2E is PARTIAL until chat/session persistence is proven against a live Hermes Agent daemon.
+- [x] Local Diak-shaped daemon contract passes with the QA compatibility daemon; production Hermes execution remains separately classified as not proven until real chat/session persistence is verified against a live Hermes Agent daemon.
 
 ## Product polish
 
@@ -48,16 +48,16 @@ Required outcomes:
 - [x] Window/app bundle/menu surfaces say `Diak`.
 - [x] Runtime references say `Hermes Agent` / `Hermes Engine` where appropriate.
 - [x] No product-facing `Hermes Desktop` remains in app source.
-- [ ] First-run onboarding is visually clean on a clean macOS account or VM. Latest local DMG-copy launch rendered onboarding but was obstructed by unrelated macOS dialogs; evidence: `qa/diak-m9-dogfood-20260510-054048/M9_DOGFOOD_EVIDENCE_REPORT.md`.
+- [x] First-run onboarding is visually clean from a DMG-copy launch after unrelated macOS prompts were cleared; evidence: `qa/diak-m9-clean-first-run-20260510-080224/M9_CLEAN_FIRST_RUN_AND_DAEMON_EVIDENCE_REPORT.md`.
 
 ## Live dogfood gates
 
 These are required before calling beta fully green:
 
-- [ ] Fresh install from DMG.
-- [ ] First launch onboarding complete/skip persists across relaunch.
-- [ ] Offline Hermes Agent state is truthful and non-crashing.
-- [ ] Live Hermes Agent chat task completes or returns a truthful user-visible failure. Latest probe: BLOCKED because no Diak-compatible daemon listens on `127.0.0.1:8765`; Hermes API Server currently exposes a different `/v1/...` contract if enabled.
+- [x] Fresh install from DMG.
+- [ ] First launch onboarding complete/skip persists across relaunch — not completed by automation in this run because local Accessibility privileges are disabled; first-run visual state itself is PASS.
+- [x] Offline Hermes Agent state is truthful and non-crashing.
+- [ ] Production Hermes Agent chat task completes with durable session/model execution evidence. Local contract probe is PASS with the QA compatibility daemon on `127.0.0.1:8765`, but this is not production execution.
 - [ ] Session created by live chat appears in session history.
 - [ ] Approval preview appears before any risky action.
 - [ ] Skill list/detail works; true skill execution classified with artifact evidence or marked PARTIAL/BLOCKED.

@@ -17,6 +17,7 @@ public final class ChatViewModel: ObservableObject {
 
     @Published public private(set) var session: HermesSession?
     @Published public private(set) var messages: [HermesMessage] = []
+    @Published public private(set) var canvas: HermesCanvasState
     @Published public private(set) var phase: Phase = .idle
     @Published public var draft: String = ""
 
@@ -29,6 +30,7 @@ public final class ChatViewModel: ObservableObject {
         self.client = client
         self.session = session
         self.messages = seedMessages
+        self.canvas = HermesCanvasState.bootstrap(sessionTitle: session?.title ?? "Untitled workspace")
     }
 
     public var canSend: Bool {
@@ -71,6 +73,7 @@ public final class ChatViewModel: ObservableObject {
             return
         }
         self.session = createdSession
+        self.canvas = HermesCanvasState.bootstrap(sessionTitle: createdSession.title)
 
         let userMessage = HermesMessage(
             id: "user-\(UUID().uuidString.prefix(8))",
@@ -142,6 +145,9 @@ public final class ChatViewModel: ObservableObject {
                     msg.toolActivities.append(activity)
                 }
             }
+            canvas.apply(.activityAdded(title: activity.name, detail: activity.summary ?? activity.status.displayName))
+        case .canvasUpdated(let update):
+            canvas.apply(update)
         case .sessionEnded(_, let status):
             switch status {
             case .completed: phase = .completed

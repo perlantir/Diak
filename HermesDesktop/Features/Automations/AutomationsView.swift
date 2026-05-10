@@ -161,6 +161,12 @@ private struct CreateAutomationCard: View {
                             .textFieldStyle(.roundedBorder)
                     }
                 }
+                ModelOverridePicker(
+                    title: "Model for this automation",
+                    selection: $viewModel.draftModelOverride,
+                    options: viewModel.modelOptions,
+                    fallbackText: "Use Hermes default model"
+                )
                 Toggle("Show notification delivery/status in UI", isOn: $viewModel.draftNotificationsEnabled)
                     .toggleStyle(.switch)
                 HermesButton("Create automation", kind: .primary) {
@@ -177,12 +183,14 @@ private struct AutomationDetailCard: View {
     @ObservedObject var viewModel: AutomationsViewModel
     @State private var cron: String
     @State private var scheduleDescription: String
+    @State private var selectedModelOverride: HermesModelOverride?
 
     init(job: HermesAutomationJob, viewModel: AutomationsViewModel) {
         self.job = job
         self.viewModel = viewModel
         _cron = State(initialValue: job.schedule.cron)
         _scheduleDescription = State(initialValue: job.schedule.humanDescription)
+        _selectedModelOverride = State(initialValue: job.modelOverride)
     }
 
     var body: some View {
@@ -206,6 +214,27 @@ private struct AutomationDetailCard: View {
                     Text(job.notificationSummary)
                         .font(HermesTypography.caption)
                         .foregroundStyle(HermesColors.muted)
+                }
+
+                Divider().background(HermesColors.border)
+
+                VStack(alignment: .leading, spacing: HermesSpacing.sm) {
+                    SectionHeader("Model routing", subtitle: "Override the default Hermes model for this scheduled job.")
+                    ModelOverridePicker(
+                        title: "Selected model",
+                        selection: $selectedModelOverride,
+                        options: viewModel.modelOptions,
+                        fallbackText: "Use Hermes default model"
+                    )
+                    HStack(spacing: HermesSpacing.sm) {
+                        Text(job.modelOverride?.displayName ?? "Hermes default model")
+                            .font(HermesTypography.caption)
+                            .foregroundStyle(HermesColors.muted)
+                        Spacer()
+                        HermesButton("Save model") {
+                            Task { await viewModel.updateModelOverride(for: job, modelOverride: selectedModelOverride) }
+                        }
+                    }
                 }
 
                 Divider().background(HermesColors.border)
@@ -245,6 +274,30 @@ private struct AutomationDetailCard: View {
             }
         }
         .id(job.id)
+    }
+}
+
+private struct ModelOverridePicker: View {
+    let title: String
+    @Binding var selection: HermesModelOverride?
+    let options: [HermesModelOverride]
+    let fallbackText: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: HermesSpacing.xs) {
+            Text(title)
+                .font(HermesTypography.caption)
+                .foregroundStyle(HermesColors.muted)
+            Picker(title, selection: $selection) {
+                Text(fallbackText).tag(HermesModelOverride?.none)
+                ForEach(options) { option in
+                    Text(option.displayName).tag(Optional(option))
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .disabled(options.isEmpty)
+        }
     }
 }
 

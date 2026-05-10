@@ -9,7 +9,7 @@ Updated: 2026-05-10 05:59 CDT
 - M9 goal: beta hardening, readiness transparency, local release-gate repeatability, and product polish.
 - Internal beta verdict: **PARTIAL PASS / DOGFOOD-READY WITH CAVEATS**
 - Local live-daemon contract verdict: **PASS WITH LOCAL COMPATIBILITY DAEMON** — a Diak-compatible QA daemon now answers the app's `127.0.0.1:8765` contract for local dogfood only.
-- External distribution verdict: **BLOCKED** until Developer ID signing/notarization/stapling/Gatekeeper and clean manual UI QA pass are complete.
+- External distribution verdict: **BLOCKED** until Developer ID signing/notarization/stapling/Gatekeeper evidence exists.
 
 ## M9 implementation coverage
 
@@ -45,20 +45,21 @@ Scripts/m9_release_gate.sh
 Evidence:
 
 - Full XCTest suite: **132 tests, 0 failures**.
-- Release gate report: `build/m9/M9_RELEASE_GATE_20260510-060052.md`.
+- Release gate report: `build/m9/M9_RELEASE_GATE_20260510-081834.md`.
 - DMG: `build/dist/Diak-0.1.0.dmg`.
-- DMG SHA-256: `91474a16bea2878bf97f2972fa7db5a980f057ae6082271c381f2f37d8c1ba6f`.
+- DMG SHA-256: `48cebf02fe02b585ab324d6e5ad0f2f1c49beb6d739d264228677549ee26bc0c`.
 - Built identity: display name `Diak`, bundle id `com.uberkiwi.diak`, executable `Diak`.
-- Local daemon probe report: `qa/diak-m9-dogfood-20260510-054048/DIAK_LIVE_DAEMON_PROBE_20260510-060255.md`.
+- Local daemon probe report: `qa/diak-m9-clean-first-run-20260510-080224/DIAK_LIVE_DAEMON_PROBE_20260510-081334.md`.
+- Clean first-run report: `qa/diak-m9-clean-first-run-20260510-080224/M9_CLEAN_FIRST_RUN_AND_DAEMON_EVIDENCE_REPORT.md`.
 
 ## Readiness classification
 
 - Automated build/test/package: **PASS** by `Scripts/m9_release_gate.sh`.
 - Product branding: **PASS** — app brand is Diak; runtime brand remains Hermes Agent / Hermes Engine.
-- First-run visual QA: **PARTIAL / ENV BLOCKED** — DMG copy launched and onboarding rendered, but local desktop modals obstructed clean verification; needs clean account/VM screenshot pass before public distribution. Weather permission dismissal was explicitly approved by Nick, but local automation could not click it because Accessibility privileges are disabled. Evidence: `qa/diak-m9-dogfood-20260510-054048/M9_DOGFOOD_EVIDENCE_REPORT.md`.
-- Local live daemon contract: **PASS WITH QA COMPATIBILITY DAEMON** — `Scripts/diak_dev_daemon.py` now serves the Diak M9 local API contract on `127.0.0.1:8765`, and `Scripts/diak_live_probe.sh` captured HTTP 200 evidence for health/version/sessions/automations/connectors/skills/memory. Evidence: `qa/diak-m9-dogfood-20260510-054048/DIAK_LIVE_DAEMON_PROBE_20260510-060255.md`.
-- Production/live Hermes daemon E2E: **PARTIAL / NOT PRODUCTION** — the compatibility daemon proves the Diak app contract and local dogfood wiring, but it is not a real Hermes daemon implementation with durable session execution, model streaming, or third-party connector execution.
-- Safe connector writes: **PARTIAL / FIXTURE ONLY** — the compatibility daemon exposes a safe Telegram QA connector fixture and policy endpoints without external side effects. Real connector writes still require Nick-approved safe destinations and exact action approval before any send/post.
+- First-run visual QA: **PASS** — DMG-copy launch was re-run after unrelated macOS prompts were cleared; the foreground onboarding screen was unobstructed and showed Diak branding, `Step 1 of 4`, `Skip`, and `Get started`. Evidence: `qa/diak-m9-clean-first-run-20260510-080224/M9_CLEAN_FIRST_RUN_AND_DAEMON_EVIDENCE_REPORT.md`.
+- Local live daemon contract: **PASS WITH QA COMPATIBILITY DAEMON** — `Scripts/diak_dev_daemon.py` serves the Diak M9 local API contract on `127.0.0.1:8765`, and `Scripts/diak_live_probe.sh` captured HTTP 200 evidence for health/version/sessions/automations/connectors/skills/memory. Latest evidence: `qa/diak-m9-clean-first-run-20260510-080224/DIAK_LIVE_DAEMON_PROBE_20260510-081334.md`.
+- Production/live Hermes daemon E2E: **NOT PROVEN** — the compatibility daemon proves the Diak app contract and local dogfood wiring, but it is not a real Hermes daemon implementation with durable session execution, model streaming, or third-party connector execution.
+- Safe connector writes: **BLOCKED FOR REAL EXTERNAL WRITES / FIXTURE POLICY PASS** — the compatibility daemon exposes a safe Telegram QA connector fixture and policy endpoints without external side effects. Real connector writes still require Nick-approved safe destinations and exact action approval before any send/post.
 - External signing/notarization: **BLOCKED** — requires Apple Developer ID/notary credentials outside git.
 
 ## Known caveats

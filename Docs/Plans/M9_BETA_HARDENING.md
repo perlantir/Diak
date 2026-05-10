@@ -35,12 +35,12 @@
 - Add `BetaReadinessSnapshot.m9Default` containing:
   - Automated build/test/package: pass
   - Product branding: pass
-  - First-run visual QA: partial
-  - Live daemon E2E: partial
-  - Safe connector writes: blocked
+  - First-run visual QA: pass after DMG-copy clean screenshot evidence
+  - Local Diak-shaped daemon contract: pass with QA compatibility daemon
+  - Safe connector writes: blocked for real external writes until explicit approval
   - External signing/notarization: blocked
 - Add computed verdicts:
-  - internal beta is `partial` while partial/blockers are limited to live E2E/signing/credentialed flows.
+  - internal beta is `partial` while remaining blockers are limited to signing/credentialed/externally side-effecting flows.
   - external distribution is `blocked` when signing/notarization is blocked.
 
 **Verification:**

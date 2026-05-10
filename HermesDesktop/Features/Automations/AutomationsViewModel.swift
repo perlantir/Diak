@@ -27,6 +27,8 @@ public final class AutomationsViewModel: ObservableObject {
     @Published public var draftCron = "0 9 * * 1-5"
     @Published public var draftScheduleDescription = "Weekdays at 9:00 AM"
     @Published public var draftNotificationsEnabled = true
+    @Published public var draftModelOverride: HermesModelOverride?
+    @Published public private(set) var modelOptions: [HermesModelOverride] = []
 
     private let client: HermesAPIClient
 
@@ -51,6 +53,12 @@ public final class AutomationsViewModel: ObservableObject {
         do {
             let fetched = try await client.automations()
             jobs = fetched
+            if let config = try? await client.config() {
+                modelOptions = Self.modelOptions(from: config.providers)
+                if draftModelOverride == nil {
+                    draftModelOverride = modelOptions.first
+                }
+            }
             if selectedJobID == nil || !fetched.contains(where: { $0.id == selectedJobID }) {
                 selectedJobID = fetched.first?.id
             }
@@ -76,7 +84,8 @@ public final class AutomationsViewModel: ObservableObject {
                 humanDescription: draftScheduleDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? draftCron : draftScheduleDescription,
                 timezone: TimeZone.current.identifier
             ),
-            notificationsEnabled: draftNotificationsEnabled
+            notificationsEnabled: draftNotificationsEnabled,
+            modelOverride: draftModelOverride
         )
         do {
             let result = try await client.createAutomation(request)
@@ -84,6 +93,7 @@ public final class AutomationsViewModel: ObservableObject {
             selectedJobID = result.job.id
             draftTitle = ""
             draftPrompt = ""
+            draftModelOverride = modelOptions.first
             actionState = .succeeded(result.note ?? "Automation created.")
         } catch let error as HermesAPIError {
             actionState = .failed(error.userFacingMessage)
@@ -103,6 +113,21 @@ public final class AutomationsViewModel: ObservableObject {
             let result = try await client.updateAutomation(id: job.id, update: update)
             upsert(result.job)
             actionState = .succeeded(result.note ?? "Schedule updated.")
+        } catch let error as HermesAPIError {
+            actionState = .failed(error.userFacingMessage)
+        } catch {
+            actionState = .failed(error.localizedDescription)
+        }
+    }
+
+    public func updateModelOverride(for job: HermesAutomationJob, modelOverride: HermesModelOverride?) async {
+        actionState = .working("Saving model…")
+        let update = HermesAutomationUpdateRequest(modelOverride: modelOverride,
+                                                   clearsModelOverride: modelOverride == nil)
+        do {
+            let result = try await client.updateAutomation(id: job.id, update: update)
+            upsert(result.job)
+            actionState = .succeeded(result.note ?? "Model override updated.")
         } catch let error as HermesAPIError {
             actionState = .failed(error.userFacingMessage)
         } catch {
@@ -168,6 +193,15 @@ public final class AutomationsViewModel: ObservableObject {
 
     public func acknowledgeAction() {
         actionState = .idle
+    }
+
+    public static func modelOptions(from providers: [HermesModelProvider]) -> [HermesModelOverride] {
+        providers
+            .filter { $0.status != .disabled }
+            .flatMap { provider in
+                let models = provider.availableModels.isEmpty ? provider.defaultModel.map { [$0] } ?? [] : provider.availableModels
+                return models.map { HermesModelOverride(providerID: provider.id, providerName: provider.displayName, model: $0) }
+            }
     }
 
     private func upsert(_ job: HermesAutomationJob) {
