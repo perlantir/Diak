@@ -125,6 +125,10 @@ final class RestartOnlyConfigClient: HermesAPIClient, @unchecked Sendable {
         throw HermesAPIError.http(status: 501, body: nil)
     }
 
+    func createSkillDraft(_ request: HermesSkillDirectDraftRequest) async throws -> HermesSkillMutationResult {
+        throw HermesAPIError.http(status: 501, body: nil)
+    }
+
     func memoryItems() async throws -> HermesMemoryDashboard {
         HermesMemoryDashboard(items: [],
                               boundaryNote: "Memory APIs are not used by settings tests.",

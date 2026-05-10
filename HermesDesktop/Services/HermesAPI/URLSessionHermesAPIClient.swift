@@ -302,6 +302,17 @@ public final class URLSessionHermesAPIClient: HermesAPIClient, @unchecked Sendab
         return try await post("/skills/draft", body: request)
     }
 
+    public func createSkillDraft(_ request: HermesSkillDirectDraftRequest) async throws -> HermesSkillMutationResult {
+        guard request.acknowledgedDaemonInstall else { throw HermesAPIError.invalidURL }
+        let name = request.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = request.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trigger = request.triggerSummary.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, !summary.isEmpty, !trigger.isEmpty else {
+            throw HermesAPIError.invalidURL
+        }
+        return try await post("/skills/draft", body: request)
+    }
+
     // MARK: Memory (M6)
 
     public func memoryItems() async throws -> HermesMemoryDashboard {

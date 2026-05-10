@@ -146,6 +146,13 @@ public protocol HermesAPIClient: Sendable {
     /// install side effect.
     func submitSkillDraft(_ request: HermesSkillDraftRequest) async throws -> HermesSkillMutationResult
 
+    /// Create a skill draft directly from the Skills screen — no chat
+    /// session required. The Mac app captures the user's edited fields
+    /// and the daemon owns install/execution. Implementations must
+    /// reject locally if the user has not acknowledged the daemon-owned
+    /// install side effect or required fields are empty.
+    func createSkillDraft(_ request: HermesSkillDirectDraftRequest) async throws -> HermesSkillMutationResult
+
     // MARK: Memory (M6)
 
     /// Memory dashboard payload. The desktop app reads memory entries

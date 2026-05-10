@@ -19,14 +19,29 @@ struct SkillsView: View {
         )) {
             SkillDraftReviewSheet(viewModel: viewModel)
         }
+        .sheet(isPresented: Binding(
+            get: { viewModel.isDirectAddSheetPresented },
+            set: { isPresented in if !isPresented { viewModel.dismissDirectAddSheet() } }
+        )) {
+            SkillDirectAddSheet(viewModel: viewModel)
+        }
     }
 
     private var skillList: some View {
         VStack(alignment: .leading, spacing: HermesSpacing.md) {
-            HStack {
+            HStack(spacing: HermesSpacing.sm) {
                 SectionHeader("Skills",
-                              subtitle: "Reusable, inspectable skills the daemon can run.")
+                              subtitle: "Reusable, inspectable skills Hermes Agent can run.")
                 Spacer()
+                Button {
+                    viewModel.presentDirectAddSheet()
+                } label: {
+                    Label("Add Skill", systemImage: "plus")
+                        .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .accessibilityIdentifier("skills.addSkillButton")
                 Button { Task { await viewModel.refresh() } } label: {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -141,13 +156,13 @@ struct SkillsView: View {
                         .font(HermesTypography.title)
                         .foregroundStyle(HermesColors.text)
                     Text(viewModel.boundaryNote.isEmpty
-                         ? "Skills are inspected and toggled here. The daemon owns real install and execution."
+                         ? "Skills are inspected and toggled here. Hermes Agent owns real install and execution."
                          : viewModel.boundaryNote)
                         .font(HermesTypography.body)
                         .foregroundStyle(HermesColors.muted)
                 }
                 Spacer()
-                StatusBadge("M6 mock/local", tone: .info)
+                StatusBadge("Hermes Agent owned", tone: .info)
             }
             SkillActionStateBanner(state: viewModel.actionState) {
                 viewModel.acknowledgeAction()
@@ -607,5 +622,212 @@ private struct SkillActionStateBanner: View {
         .padding(HermesSpacing.sm)
         .background(tone.background)
         .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
+    }
+}
+
+// MARK: - Direct add sheet (M12 Slice 6)
+
+private struct SkillDirectAddSheet: View {
+    @ObservedObject var viewModel: SkillsViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: HermesSpacing.lg) {
+            header
+            Divider().background(HermesColors.border)
+            ScrollView {
+                VStack(alignment: .leading, spacing: HermesSpacing.lg) {
+                    fieldsSection
+                    boundarySection
+                    acknowledgementSection
+                }
+            }
+            footer
+        }
+        .padding(HermesSpacing.xl)
+        .frame(minWidth: 580, minHeight: 580)
+        .background(HermesColors.canvas)
+        .accessibilityIdentifier("skills.directAddSheet")
+    }
+
+    private var header: some View {
+        HStack(alignment: .top, spacing: HermesSpacing.md) {
+            Image(systemName: "plus.app")
+                .font(.system(size: 22, weight: .regular))
+                .foregroundStyle(HermesColors.text)
+                .frame(width: 30, height: 30)
+            VStack(alignment: .leading, spacing: HermesSpacing.xs) {
+                Text("Add a skill")
+                    .font(HermesTypography.title)
+                    .foregroundStyle(HermesColors.text)
+                Text("Author a new skill draft. Hermes Agent finalises install and runs the skill — Diak only captures the draft.")
+                    .font(HermesTypography.caption)
+                    .foregroundStyle(HermesColors.muted)
+            }
+            Spacer()
+            StatusBadge("Hermes Agent owns install", tone: .info)
+        }
+    }
+
+    private var fieldsSection: some View {
+        HermesCard {
+            VStack(alignment: .leading, spacing: HermesSpacing.md) {
+                SectionHeader("Draft fields",
+                              subtitle: "Required fields are marked. The Mac app trims whitespace before submitting.")
+                directField(label: "Name",
+                            isRequired: true,
+                            hasError: viewModel.directDraftFieldErrors.contains(.name)) {
+                    TextField("e.g. Project triage summary", text: $viewModel.directDraftName)
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityIdentifier("skills.directAdd.name")
+                }
+                directField(label: "Summary",
+                            isRequired: true,
+                            hasError: viewModel.directDraftFieldErrors.contains(.summary)) {
+                    TextEditor(text: $viewModel.directDraftSummary)
+                        .font(HermesTypography.body)
+                        .frame(minHeight: 60)
+                        .padding(HermesSpacing.xs)
+                        .background(HermesColors.field)
+                        .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
+                        .accessibilityIdentifier("skills.directAdd.summary")
+                }
+                directField(label: "Trigger",
+                            isRequired: true,
+                            hasError: viewModel.directDraftFieldErrors.contains(.triggerSummary),
+                            hint: "When Hermes Agent should reach for this skill.") {
+                    TextEditor(text: $viewModel.directDraftTriggerSummary)
+                        .font(HermesTypography.body)
+                        .frame(minHeight: 50)
+                        .padding(HermesSpacing.xs)
+                        .background(HermesColors.field)
+                        .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
+                        .accessibilityIdentifier("skills.directAdd.trigger")
+                }
+                HStack(spacing: HermesSpacing.md) {
+                    directField(label: "Category", isRequired: false, hasError: false) {
+                        Picker("", selection: $viewModel.directDraftCategory) {
+                            ForEach(HermesSkillCategory.allCases.filter { $0 != .unknown }, id: \.self) { category in
+                                Text(category.displayName).tag(category)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .accessibilityIdentifier("skills.directAdd.category")
+                    }
+                    directField(label: "Risk style", isRequired: false, hasError: false) {
+                        Picker("", selection: $viewModel.directDraftRiskStyle) {
+                            ForEach(HermesSkillRiskStyle.allCases.filter { $0 != .unknown }, id: \.self) { risk in
+                                Text(risk.displayName).tag(risk)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .accessibilityIdentifier("skills.directAdd.risk")
+                    }
+                }
+                directField(label: "Instructions",
+                            isRequired: false,
+                            hasError: false,
+                            hint: "Optional. Notes Hermes Agent should reference when running the skill.") {
+                    TextEditor(text: $viewModel.directDraftInstructions)
+                        .font(HermesTypography.body)
+                        .frame(minHeight: 80)
+                        .padding(HermesSpacing.xs)
+                        .background(HermesColors.field)
+                        .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
+                        .accessibilityIdentifier("skills.directAdd.instructions")
+                }
+            }
+        }
+    }
+
+    private var boundarySection: some View {
+        HermesCard {
+            VStack(alignment: .leading, spacing: HermesSpacing.sm) {
+                SectionHeader("Boundary",
+                              subtitle: "What happens when you submit.")
+                boundaryRow(icon: "checkmark.shield",
+                            text: "Diak persists the draft and shows it in your library.")
+                boundaryRow(icon: "gearshape.2",
+                            text: "Hermes Agent owns the install and any execution side effects.")
+                boundaryRow(icon: "hand.raised",
+                            text: "The skill stays disabled until you flip it on after install.")
+            }
+        }
+    }
+
+    private func boundaryRow(icon: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: HermesSpacing.sm) {
+            Image(systemName: icon)
+                .foregroundStyle(HermesColors.info)
+            Text(text)
+                .font(HermesTypography.body)
+                .foregroundStyle(HermesColors.text)
+            Spacer()
+        }
+    }
+
+    private var acknowledgementSection: some View {
+        HermesCard {
+            VStack(alignment: .leading, spacing: HermesSpacing.sm) {
+                Toggle(isOn: $viewModel.directDraftAcknowledgedInstall) {
+                    Text("I understand Hermes Agent — not Diak — performs the install and runs the skill.")
+                        .font(HermesTypography.body)
+                        .foregroundStyle(HermesColors.text)
+                }
+                .toggleStyle(.checkbox)
+                .accessibilityIdentifier("skills.directAdd.acknowledge")
+                Text("Submission queues an audit entry. The skill appears as a draft until Hermes Agent finishes installing.")
+                    .font(HermesTypography.caption)
+                    .foregroundStyle(HermesColors.muted)
+            }
+        }
+    }
+
+    private var footer: some View {
+        HStack(spacing: HermesSpacing.sm) {
+            Spacer()
+            HermesButton("Cancel") { viewModel.dismissDirectAddSheet() }
+            HermesButton("Create draft", kind: .primary) {
+                Task { await viewModel.submitDirectDraft() }
+            }
+            .disabled(!viewModel.directDraftAcknowledgedInstall || !viewModel.isDirectDraftValid)
+            .accessibilityIdentifier("skills.directAdd.submit")
+        }
+    }
+
+    @ViewBuilder
+    private func directField<Content: View>(label: String,
+                                            isRequired: Bool,
+                                            hasError: Bool,
+                                            hint: String? = nil,
+                                            @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: HermesSpacing.xs) {
+            HStack(spacing: HermesSpacing.xs) {
+                Text(label)
+                    .font(HermesTypography.caption)
+                    .foregroundStyle(HermesColors.muted)
+                if isRequired {
+                    Text("Required")
+                        .font(HermesTypography.caption)
+                        .foregroundStyle(hasError ? HermesColors.danger : HermesColors.subtle)
+                }
+                Spacer()
+            }
+            content()
+                .overlay(
+                    RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous)
+                        .stroke(hasError ? HermesColors.danger : Color.clear, lineWidth: 1)
+                )
+            if hasError {
+                Text("This field is required.")
+                    .font(HermesTypography.caption)
+                    .foregroundStyle(HermesColors.danger)
+            } else if let hint {
+                Text(hint)
+                    .font(HermesTypography.caption)
+                    .foregroundStyle(HermesColors.muted)
+            }
+        }
     }
 }

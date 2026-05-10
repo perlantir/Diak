@@ -97,6 +97,140 @@ final class SkillsViewModelTests: XCTestCase {
         }
     }
 
+    // MARK: - Direct add (M12 Slice 6)
+
+    @MainActor
+    func testDirectAddSheetPresentResetsFields() async throws {
+        let client = MockHermesAPIClient()
+        client.resetSkillState()
+        let viewModel = SkillsViewModel(client: client)
+
+        // Pre-populate to ensure presentDirectAddSheet wipes prior state.
+        viewModel.directDraftName = "stale"
+        viewModel.directDraftSummary = "stale summary"
+        viewModel.directDraftAcknowledgedInstall = true
+
+        viewModel.presentDirectAddSheet()
+
+        XCTAssertTrue(viewModel.isDirectAddSheetPresented)
+        XCTAssertEqual(viewModel.directDraftName, "")
+        XCTAssertEqual(viewModel.directDraftSummary, "")
+        XCTAssertEqual(viewModel.directDraftTriggerSummary, "")
+        XCTAssertFalse(viewModel.directDraftAcknowledgedInstall)
+        XCTAssertTrue(viewModel.directDraftFieldErrors.isEmpty)
+    }
+
+    @MainActor
+    func testDirectAddSubmitRejectsMissingRequiredFields() async throws {
+        let client = MockHermesAPIClient()
+        client.resetSkillState()
+        let viewModel = SkillsViewModel(client: client)
+        await viewModel.refresh()
+
+        viewModel.presentDirectAddSheet()
+        viewModel.directDraftAcknowledgedInstall = true
+        // Leave name/summary/trigger blank.
+        await viewModel.submitDirectDraft()
+
+        XCTAssertEqual(client.createSkillDraftCallCount, 0,
+                       "Validation must reject locally before reaching the daemon.")
+        XCTAssertTrue(viewModel.directDraftFieldErrors.contains(.name))
+        XCTAssertTrue(viewModel.directDraftFieldErrors.contains(.summary))
+        XCTAssertTrue(viewModel.directDraftFieldErrors.contains(.triggerSummary))
+        if case .failed(let message) = viewModel.actionState {
+            XCTAssertTrue(message.lowercased().contains("name"))
+        } else {
+            XCTFail("Expected failed action state, got \(viewModel.actionState)")
+        }
+        XCTAssertTrue(viewModel.isDirectAddSheetPresented,
+                      "Sheet must remain open so the user can correct fields.")
+    }
+
+    @MainActor
+    func testDirectAddSubmitRejectsWithoutAcknowledgement() async throws {
+        let client = MockHermesAPIClient()
+        client.resetSkillState()
+        let viewModel = SkillsViewModel(client: client)
+        await viewModel.refresh()
+
+        viewModel.presentDirectAddSheet()
+        viewModel.directDraftName = "Cleanup helper"
+        viewModel.directDraftSummary = "Tidy up project workspaces."
+        viewModel.directDraftTriggerSummary = "When the user asks to clean up a project."
+        // No acknowledgement.
+        await viewModel.submitDirectDraft()
+
+        XCTAssertEqual(client.createSkillDraftCallCount, 0)
+        if case .failed(let message) = viewModel.actionState {
+            XCTAssertTrue(message.contains("Acknowledge"))
+        } else {
+            XCTFail("Expected failed action state, got \(viewModel.actionState)")
+        }
+    }
+
+    @MainActor
+    func testDirectAddSubmitPersistsSkillAndDismissesSheet() async throws {
+        let client = MockHermesAPIClient()
+        client.resetSkillState()
+        let viewModel = SkillsViewModel(client: client)
+        await viewModel.refresh()
+        let initialCount = viewModel.skills.count
+
+        viewModel.presentDirectAddSheet()
+        viewModel.directDraftName = "Repo health"
+        viewModel.directDraftSummary = "Reports outdated dependencies and stale branches."
+        viewModel.directDraftTriggerSummary = "When the user asks about repo health."
+        viewModel.directDraftCategory = .ops
+        viewModel.directDraftRiskStyle = .safe
+        viewModel.directDraftInstructions = "  Stay read-only.  "
+        viewModel.directDraftAcknowledgedInstall = true
+
+        await viewModel.submitDirectDraft()
+
+        XCTAssertEqual(client.createSkillDraftCallCount, 1)
+        XCTAssertFalse(viewModel.isDirectAddSheetPresented,
+                       "Sheet must dismiss after successful submission.")
+        XCTAssertEqual(viewModel.skills.count, initialCount + 1)
+        let created = try XCTUnwrap(viewModel.skills.first { $0.name == "Repo health" })
+        XCTAssertEqual(created.status, .draft)
+        XCTAssertEqual(created.source, .userCreated)
+        XCTAssertNil(created.sourceSessionID,
+                     "Direct add must not require or attach a chat session id.")
+        XCTAssertFalse(created.isEnabled,
+                       "Newly created drafts must remain disabled until install completes.")
+        XCTAssertTrue(created.artifacts.contains { $0.detail == "Stay read-only." },
+                      "Whitespace-trimmed instructions must travel as a prompt-template artifact.")
+        if case .succeeded = viewModel.actionState {
+            // expected
+        } else {
+            XCTFail("Expected succeeded action state, got \(viewModel.actionState)")
+        }
+    }
+
+    @MainActor
+    func testDirectAddSurfacesOfflineFailure() async throws {
+        let client = MockHermesAPIClient(outcome: .offline)
+        let viewModel = SkillsViewModel(client: client)
+
+        viewModel.presentDirectAddSheet()
+        viewModel.directDraftName = "Offline draft"
+        viewModel.directDraftSummary = "Should not reach the daemon."
+        viewModel.directDraftTriggerSummary = "Never."
+        viewModel.directDraftAcknowledgedInstall = true
+
+        await viewModel.submitDirectDraft()
+
+        XCTAssertEqual(client.createSkillDraftCallCount, 1,
+                       "Offline failure surfaces only after the boundary call is attempted.")
+        if case .failed(let message) = viewModel.actionState {
+            XCTAssertEqual(message, HermesAPIError.notReachable.userFacingMessage)
+        } else {
+            XCTFail("Expected failed action state, got \(viewModel.actionState)")
+        }
+        XCTAssertTrue(viewModel.isDirectAddSheetPresented,
+                      "Sheet must remain open so the user can retry.")
+    }
+
     @MainActor
     func testArchivedSkillCannotBeToggled() async throws {
         let client = MockHermesAPIClient()

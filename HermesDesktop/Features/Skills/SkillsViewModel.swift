@@ -48,6 +48,26 @@ public final class SkillsViewModel: ObservableObject {
     @Published public var draftRiskStyle: HermesSkillRiskStyle = .requiresApproval
     @Published public var draftAcknowledgedInstall: Bool = false
 
+    /// Direct add (M12 Slice 6) state. The user authors a new skill draft
+    /// from the Skills screen without an existing chat session. The Mac
+    /// app captures the fields, validates them, and submits via the
+    /// typed API boundary. Hermes Agent owns install/execution.
+    @Published public var isDirectAddSheetPresented: Bool = false
+    @Published public var directDraftName: String = ""
+    @Published public var directDraftSummary: String = ""
+    @Published public var directDraftTriggerSummary: String = ""
+    @Published public var directDraftCategory: HermesSkillCategory = .general
+    @Published public var directDraftRiskStyle: HermesSkillRiskStyle = .requiresApproval
+    @Published public var directDraftInstructions: String = ""
+    @Published public var directDraftAcknowledgedInstall: Bool = false
+    @Published public private(set) var directDraftFieldErrors: Set<DirectDraftField> = []
+
+    public enum DirectDraftField: Hashable {
+        case name
+        case summary
+        case triggerSummary
+    }
+
     private let client: HermesAPIClient
 
     public init(client: HermesAPIClient) {
@@ -197,6 +217,84 @@ public final class SkillsViewModel: ObservableObject {
 
     public func acknowledgeAction() {
         actionState = .idle
+    }
+
+    // MARK: - Direct Add Skill (M12 Slice 6)
+
+    public func presentDirectAddSheet() {
+        isDirectAddSheetPresented = true
+        directDraftName = ""
+        directDraftSummary = ""
+        directDraftTriggerSummary = ""
+        directDraftCategory = .general
+        directDraftRiskStyle = .requiresApproval
+        directDraftInstructions = ""
+        directDraftAcknowledgedInstall = false
+        directDraftFieldErrors = []
+    }
+
+    public func dismissDirectAddSheet() {
+        isDirectAddSheetPresented = false
+        directDraftFieldErrors = []
+    }
+
+    /// Whether all required fields are non-empty. Used to enable the
+    /// submit button so the user gets immediate feedback.
+    public var isDirectDraftValid: Bool {
+        directDraftMissingFields.isEmpty
+    }
+
+    private var directDraftMissingFields: Set<DirectDraftField> {
+        var missing: Set<DirectDraftField> = []
+        if directDraftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            missing.insert(.name)
+        }
+        if directDraftSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            missing.insert(.summary)
+        }
+        if directDraftTriggerSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            missing.insert(.triggerSummary)
+        }
+        return missing
+    }
+
+    public func submitDirectDraft() async {
+        let missing = directDraftMissingFields
+        if !missing.isEmpty {
+            directDraftFieldErrors = missing
+            actionState = .failed("Fill in name, summary, and trigger before submitting.")
+            return
+        }
+        guard directDraftAcknowledgedInstall else {
+            actionState = .failed("Acknowledge that Hermes Agent owns install before submitting.")
+            return
+        }
+        directDraftFieldErrors = []
+
+        let trimmedInstructions = directDraftInstructions
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let request = HermesSkillDirectDraftRequest(
+            name: directDraftName.trimmingCharacters(in: .whitespacesAndNewlines),
+            summary: directDraftSummary.trimmingCharacters(in: .whitespacesAndNewlines),
+            triggerSummary: directDraftTriggerSummary.trimmingCharacters(in: .whitespacesAndNewlines),
+            category: directDraftCategory,
+            riskStyle: directDraftRiskStyle,
+            instructions: trimmedInstructions.isEmpty ? nil : trimmedInstructions,
+            acknowledgedDaemonInstall: true
+        )
+
+        actionState = .working("Submitting skill draft to Hermes Agent…")
+        do {
+            let result = try await client.createSkillDraft(request)
+            upsert(result.skill)
+            selectedSkillID = result.skill.id
+            actionState = .succeeded(result.note ?? "Skill draft submitted to Hermes Agent.")
+            dismissDirectAddSheet()
+        } catch let error as HermesAPIError {
+            actionState = .failed(error.userFacingMessage)
+        } catch {
+            actionState = .failed(error.localizedDescription)
+        }
     }
 
     private func upsert(_ skill: HermesSkill) {

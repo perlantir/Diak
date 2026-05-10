@@ -150,6 +150,53 @@ class DiakHermesBridgeTests(unittest.TestCase):
         self.assertEqual(second["prompt"], "second")
         self.assertEqual(second["preferred_session_id"], "hermes-session-1")
         self.assertEqual([m["role"] for m in second["history"]], ["user", "assistant"])
+    def test_direct_skill_draft_requires_acknowledgement_and_fields(self):
+        status, _, body = self.harness.request("POST", "/skills/draft", {
+            "name": "Daily QA Brief",
+            "summary": "Summarize overnight QA signals.",
+            "trigger_summary": "When Diak asks for a QA handoff.",
+            "acknowledged_daemon_install": False,
+        })
+        self.assertEqual(status, 400)
+        self.assertIn("acknowledged_daemon_install", body)
+
+        status, _, body = self.harness.request("POST", "/skills/draft", {
+            "name": "Daily QA Brief",
+            "summary": "",
+            "trigger_summary": "When Diak asks for a QA handoff.",
+            "acknowledged_daemon_install": True,
+        })
+        self.assertEqual(status, 400)
+        self.assertIn("summary", body)
+
+    def test_direct_skill_draft_persists_without_session_and_appears_in_catalog(self):
+        status, _, body = self.harness.request("POST", "/skills/draft", {
+            "name": "Daily QA Brief",
+            "summary": "Summarize overnight QA signals.",
+            "trigger_summary": "When Diak asks for a QA handoff.",
+            "category": "ops",
+            "risk_style": "requires_approval",
+            "instructions": "Check test reports, blockers, and release risks.",
+            "acknowledged_daemon_install": True,
+        })
+        self.assertEqual(status, 200)
+        created = json.loads(body)
+        skill = created["skill"]
+        self.assertEqual(skill["status"], "draft")
+        self.assertEqual(skill["source_session_id"], None)
+        self.assertEqual(skill["installed_by"], "Hermes Agent")
+        self.assertEqual(skill["category"], "ops")
+        self.assertEqual(skill["risk_style"], "requires_approval")
+        self.assertEqual(skill["artifacts"][0]["kind"], "prompt_template")
+        self.assertIn("Hermes Agent owns install", created["note"])
+
+        status, _, body = self.harness.request("GET", "/skills")
+        self.assertEqual(status, 200)
+        catalog = json.loads(body)
+        catalog_skill = next(item for item in catalog["skills"] if item["id"] == skill["id"])
+        self.assertEqual(catalog_skill["name"], "Daily QA Brief")
+        self.assertEqual(catalog_skill["source_session_id"], None)
+
     def test_connector_setup_reports_configuration_required_without_provider(self):
         status, _, body = self.harness.request("GET", "/connectors")
         self.assertEqual(status, 200)

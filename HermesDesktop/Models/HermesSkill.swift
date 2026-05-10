@@ -492,3 +492,42 @@ public struct HermesSkillMutationResult: Codable, Equatable, Sendable {
         self.note = note
     }
 }
+
+/// Request body for `createSkillDraft` — the direct add path that does
+/// not require an existing chat session. The Mac app captures the
+/// fields the user authors, the daemon owns install/execution.
+public struct HermesSkillDirectDraftRequest: Codable, Equatable, Sendable {
+    public let name: String
+    public let summary: String
+    public let triggerSummary: String
+    public let category: HermesSkillCategory
+    public let riskStyle: HermesSkillRiskStyle
+    public let instructions: String?
+    public let acknowledgedDaemonInstall: Bool
+
+    public init(name: String,
+                summary: String,
+                triggerSummary: String,
+                category: HermesSkillCategory,
+                riskStyle: HermesSkillRiskStyle,
+                instructions: String?,
+                acknowledgedDaemonInstall: Bool) {
+        self.name = name
+        self.summary = summary
+        self.triggerSummary = triggerSummary
+        self.category = category
+        self.riskStyle = riskStyle
+        self.instructions = instructions
+        self.acknowledgedDaemonInstall = acknowledgedDaemonInstall
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case summary
+        case triggerSummary = "trigger_summary"
+        case category
+        case riskStyle = "risk_style"
+        case instructions
+        case acknowledgedDaemonInstall = "acknowledged_daemon_install"
+    }
+}

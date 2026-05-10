@@ -40,6 +40,7 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     public private(set) var disconnectConnectorCallCount = 0
     public private(set) var queueConnectorSendCallCount = 0
     public private(set) var skillsCallCount = 0
+    public private(set) var createSkillDraftCallCount = 0
     public private(set) var skillCallCount = 0
     public private(set) var setSkillEnabledCallCount = 0
     public private(set) var previewSkillDraftCallCount = 0
@@ -837,6 +838,53 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
         return HermesSkillMutationResult(
             skill: skill,
             note: "Draft submitted to the daemon. The skill will appear as a draft until the daemon finishes installation."
+        )
+    }
+
+    public func createSkillDraft(_ request: HermesSkillDirectDraftRequest) async throws -> HermesSkillMutationResult {
+        createSkillDraftCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        guard request.acknowledgedDaemonInstall else { throw HermesAPIError.invalidURL }
+        let name = request.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = request.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trigger = request.triggerSummary.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, !summary.isEmpty, !trigger.isEmpty else {
+            throw HermesAPIError.invalidURL
+        }
+
+        let now = Date()
+        let id = "skill-direct-\(Int(now.timeIntervalSince1970))-\(UUID().uuidString.prefix(4))"
+        let instructions = request.instructions?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var artifacts: [HermesSkillArtifact] = []
+        if let instructions, !instructions.isEmpty {
+            artifacts.append(
+                HermesSkillArtifact(id: "art-instructions-\(id)",
+                                    kind: .promptTemplate,
+                                    title: "Authoring instructions",
+                                    detail: instructions)
+            )
+        }
+        let skill = HermesSkill(
+            id: id,
+            name: name,
+            summary: summary,
+            status: .draft,
+            category: request.category,
+            source: .userCreated,
+            riskStyle: request.riskStyle,
+            version: "0.1.0",
+            triggerSummary: trigger,
+            usageNotes: "Draft authored from the Skills screen. Hermes Agent finalises install in the background.",
+            artifacts: artifacts,
+            isEnabled: false,
+            sourceSessionID: nil,
+            updatedAt: now,
+            installedBy: "Hermes Agent"
+        )
+        skillIndex[id] = skill
+        return HermesSkillMutationResult(
+            skill: skill,
+            note: "Skill draft submitted. Hermes Agent owns install and execution; it will appear as a draft until install completes."
         )
     }
 

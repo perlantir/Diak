@@ -118,7 +118,7 @@ class BridgeState:
         self.path = path or DEFAULT_STATE_PATH
         self.persist = persist
         self._lock = threading.RLock()
-        self._data: dict[str, Any] = {"sessions": {}, "messages": {}, "events": {}, "connectors": {}, "artifacts": {}, "approvals": {}, "memory": {}, "automations": {}, "skills": {}}
+        self._data: dict[str, Any] = {"sessions": {}, "messages": {}, "events": {}, "connectors": {}, "artifacts": {}, "approvals": {}, "memory": {}, "automations": {}, "skills": {}, "skill_drafts": {}}
         if persist:
             self._load()
 
@@ -136,10 +136,11 @@ class BridgeState:
                     self._data["memory"] = loaded.get("memory", {}) if isinstance(loaded.get("memory", {}), dict) else {}
                     self._data["automations"] = loaded.get("automations", {}) if isinstance(loaded.get("automations", {}), dict) else {}
                     self._data["skills"] = loaded.get("skills", {}) if isinstance(loaded.get("skills", {}), dict) else {}
+                    self._data["skill_drafts"] = loaded.get("skill_drafts", {}) if isinstance(loaded.get("skill_drafts", {}), dict) else {}
         except Exception:
             # Corrupt state must not prevent the bridge from starting.  Keep the
             # bad file for forensic inspection and begin with empty state.
-            self._data = {"sessions": {}, "messages": {}, "events": {}, "connectors": {}, "artifacts": {}, "approvals": {}, "memory": {}, "automations": {}, "skills": {}}
+            self._data = {"sessions": {}, "messages": {}, "events": {}, "connectors": {}, "artifacts": {}, "approvals": {}, "memory": {}, "automations": {}, "skills": {}, "skill_drafts": {}}
 
     def _save_locked(self) -> None:
         if not self.persist:
@@ -646,6 +647,8 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
                 return self._set_automation_status(match.group(1), "paused" if match.group(2) == "pause" else "active")
             if path == "/memory":
                 return self._create_memory(body)
+            if path == "/skills/draft":
+                return self._create_skill_draft(body)
             return self._send_error(404, "Not found")
         except Exception as exc:
             traceback.print_exc()
@@ -1087,7 +1090,7 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
         return self._send_json(200, {"deleted": bool(item), "id": item_id, "note": "Memory deleted from Diak bridge persistence."})
 
     def _skills_catalog(self) -> dict[str, Any]:
-        skills=[]; root=Path.home()/".hermes"/"skills"
+        skills=[]; seen: set[str] = set(); root=Path.home()/".hermes"/"skills"
         if root.exists():
             for path in root.rglob("SKILL.md"):
                 try:
@@ -1097,12 +1100,73 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
                     with self.server.state._lock:
                         enabled=self.server.state._data.setdefault("skills", {}).get(sid, {}).get("is_enabled", True)
                     skills.append({"id": sid, "name": name, "summary": _extract_frontmatter_field(text,"description", "Hermes skill"), "status": "active" if enabled else "disabled", "category": _skill_category_from_path(path), "source": "user_created", "risk_style": "requires_approval", "version": _extract_frontmatter_field(text,"version", "1.0.0"), "trigger_summary": _extract_frontmatter_field(text,"description", "Loaded when relevant."), "usage_notes": str(path), "artifacts": [], "is_enabled": bool(enabled), "source_session_id": None, "updated_at": None, "installed_by": "Hermes Agent"})
+                    seen.add(sid)
                 except Exception: pass
+        with self.server.state._lock:
+            drafts = dict(self.server.state._data.get("skill_drafts", {}))
+        for sid, draft in drafts.items():
+            if sid in seen: continue
+            skills.append(draft)
         skills.sort(key=lambda x: x["name"])
-        return {"skills": skills, "boundary_note": "Live Hermes skill library scanned from ~/.hermes/skills; enable state persisted by Diak bridge.", "active_count": sum(1 for s in skills if s["is_enabled"]), "draft_count": 0, "total_count": len(skills)}
+        draft_count = sum(1 for s in skills if s.get("status") == "draft")
+        return {"skills": skills, "boundary_note": "Live Hermes skill library scanned from ~/.hermes/skills; enable state and drafts persisted by Diak bridge.", "active_count": sum(1 for s in skills if s["is_enabled"]), "draft_count": draft_count, "total_count": len(skills)}
 
     def _get_skill(self, skill_id: str) -> dict[str, Any] | None:
         return next((s for s in self._skills_catalog()["skills"] if s["id"] == skill_id), None)
+
+    def _create_skill_draft(self, body: dict[str, Any]) -> None:
+        # Direct add path: the desktop UI authors a skill draft without an
+        # existing chat session. The bridge persists the draft as a
+        # boundary record so the catalog reflects it; Hermes Agent owns
+        # the actual install/execution side effect.
+        if not bool(body.get("acknowledged_daemon_install")):
+            return self._send_error(400, "acknowledged_daemon_install must be true")
+        name = str(body.get("name") or "").strip()
+        summary = str(body.get("summary") or "").strip()
+        trigger = str(body.get("trigger_summary") or "").strip()
+        if not name or not summary or not trigger:
+            return self._send_error(400, "name, summary, and trigger_summary are required")
+        category = str(body.get("category") or "general").strip().lower() or "general"
+        risk_style = str(body.get("risk_style") or "requires_approval").strip().lower() or "requires_approval"
+        instructions_raw = body.get("instructions")
+        instructions = str(instructions_raw).strip() if isinstance(instructions_raw, str) else ""
+        slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+        skill_id = f"skill-direct-{slug}" if slug else f"skill-direct-{int(time.time())}"
+        # Avoid collisions with existing on-disk skills or prior drafts.
+        if self._get_skill(skill_id) is not None:
+            skill_id = f"{skill_id}-{int(time.time())}"
+        artifacts: list[dict[str, Any]] = []
+        if instructions:
+            artifacts.append({
+                "id": f"art-instructions-{skill_id}",
+                "kind": "prompt_template",
+                "title": "Authoring instructions",
+                "detail": instructions,
+            })
+        skill = {
+            "id": skill_id,
+            "name": name,
+            "summary": summary,
+            "status": "draft",
+            "category": category,
+            "source": "user_created",
+            "risk_style": risk_style,
+            "version": "0.1.0",
+            "trigger_summary": trigger,
+            "usage_notes": "Draft authored from the Skills screen. Hermes Agent finalises install in the background.",
+            "artifacts": artifacts,
+            "is_enabled": False,
+            "source_session_id": None,
+            "updated_at": None,
+            "installed_by": "Hermes Agent",
+        }
+        with self.server.state._lock:
+            self.server.state._data.setdefault("skill_drafts", {})[skill_id] = skill
+            self.server.state._save_locked()
+        return self._send_json(200, {
+            "skill": skill,
+            "note": "Skill draft submitted. Hermes Agent owns install and execution.",
+        })
 
     def _set_skill_enabled(self, skill_id: str, enabled: bool) -> None:
         skill = self._get_skill(skill_id)
