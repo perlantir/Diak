@@ -125,4 +125,45 @@ final class ConnectorsViewModelTests: XCTestCase {
             XCTFail("Expected failed state, got \(viewModel.state)")
         }
     }
+
+
+    @MainActor
+    func testSearchFiltersConnectorCatalogByNameSummaryCapabilityAndScope() async throws {
+        let client = MockHermesAPIClient()
+        client.resetConnectorState()
+        let viewModel = ConnectorsViewModel(client: client)
+        await viewModel.refresh()
+
+        viewModel.searchText = "gmail.send"
+        XCTAssertEqual(viewModel.filteredConnectors.map(\.id), ["conn-gmail"])
+
+        viewModel.searchText = "webhook"
+        XCTAssertEqual(viewModel.filteredConnectors.map(\.id), ["conn-http"])
+
+        viewModel.searchText = "send"
+        XCTAssertTrue(viewModel.filteredConnectors.contains { $0.id == "conn-slack" })
+    }
+
+    @MainActor
+    func testRiskyConnectorActionsRequireExplicitConfirmation() async throws {
+        let client = MockHermesAPIClient()
+        client.resetConnectorState()
+        let viewModel = ConnectorsViewModel(client: client)
+        await viewModel.refresh()
+        let slack = try XCTUnwrap(viewModel.connectors.first { $0.id == "conn-slack" })
+
+        viewModel.requestDisconnect(slack)
+        XCTAssertNotNil(viewModel.pendingSafetyConfirmation)
+        XCTAssertEqual(client.disconnectConnectorCallCount, 0)
+        viewModel.cancelPendingSafetyAction()
+        XCTAssertNil(viewModel.pendingSafetyConfirmation)
+
+        viewModel.requestPolicyUpdate(for: slack, to: .autoApproveLowRisk)
+        XCTAssertNotNil(viewModel.pendingSafetyConfirmation)
+        XCTAssertEqual(client.updateConnectorPolicyCallCount, 0)
+        await viewModel.confirmPendingSafetyAction()
+        XCTAssertNil(viewModel.pendingSafetyConfirmation)
+        XCTAssertEqual(client.updateConnectorPolicyCallCount, 1)
+    }
+
 }

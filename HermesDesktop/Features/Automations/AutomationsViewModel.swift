@@ -21,6 +21,7 @@ public final class AutomationsViewModel: ObservableObject {
     @Published public private(set) var actionState: ActionState = .idle
     @Published public private(set) var jobs: [HermesAutomationJob] = []
     @Published public var selectedJobID: String?
+    @Published public private(set) var pendingDeleteJob: HermesAutomationJob?
 
     @Published public var draftTitle = ""
     @Published public var draftPrompt = ""
@@ -176,8 +177,26 @@ public final class AutomationsViewModel: ObservableObject {
         }
     }
 
+    public func requestDeleteSelected() {
+        pendingDeleteJob = selectedJob
+    }
+
+    public func cancelDeleteConfirmation() {
+        pendingDeleteJob = nil
+    }
+
+    public func confirmDeleteSelected() async {
+        guard let job = pendingDeleteJob else { return }
+        pendingDeleteJob = nil
+        await delete(job)
+    }
+
     public func deleteSelected() async {
         guard let job = selectedJob else { return }
+        await delete(job)
+    }
+
+    private func delete(_ job: HermesAutomationJob) async {
         actionState = .working("Deleting…")
         do {
             let result = try await client.deleteAutomation(id: job.id)

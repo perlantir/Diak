@@ -156,6 +156,34 @@ public struct HermesCanvasState: Equatable, Sendable {
         artifacts.filter { $0.kind.canvasTab == tab }
     }
 
+    /// The artifact a tab should pin as its primary preview. Picks the
+    /// most recently updated artifact (falling back to `createdAt`) so
+    /// the canvas surface is deterministic for a given session payload.
+    /// Ties are broken by `id` to keep the result stable across loads.
+    public func primaryArtifact(for tab: HermesCanvasTab) -> HermesCanvasArtifact? {
+        artifacts(for: tab).max(by: { lhs, rhs in
+            let lhsTime = lhs.updatedAt ?? lhs.createdAt
+            let rhsTime = rhs.updatedAt ?? rhs.createdAt
+            if lhsTime == rhsTime { return lhs.id < rhs.id }
+            return lhsTime < rhsTime
+        })
+    }
+
+    /// Artifacts a tab should list under the primary preview. Excludes
+    /// the primary artifact and orders by recency so the canvas reads
+    /// "most recent first" without the primary appearing twice.
+    public func secondaryArtifacts(for tab: HermesCanvasTab) -> [HermesCanvasArtifact] {
+        let primary = primaryArtifact(for: tab)
+        return artifacts(for: tab)
+            .filter { $0.id != primary?.id }
+            .sorted { lhs, rhs in
+                let lhsTime = lhs.updatedAt ?? lhs.createdAt
+                let rhsTime = rhs.updatedAt ?? rhs.createdAt
+                if lhsTime == rhsTime { return lhs.id < rhs.id }
+                return lhsTime > rhsTime
+            }
+    }
+
     public static func bootstrap(sessionTitle: String) -> HermesCanvasState {
         HermesCanvasState(
             documentTitle: sessionTitle,

@@ -16,7 +16,7 @@ struct ChatCanvasView: View {
                     case .document:
                         documentContent
                     case .board:
-                        taskBoard
+                        boardContent
                     case .browser:
                         tabContent(icon: "globe",
                                    title: "Browser workspace",
@@ -74,6 +74,9 @@ struct ChatCanvasView: View {
 
     private var documentContent: some View {
         VStack(alignment: .leading, spacing: HermesSpacing.md) {
+            if let primary = canvas.primaryArtifact(for: .document) {
+                CanvasDocumentPreview(artifact: primary)
+            }
             ForEach(canvas.sections) { section in
                 HermesCard {
                     VStack(alignment: .leading, spacing: HermesSpacing.sm) {
@@ -92,43 +95,59 @@ struct ChatCanvasView: View {
                     }
                 }
             }
-            artifactList(for: .document)
+            secondaryArtifactList(for: .document)
         }
     }
 
-    private func artifactList(for tab: HermesCanvasTab) -> some View {
-        let artifacts = canvas.artifacts(for: tab)
-        return Group {
-            if !artifacts.isEmpty {
-                VStack(alignment: .leading, spacing: HermesSpacing.sm) {
-                    SectionHeader("Pinned artifacts",
-                                  subtitle: canvas.artifactBoundaryNote ?? "Persisted by the Hermes daemon for this session.")
-                    ForEach(artifacts) { artifact in
-                        HermesCard {
-                            VStack(alignment: .leading, spacing: HermesSpacing.xs) {
-                                HStack {
-                                    Label(artifact.title, systemImage: tab.iconName)
-                                        .font(HermesTypography.bodyStrong)
-                                        .foregroundStyle(HermesColors.text)
-                                    Spacer()
-                                    StatusBadge(artifact.kind.rawValue.capitalized, tone: .info)
-                                }
-                                if let summary = artifact.summary {
-                                    Text(summary)
-                                        .font(HermesTypography.caption)
-                                        .foregroundStyle(HermesColors.muted)
-                                }
-                                if let preview = artifact.preview {
-                                    Text(preview)
-                                        .font(HermesTypography.caption)
-                                        .foregroundStyle(HermesColors.muted)
-                                        .lineLimit(3)
-                                }
+    private var boardContent: some View {
+        VStack(alignment: .leading, spacing: HermesSpacing.md) {
+            if let primary = canvas.primaryArtifact(for: .board) {
+                CanvasBoardPreview(artifact: primary)
+            }
+            taskBoard
+            secondaryArtifactList(for: .board)
+        }
+    }
+
+    /// Lists the non-primary pinned artifacts under a tab so the typed
+    /// preview at the top is never duplicated. When the tab has no
+    /// artifacts at all, surfaces the load-state hint (error / loading)
+    /// so chat remains usable on offline/empty boundaries.
+    @ViewBuilder
+    private func secondaryArtifactList(for tab: HermesCanvasTab) -> some View {
+        let secondary = canvas.secondaryArtifacts(for: tab)
+        let hasPrimary = canvas.primaryArtifact(for: tab) != nil
+        if !secondary.isEmpty {
+            VStack(alignment: .leading, spacing: HermesSpacing.sm) {
+                SectionHeader("Other pinned artifacts",
+                              subtitle: canvas.artifactBoundaryNote ?? "Persisted by the Hermes daemon for this session.")
+                ForEach(secondary) { artifact in
+                    HermesCard {
+                        VStack(alignment: .leading, spacing: HermesSpacing.xs) {
+                            HStack {
+                                Label(artifact.title, systemImage: tab.iconName)
+                                    .font(HermesTypography.bodyStrong)
+                                    .foregroundStyle(HermesColors.text)
+                                Spacer()
+                                StatusBadge(artifact.kind.rawValue.capitalized, tone: .info)
+                            }
+                            if let summary = artifact.summary {
+                                Text(summary)
+                                    .font(HermesTypography.caption)
+                                    .foregroundStyle(HermesColors.muted)
+                            }
+                            if let preview = artifact.preview {
+                                Text(preview)
+                                    .font(HermesTypography.caption)
+                                    .foregroundStyle(HermesColors.muted)
+                                    .lineLimit(3)
                             }
                         }
                     }
                 }
-            } else if let error = artifactLoadError {
+            }
+        } else if !hasPrimary {
+            if let error = artifactLoadError {
                 EmptyStateView(icon: "exclamationmark.triangle",
                                title: "Couldn’t load artifacts",
                                message: error)
@@ -198,13 +217,28 @@ struct ChatCanvasView: View {
 
     @ViewBuilder
     private func tabContent(icon: String, title: String, message: String) -> some View {
-        let artifacts = canvas.artifacts(for: canvas.activeTab)
-        if !artifacts.isEmpty {
-            artifactList(for: canvas.activeTab)
+        if let primary = canvas.primaryArtifact(for: canvas.activeTab) {
+            VStack(alignment: .leading, spacing: HermesSpacing.md) {
+                primaryPreview(for: primary)
+                secondaryArtifactList(for: canvas.activeTab)
+            }
         } else {
-            EmptyStateView(icon: icon, title: title, message: message)
-                .padding(.vertical, HermesSpacing.xl)
-            artifactList(for: canvas.activeTab)
+            VStack(alignment: .leading, spacing: HermesSpacing.md) {
+                EmptyStateView(icon: icon, title: title, message: message)
+                    .padding(.vertical, HermesSpacing.xl)
+                secondaryArtifactList(for: canvas.activeTab)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func primaryPreview(for artifact: HermesCanvasArtifact) -> some View {
+        switch artifact.kind.canvasTab {
+        case .document: CanvasDocumentPreview(artifact: artifact)
+        case .code:     CanvasCodePreview(artifact: artifact)
+        case .browser:  CanvasBrowserPreview(artifact: artifact)
+        case .design:   CanvasDesignPreview(artifact: artifact)
+        case .board:    CanvasBoardPreview(artifact: artifact)
         }
     }
 }

@@ -13,6 +13,10 @@ public protocol HermesAPIClient: Sendable {
     func session(id: String) async throws -> HermesSession
     func messages(sessionID: String) async throws -> [HermesMessage]
     func createSession(prompt: String, projectID: String?) async throws -> HermesSession
+    /// Continue an existing saved session with a follow-up prompt.
+    /// This prevents the desktop app from creating a new session when the
+    /// user is viewing/resuming prior chat history.
+    func continueSession(sessionID: String, prompt: String, projectID: String?) async throws -> HermesSession
 
     /// Stream of incremental events for a session. The real daemon
     /// implementation isn't shipped in M1 — only the mock client returns
@@ -167,4 +171,13 @@ public protocol HermesAPIClient: Sendable {
     /// and any side-effecting writes — the desktop app never produces
     /// real artifacts itself.
     func canvasArtifacts(sessionID: String) async throws -> HermesCanvasArtifactList
+}
+
+public extension HermesAPIClient {
+    /// Compatibility default for narrow test doubles that never exercise
+    /// chat continuation. Production clients should implement the typed
+    /// endpoint explicitly.
+    func continueSession(sessionID: String, prompt: String, projectID: String?) async throws -> HermesSession {
+        throw HermesAPIError.invalidURL
+    }
 }

@@ -13,6 +13,21 @@ struct AutomationsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .task { await viewModel.refresh() }
+        .confirmationDialog(
+            viewModel.pendingDeleteJob.map { "Delete \($0.title)?" } ?? "Delete automation?",
+            isPresented: Binding(
+                get: { viewModel.pendingDeleteJob != nil },
+                set: { isPresented in if !isPresented { viewModel.cancelDeleteConfirmation() } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete automation", role: .destructive) {
+                Task { await viewModel.confirmDeleteSelected() }
+            }
+            Button("Cancel", role: .cancel) { viewModel.cancelDeleteConfirmation() }
+        } message: {
+            Text("The daemon will remove this scheduled job. This cannot be undone from the desktop app.")
+        }
     }
 
     private var automationList: some View {
@@ -268,7 +283,7 @@ private struct AutomationDetailCard: View {
                         Task { await viewModel.pauseOrResumeSelected() }
                     }
                     HermesButton("Delete", kind: .destructive) {
-                        Task { await viewModel.deleteSelected() }
+                        viewModel.requestDeleteSelected()
                     }
                 }
             }

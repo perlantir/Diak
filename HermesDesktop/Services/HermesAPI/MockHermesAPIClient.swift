@@ -15,6 +15,7 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     public private(set) var sessionCallCount = 0
     public private(set) var messagesCallCount = 0
     public private(set) var createSessionCallCount = 0
+    public private(set) var continueSessionCallCount = 0
     public private(set) var streamCallCount = 0
     public private(set) var pendingApprovalsCallCount = 0
     public private(set) var approvalCallCount = 0
@@ -173,6 +174,27 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
             hasArtifacts: false,
             pendingApprovalsCount: 0
         )
+    }
+
+    public func continueSession(sessionID: String, prompt: String, projectID: String?) async throws -> HermesSession {
+        continueSessionCallCount += 1
+        if case .offline = outcome { throw HermesAPIError.notReachable }
+        if let override = sessionsOverride?.first(where: { $0.id == sessionID }) { return override }
+        if let existing = MockHermesData.sessions.first(where: { $0.id == sessionID }) {
+            return HermesSession(
+                id: existing.id,
+                title: existing.title,
+                summary: prompt,
+                status: .running,
+                createdAt: existing.createdAt,
+                updatedAt: Date(),
+                model: existing.model,
+                project: existing.project,
+                hasArtifacts: existing.hasArtifacts,
+                pendingApprovalsCount: existing.pendingApprovalsCount
+            )
+        }
+        throw HermesAPIError.http(status: 404, body: "no session \(sessionID)")
     }
 
     // MARK: Approvals / action evidence (M2)

@@ -176,6 +176,18 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_sse(self, events: list[dict[str, Any]]) -> None:
+        chunks = []
+        for event in events:
+            chunks.append(f"data: {json.dumps(event, separators=(',', ':'))}\n\n")
+        body = "".join(chunks).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         if path == "/health":
@@ -188,6 +200,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, SESSION)
         if path == f"/sessions/{SESSION['id']}/messages":
             return self._send(200, [MESSAGE_USER, MESSAGE_ASSISTANT])
+        if path in (f"/sessions/{SESSION['id']}/stream", "/sessions/sess-diak-live-created/stream"):
+            return self._send_sse([
+                {"type": "message_started", "message_id": "msg-assistant-stream", "session_id": SESSION["id"], "role": "assistant"},
+                {"type": "message_delta", "message_id": "msg-assistant-stream", "text_delta": "Diak compatibility stream is working. "},
+                {"type": "message_delta", "message_id": "msg-assistant-stream", "text_delta": "No external side effects were performed."},
+                {"type": "message_completed", "message_id": "msg-assistant-stream"},
+                {"type": "session_ended", "session_id": SESSION["id"], "status": "completed"},
+            ])
         if path == f"/sessions/{SESSION['id']}/evidence" or path == "/evidence":
             return self._send(200, [])
         if path == "/approvals":
@@ -233,6 +253,11 @@ class Handler(BaseHTTPRequestHandler):
             session["id"] = "sess-diak-live-created"
             session["title"] = prompt[:80]
             session["summary"] = "Created by compatibility daemon."
+            return self._send(200, session)
+        if path == f"/sessions/{SESSION['id']}/messages":
+            session = dict(SESSION)
+            session["status"] = "running"
+            session["summary"] = str(body.get("prompt") or "Continued session")
             return self._send(200, session)
         if path == "/daemon/restart" or path == "/daemon/reconnect":
             return self._send(200, {"accepted": True, "note": "Compatibility daemon acknowledged request; no process restart performed."})

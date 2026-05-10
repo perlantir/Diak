@@ -69,4 +69,31 @@ final class ChatAndSessionsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.messages.first?.role, .user)
         XCTAssertTrue(viewModel.messages.contains { $0.role == .assistant && $0.content.contains("release notes") })
     }
+
+
+    func testFollowUpOnSavedSessionContinuesExistingSessionInsteadOfCreatingNewOne() async {
+        let client = MockHermesAPIClient()
+        client.streamingDelayNanos = 0
+        let session = MockHermesData.sessions.first { $0.id == "sess-001" }!
+        let viewModel = ChatViewModel(client: client, session: session, seedMessages: MockHermesData.messages(for: session.id))
+        viewModel.draft = "Follow up in this saved chat"
+
+        await viewModel.startStreaming()
+        for _ in 0..<20 where viewModel.phase != .completed {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        XCTAssertEqual(client.continueSessionCallCount, 1)
+        XCTAssertEqual(client.createSessionCallCount, 0)
+        XCTAssertEqual(viewModel.session?.id, "sess-001")
+        XCTAssertTrue(viewModel.messages.contains { $0.role == .user && $0.content == "Follow up in this saved chat" })
+    }
+
+    func testHTTP404SurfacesFriendlyActionableMessage() async {
+        let message = HermesAPIError.http(status: 404, body: "not_found").userFacingMessage
+        XCTAssertTrue(message.contains("could not find"))
+        XCTAssertTrue(message.contains("local daemon"))
+        XCTAssertFalse(message.contains("HTTP 404"))
+    }
+
 }

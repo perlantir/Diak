@@ -121,6 +121,61 @@ public struct HermesCanvasArtifact: Codable, Equatable, Sendable, Identifiable, 
     }
 }
 
+// MARK: - Derived preview metadata
+
+public extension HermesCanvasArtifact {
+    /// Best-effort path label for code artifacts. Prefers
+    /// `ref.detail` (full path) and falls back to `ref.title`
+    /// (filename) so the code preview can show a stable header.
+    var codePreviewPath: String? {
+        if let detail = ref?.detail?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !detail.isEmpty {
+            return detail
+        }
+        if let title = ref?.title.trimmingCharacters(in: .whitespacesAndNewlines),
+           !title.isEmpty {
+            return title
+        }
+        return nil
+    }
+
+    /// Inferred language label for code artifacts (e.g. "SWIFT",
+    /// "DIFF"). Derived from the file extension on `ref.title` /
+    /// `ref.detail`. Returns `nil` when no extension is available.
+    var codePreviewLanguage: String? {
+        let candidates = [ref?.detail, ref?.title].compactMap { $0 }
+        for candidate in candidates {
+            let lastComponent = (candidate as NSString).lastPathComponent
+            let ext = (lastComponent as NSString).pathExtension
+            let trimmed = ext.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed.uppercased() }
+        }
+        return nil
+    }
+
+    /// URL extracted from a browser artifact preview/ref. Accepts
+    /// http(s) schemes only so a stray summary string does not get
+    /// promoted to a "link". Returns `nil` when nothing parseable is
+    /// available.
+    var browserPreviewURL: URL? {
+        let candidates = [preview, ref?.detail, ref?.title].compactMap { $0 }
+        for candidate in candidates {
+            let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let url = URL(string: trimmed),
+                  let scheme = url.scheme?.lowercased(),
+                  scheme == "http" || scheme == "https" else { continue }
+            return url
+        }
+        return nil
+    }
+
+    /// Host component of `browserPreviewURL`, suitable for a
+    /// secondary label (e.g. "example.com").
+    var browserPreviewHost: String? {
+        browserPreviewURL?.host
+    }
+}
+
 /// Wire payload returned by `GET /sessions/{id}/canvas/artifacts`. The
 /// `boundaryNote` mirrors the connector/skill/memory pattern so the UI
 /// can surface a daemon-handoff explainer without inventing copy.

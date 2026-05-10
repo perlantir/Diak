@@ -94,9 +94,13 @@ public final class ChatViewModel: ObservableObject {
 
         let projectID = session?.project?.id
 
-        let createdSession: HermesSession
+        let activeSession: HermesSession
         do {
-            createdSession = try await client.createSession(prompt: prompt, projectID: projectID)
+            if let existing = session {
+                activeSession = try await client.continueSession(sessionID: existing.id, prompt: prompt, projectID: projectID)
+            } else {
+                activeSession = try await client.createSession(prompt: prompt, projectID: projectID)
+            }
         } catch let error as HermesAPIError {
             phase = .failed(error.userFacingMessage)
             return
@@ -104,13 +108,16 @@ public final class ChatViewModel: ObservableObject {
             phase = .failed(error.localizedDescription)
             return
         }
-        self.session = createdSession
-        self.canvas = HermesCanvasState.bootstrap(sessionTitle: createdSession.title)
-        await loadArtifacts(for: createdSession.id)
+        let isContinuingExistingSession = session?.id == activeSession.id
+        self.session = activeSession
+        if !isContinuingExistingSession {
+            self.canvas = HermesCanvasState.bootstrap(sessionTitle: activeSession.title)
+            await loadArtifacts(for: activeSession.id)
+        }
 
         let userMessage = HermesMessage(
             id: "user-\(UUID().uuidString.prefix(8))",
-            sessionID: createdSession.id,
+            sessionID: activeSession.id,
             role: .user,
             content: prompt,
             createdAt: Date()
@@ -119,7 +126,7 @@ public final class ChatViewModel: ObservableObject {
         phase = .streaming
 
         streamTask?.cancel()
-        let stream = client.streamEvents(sessionID: createdSession.id)
+        let stream = client.streamEvents(sessionID: activeSession.id)
         streamTask = Task { [weak self] in
             guard let self else { return }
             do {

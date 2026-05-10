@@ -47,6 +47,16 @@ public final class URLSessionHermesAPIClient: HermesAPIClient, @unchecked Sendab
         return try await post("/sessions", body: Body(prompt: prompt, project_id: projectID))
     }
 
+    public func continueSession(sessionID: String, prompt: String, projectID: String?) async throws -> HermesSession {
+        struct Body: Encodable {
+            let prompt: String
+            let project_id: String?
+        }
+        let trimmed = sessionID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw HermesAPIError.invalidURL }
+        return try await post("/sessions/\(trimmed)/messages", body: Body(prompt: prompt, project_id: projectID))
+    }
+
     public func streamEvents(sessionID: String) -> AsyncThrowingStream<HermesStreamEvent, Error> {
         let session = self.session
         let decoder = self.decoder

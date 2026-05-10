@@ -67,4 +67,29 @@ final class AutomationsViewModelTests: XCTestCase {
         XCTAssertEqual(client.updateAutomationCallCount, 1)
         XCTAssertEqual(viewModel.selectedJob?.modelOverride, override)
     }
+
+
+    @MainActor
+    func testDeleteAutomationRequiresExplicitConfirmation() async throws {
+        let client = MockHermesAPIClient()
+        client.resetAutomationState()
+        let viewModel = AutomationsViewModel(client: client)
+        await viewModel.refresh()
+        let initialCount = viewModel.jobs.count
+
+        viewModel.requestDeleteSelected()
+        XCTAssertNotNil(viewModel.pendingDeleteJob)
+        XCTAssertEqual(client.deleteAutomationCallCount, 0)
+
+        viewModel.cancelDeleteConfirmation()
+        XCTAssertNil(viewModel.pendingDeleteJob)
+        XCTAssertEqual(viewModel.jobs.count, initialCount)
+
+        viewModel.requestDeleteSelected()
+        await viewModel.confirmDeleteSelected()
+        XCTAssertNil(viewModel.pendingDeleteJob)
+        XCTAssertEqual(client.deleteAutomationCallCount, 1)
+        XCTAssertEqual(viewModel.jobs.count, initialCount - 1)
+    }
+
 }

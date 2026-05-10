@@ -129,4 +129,133 @@ final class ChatCanvasWorkspaceTests: XCTestCase {
         XCTAssertGreaterThan(viewModel.canvas.artifacts.count, 0)
         XCTAssertEqual(viewModel.canvas.documentTitle, "Project triage")
     }
+
+    // MARK: - M10 Phase 3 — primary/secondary artifact selection
+
+    func testPrimaryArtifactPicksMostRecentlyUpdatedPerTab() {
+        var state = HermesCanvasState.bootstrap(sessionTitle: "Triage")
+        let base = Date(timeIntervalSince1970: 1_700_000_000)
+        state.setArtifacts([
+            HermesCanvasArtifact(id: "a-doc-old",
+                                 sessionID: "s",
+                                 kind: .document,
+                                 title: "Old doc",
+                                 createdAt: base,
+                                 updatedAt: base.addingTimeInterval(60)),
+            HermesCanvasArtifact(id: "a-doc-new",
+                                 sessionID: "s",
+                                 kind: .document,
+                                 title: "New doc",
+                                 createdAt: base.addingTimeInterval(30),
+                                 updatedAt: base.addingTimeInterval(600)),
+            HermesCanvasArtifact(id: "a-code-1",
+                                 sessionID: "s",
+                                 kind: .code,
+                                 title: "Patch",
+                                 createdAt: base.addingTimeInterval(120))
+        ], boundaryNote: nil)
+
+        XCTAssertEqual(state.primaryArtifact(for: .document)?.id, "a-doc-new")
+        XCTAssertEqual(state.primaryArtifact(for: .code)?.id, "a-code-1")
+        XCTAssertNil(state.primaryArtifact(for: .design))
+        XCTAssertEqual(state.secondaryArtifacts(for: .document).map(\.id), ["a-doc-old"])
+        XCTAssertTrue(state.secondaryArtifacts(for: .code).isEmpty)
+    }
+
+    func testPrimaryArtifactBreaksTiesByID() {
+        var state = HermesCanvasState.bootstrap(sessionTitle: "Triage")
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        state.setArtifacts([
+            HermesCanvasArtifact(id: "a-2", sessionID: "s", kind: .browser, title: "Page B", createdAt: now),
+            HermesCanvasArtifact(id: "a-1", sessionID: "s", kind: .browser, title: "Page A", createdAt: now)
+        ], boundaryNote: nil)
+
+        XCTAssertEqual(state.primaryArtifact(for: .browser)?.id, "a-2")
+        XCTAssertEqual(state.secondaryArtifacts(for: .browser).map(\.id), ["a-1"])
+    }
+
+    func testCanvasArtifactCodePreviewDerivesPathAndLanguage() {
+        let now = Date()
+        let withPath = HermesCanvasArtifact(
+            id: "a-1",
+            sessionID: "s",
+            kind: .code,
+            title: "Patch",
+            createdAt: now,
+            ref: HermesArtifactRef(id: "ref-1", kind: .file, title: "Approvals.swift", detail: "src/Agent/Approvals.swift")
+        )
+        XCTAssertEqual(withPath.codePreviewPath, "src/Agent/Approvals.swift")
+        XCTAssertEqual(withPath.codePreviewLanguage, "SWIFT")
+
+        let titleOnly = HermesCanvasArtifact(
+            id: "a-2",
+            sessionID: "s",
+            kind: .code,
+            title: "Diff",
+            createdAt: now,
+            ref: HermesArtifactRef(id: "ref-2", kind: .file, title: "router.diff")
+        )
+        XCTAssertEqual(titleOnly.codePreviewPath, "router.diff")
+        XCTAssertEqual(titleOnly.codePreviewLanguage, "DIFF")
+
+        let noRef = HermesCanvasArtifact(
+            id: "a-3",
+            sessionID: "s",
+            kind: .code,
+            title: "No ref",
+            createdAt: now
+        )
+        XCTAssertNil(noRef.codePreviewPath)
+        XCTAssertNil(noRef.codePreviewLanguage)
+    }
+
+    func testCanvasArtifactBrowserPreviewParsesURLAndHost() {
+        let now = Date()
+        let urlInPreview = HermesCanvasArtifact(
+            id: "a-1",
+            sessionID: "s",
+            kind: .browser,
+            title: "Vendor docs",
+            preview: "https://example.com/migrations/v3-release-notes",
+            createdAt: now
+        )
+        XCTAssertEqual(urlInPreview.browserPreviewURL?.scheme, "https")
+        XCTAssertEqual(urlInPreview.browserPreviewHost, "example.com")
+
+        let nonURLPreview = HermesCanvasArtifact(
+            id: "a-2",
+            sessionID: "s",
+            kind: .browser,
+            title: "No URL",
+            summary: "A browser snapshot summary",
+            preview: "11 open PRs · 2 require review",
+            createdAt: now
+        )
+        XCTAssertNil(nonURLPreview.browserPreviewURL)
+        XCTAssertNil(nonURLPreview.browserPreviewHost)
+
+        let urlInRef = HermesCanvasArtifact(
+            id: "a-3",
+            sessionID: "s",
+            kind: .browser,
+            title: "Linked",
+            preview: nil,
+            createdAt: now,
+            ref: HermesArtifactRef(id: "ref", kind: .link, title: "release notes", detail: "https://example.org/notes")
+        )
+        XCTAssertEqual(urlInRef.browserPreviewURL?.host, "example.org")
+    }
+
+    func testSecondaryArtifactsExcludePrimaryAndSortByRecency() {
+        var state = HermesCanvasState.bootstrap(sessionTitle: "Workspace")
+        let base = Date(timeIntervalSince1970: 1_700_000_000)
+        state.setArtifacts([
+            HermesCanvasArtifact(id: "old", sessionID: "s", kind: .design, title: "Old", createdAt: base),
+            HermesCanvasArtifact(id: "mid", sessionID: "s", kind: .design, title: "Mid", createdAt: base.addingTimeInterval(60)),
+            HermesCanvasArtifact(id: "new", sessionID: "s", kind: .design, title: "New", createdAt: base.addingTimeInterval(120))
+        ], boundaryNote: nil)
+
+        XCTAssertEqual(state.primaryArtifact(for: .design)?.id, "new")
+        XCTAssertEqual(state.secondaryArtifacts(for: .design).map(\.id), ["mid", "old"])
+    }
 }
