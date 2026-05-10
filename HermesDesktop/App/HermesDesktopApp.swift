@@ -16,15 +16,18 @@ struct HermesDesktopApp: App {
 
     private let client: HermesAPIClient
     private let bridgeManager: HermesBridgeProcessManager
+    private let secretStore: SecretStore
 
     init() {
         // Real client by default; if the endpoint is offline, the daemon view
         // model asks the bridge manager to launch the production local bridge
         // and then retries the same health/version checks.
-        let bridgeManager = HermesBridgeProcessManager()
+        let secretStore = KeychainSecretStore()
+        let bridgeManager = HermesBridgeProcessManager(secretStore: secretStore)
         let client: HermesAPIClient = URLSessionHermesAPIClient()
         self.client = client
         self.bridgeManager = bridgeManager
+        self.secretStore = secretStore
         let daemonVM = DaemonStatusViewModel(client: client, bridgeManager: bridgeManager)
         let routerInstance = AppRouter()
         _daemon = StateObject(wrappedValue: daemonVM)
@@ -45,6 +48,7 @@ struct HermesDesktopApp: App {
                      approvals: approvals,
                      compactWindow: compactWindow,
                      client: client,
+                     secretStore: secretStore,
                      openQuickPrompt: openQuickPromptWindow)
         }
         .windowStyle(.titleBar)
@@ -128,6 +132,7 @@ private struct RootView: View {
     @ObservedObject var approvals: ApprovalsViewModel
     @ObservedObject var compactWindow: CompactWindowViewModel
     let client: HermesAPIClient
+    let secretStore: SecretStore?
     let openQuickPrompt: () -> Void
 
     var body: some View {
@@ -139,6 +144,7 @@ private struct RootView: View {
                              router: router,
                              compactWindow: compactWindow,
                              client: client,
+                             secretStore: secretStore,
                              openQuickPrompt: openQuickPrompt)
             } else {
                 OnboardingShellView(viewModel: onboarding, daemon: daemon)

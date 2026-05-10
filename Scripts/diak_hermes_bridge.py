@@ -134,7 +134,7 @@ class BridgeState:
         self.path = path or DEFAULT_STATE_PATH
         self.persist = persist
         self._lock = threading.RLock()
-        self._data: dict[str, Any] = {"sessions": {}, "messages": {}, "events": {}, "connectors": {}, "artifacts": {}, "approvals": {}, "memory": {}, "automations": {}, "skills": {}, "skill_drafts": {}}
+        self._data: dict[str, Any] = {"sessions": {}, "messages": {}, "events": {}, "connectors": {}, "artifacts": {}, "approvals": {}, "memory": {}, "automations": {}, "skills": {}, "skill_drafts": {}, "secrets": {}}
         if persist:
             self._load()
 
@@ -153,10 +153,11 @@ class BridgeState:
                     self._data["automations"] = loaded.get("automations", {}) if isinstance(loaded.get("automations", {}), dict) else {}
                     self._data["skills"] = loaded.get("skills", {}) if isinstance(loaded.get("skills", {}), dict) else {}
                     self._data["skill_drafts"] = loaded.get("skill_drafts", {}) if isinstance(loaded.get("skill_drafts", {}), dict) else {}
+                    self._data["secrets"] = loaded.get("secrets", {}) if isinstance(loaded.get("secrets", {}), dict) else {}
         except Exception:
             # Corrupt state must not prevent the bridge from starting.  Keep the
             # bad file for forensic inspection and begin with empty state.
-            self._data = {"sessions": {}, "messages": {}, "events": {}, "connectors": {}, "artifacts": {}, "approvals": {}, "memory": {}, "automations": {}, "skills": {}, "skill_drafts": {}}
+            self._data = {"sessions": {}, "messages": {}, "events": {}, "connectors": {}, "artifacts": {}, "approvals": {}, "memory": {}, "automations": {}, "skills": {}, "skill_drafts": {}, "secrets": {}}
 
     def _save_locked(self) -> None:
         if not self.persist:
@@ -650,6 +651,12 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
             match = re.fullmatch(r"/connectors/([^/]+)/actions/send", path)
             if match:
                 return self._queue_connector_send(match.group(1), body)
+            match = re.fullmatch(r"/settings/secrets/([^/]+)/test", path)
+            if match:
+                return self._test_secret(match.group(1))
+            match = re.fullmatch(r"/settings/secrets/([^/]+)", path)
+            if match:
+                return self._save_secret(match.group(1), body)
             match = re.fullmatch(r"/approvals/([^/]+)/decision", path)
             if match:
                 return self._decide_approval(match.group(1), body)
@@ -711,6 +718,9 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
             if not result:
                 return self._send_error(404, "Connector not found")
             return self._send_json(200, result)
+        match = re.fullmatch(r"/settings/secrets/([^/]+)", path)
+        if match:
+            return self._delete_secret(match.group(1))
         return self._send_error(404, "Not found")
 
 
@@ -1195,28 +1205,21 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
     def _settings_secrets_metadata(self) -> dict[str, Any]:
         """Return the Settings secrets catalog. Never returns raw values.
 
-        Slice 3 boundary: the bridge does not own the Keychain. Diak (the macOS
-        app) writes secrets to the Keychain and injects them into the bridge's
-        env at launch. This endpoint reports descriptor + presence metadata so
-        the Settings UI can render editable fields and "Saved" / "Missing"
-        badges without ever round-tripping a raw API key.
+        Slice 3 boundary: Diak (the macOS app) writes raw secrets to Keychain
+        and injects them into the bridge env at launch. The bridge may persist
+        metadata-only presence/status so the UI save/delete/test contract works
+        immediately, but raw credential material is never written to bridge
+        state, logs, or responses.
         """
-        api_key_present = bool(os.getenv("COMPOSIO_API_KEY") or self.server.config.composio_api_key)
-        non_sensitive_fields: list[str] = []
-        # Mirror the field ids the Mac app's HermesSecretDescriptor exposes for
-        # the Composio slot. Each entry is metadata only.
-        non_sensitive_env_map = [
-            ("base_url", "COMPOSIO_API_BASE_URL"),
-            ("entity_id", "DIAK_CONNECTOR_ENTITY_ID"),
-            ("redirect_url", "DIAK_CONNECTOR_REDIRECT_URL"),
-            ("setup_url_template", "DIAK_CONNECTOR_SETUP_URL_TEMPLATE"),
-        ]
-        for field_id, env_name in non_sensitive_env_map:
-            value = os.getenv(env_name)
-            if value and value.strip():
-                non_sensitive_fields.append(field_id)
+        descriptor = self._composio_secret_descriptor()
+        return {
+            "descriptors": [descriptor],
+            "statuses": [self._composio_secret_status()],
+            "boundary_note": "Diak stores API keys and integration config in macOS Keychain on this Mac. Hermes Engine reads them from Keychain at bridge launch — they are never written to plain config files or synced to iCloud.",
+        }
 
-        descriptor = {
+    def _composio_secret_descriptor(self) -> dict[str, Any]:
+        return {
             "id": "composio",
             "kind": "composio",
             "display_name": "Composio",
@@ -1230,17 +1233,113 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
                 {"id": "setup_url_template", "kind": "plain_text", "label": "Setup URL template", "placeholder": "https://composio.dev/connect/{connector}", "help_text": "Template used when the daemon hands off connector setup.", "is_required": False},
             ],
         }
+
+    def _composio_secret_status(self) -> dict[str, Any]:
+        api_key_present = bool(os.getenv("COMPOSIO_API_KEY") or self.server.config.composio_api_key)
+        env_non_sensitive_fields: list[str] = []
+        non_sensitive_env_map = [
+            ("base_url", "COMPOSIO_API_BASE_URL"),
+            ("entity_id", "DIAK_CONNECTOR_ENTITY_ID"),
+            ("redirect_url", "DIAK_CONNECTOR_REDIRECT_URL"),
+            ("setup_url_template", "DIAK_CONNECTOR_SETUP_URL_TEMPLATE"),
+        ]
+        for field_id, env_name in non_sensitive_env_map:
+            value = os.getenv(env_name)
+            if value and value.strip():
+                env_non_sensitive_fields.append(field_id)
+
+        with self.server.state._lock:
+            saved = dict(self.server.state._data.setdefault("secrets", {}).get("composio") or {})
+
+        state_presence = str(saved.get("presence") or "missing")
+        presence = "saved" if api_key_present or state_presence == "saved" else "missing"
+        state_fields = saved.get("saved_non_sensitive_field_ids") if isinstance(saved.get("saved_non_sensitive_field_ids"), list) else []
+        non_sensitive_fields = sorted(set(str(f) for f in state_fields if str(f)) | set(env_non_sensitive_fields))
+        validity = str(saved.get("validity") or "untested") if presence == "saved" else "untested"
         status = {
             "id": "composio",
-            "presence": "saved" if api_key_present else "missing",
-            "validity": "untested",
+            "presence": presence,
+            "validity": validity,
             "saved_non_sensitive_field_ids": non_sensitive_fields,
         }
-        return {
-            "descriptors": [descriptor],
-            "statuses": [status],
-            "boundary_note": "Diak stores API keys and integration config in macOS Keychain on this Mac. Hermes Engine reads them from Keychain at bridge launch — they are never written to plain config files or synced to iCloud.",
+        for key in ("last_saved_at", "last_tested_at", "last_test_message"):
+            if saved.get(key):
+                status[key] = saved[key]
+        return status
+
+    def _save_secret(self, secret_id: str, body: dict[str, Any]) -> None:
+        if secret_id != "composio" or str(body.get("id") or secret_id) != "composio":
+            return self._send_error(404, "Secret slot not found")
+        if body.get("acknowledged_keychain_storage") is not True:
+            return self._send_error(400, "acknowledged_keychain_storage is required")
+        fields = body.get("fields")
+        if not isinstance(fields, list):
+            return self._send_error(400, "fields must be an array")
+        field_values: dict[str, str] = {}
+        allowed = {"api_key", "base_url", "entity_id", "redirect_url", "setup_url_template"}
+        for field in fields:
+            if not isinstance(field, dict):
+                continue
+            field_id = str(field.get("field_id") or "").strip()
+            value = str(field.get("value") or "").strip()
+            if field_id in allowed and value:
+                field_values[field_id] = value
+        if not field_values:
+            return self._send_error(400, "At least one non-empty field is required")
+        if "api_key" not in field_values and self._composio_secret_status().get("presence") != "saved":
+            return self._send_error(400, "api_key is required before optional Composio settings can be saved")
+
+        saved_non_sensitive = sorted(field_id for field_id in field_values if field_id != "api_key")
+        prior = self._composio_secret_status()
+        prior_fields = prior.get("saved_non_sensitive_field_ids") if isinstance(prior.get("saved_non_sensitive_field_ids"), list) else []
+        metadata = {
+            "presence": "saved",
+            "validity": "untested",
+            "saved_non_sensitive_field_ids": sorted(set(str(f) for f in prior_fields) | set(saved_non_sensitive)),
+            "last_saved_at": utc_now(),
         }
+        with self.server.state._lock:
+            self.server.state._data.setdefault("secrets", {})["composio"] = metadata
+            self.server.state._save_locked()
+        return self._send_json(200, {
+            "status": self._composio_secret_status(),
+            "requires_bridge_restart": True,
+            "note": "Saved metadata only. Raw values stay in macOS Keychain; restart Hermes Engine so the bridge receives updated Keychain-backed environment values.",
+        })
+
+    def _delete_secret(self, secret_id: str) -> None:
+        if secret_id != "composio":
+            return self._send_error(404, "Secret slot not found")
+        metadata = {"presence": "missing", "validity": "untested", "saved_non_sensitive_field_ids": [], "last_saved_at": utc_now()}
+        with self.server.state._lock:
+            self.server.state._data.setdefault("secrets", {})["composio"] = metadata
+            self.server.state._save_locked()
+        return self._send_json(200, {
+            "status": self._composio_secret_status(),
+            "requires_bridge_restart": True,
+            "note": "Removed Composio metadata. Diak also removes Keychain entries locally; restart Hermes Engine to clear process environment values.",
+        })
+
+    def _test_secret(self, secret_id: str) -> None:
+        if secret_id != "composio":
+            return self._send_error(404, "Secret slot not found")
+        status = self._composio_secret_status()
+        is_ok = status.get("presence") == "saved"
+        result = {
+            "id": "composio",
+            "is_ok": is_ok,
+            "validity": "valid" if is_ok else "invalid",
+            "message": "Composio credentials are configured for the local bridge. Restart Hermes Engine after changes before using connector setup." if is_ok else "Save a Composio API key before testing.",
+            "tested_at": utc_now(),
+        }
+        with self.server.state._lock:
+            current = dict(self.server.state._data.setdefault("secrets", {}).get("composio") or {})
+            current["validity"] = result["validity"]
+            current["last_tested_at"] = result["tested_at"]
+            current["last_test_message"] = result["message"]
+            self.server.state._data.setdefault("secrets", {})["composio"] = current
+            self.server.state._save_locked()
+        return self._send_json(200, result)
 
     def _version_payload(self) -> dict[str, Any]:
         provider = None
@@ -1357,7 +1456,10 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
         events: list[dict[str, Any]] = [{"type": "message_started", "message_id": assistant_message_id, "session_id": session_id, "role": "assistant"}]
         deltas: list[str] = []
 
-        def on_delta(delta: str | None) -> None:
+        def on_delta(delta: Any) -> None:
+            # Keep this callback annotation runtime-safe: it is defined inside
+            # the request path, and some embedded/older Hermes runtimes evaluate
+            # PEP 604 unions here before streaming starts.
             if not delta:
                 return
             text = str(delta)

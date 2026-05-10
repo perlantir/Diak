@@ -7,6 +7,7 @@ public struct AppShellView: View {
     @ObservedObject var router: AppRouter
     @ObservedObject var compactWindow: CompactWindowViewModel
     let client: HermesAPIClient
+    let secretStore: SecretStore?
     var openQuickPrompt: () -> Void = {}
 
     public init(daemon: DaemonStatusViewModel,
@@ -15,6 +16,7 @@ public struct AppShellView: View {
                 router: AppRouter,
                 compactWindow: CompactWindowViewModel,
                 client: HermesAPIClient = URLSessionHermesAPIClient(),
+                secretStore: SecretStore? = nil,
                 openQuickPrompt: @escaping () -> Void = {}) {
         self.daemon = daemon
         self.engineViewModel = engineViewModel
@@ -22,6 +24,7 @@ public struct AppShellView: View {
         self.router = router
         self.compactWindow = compactWindow
         self.client = client
+        self.secretStore = secretStore
         self.openQuickPrompt = openQuickPrompt
     }
 
@@ -57,7 +60,8 @@ public struct AppShellView: View {
                           daemon: daemon,
                           engineViewModel: engineViewModel,
                           approvals: approvals,
-                          client: client)
+                          client: client,
+                          secretStore: secretStore)
                 .frame(minWidth: 480)
         } detail: {
             if router.inspectorVisible {
@@ -102,7 +106,8 @@ public struct AppShellView: View {
                           daemon: daemon,
                           engineViewModel: engineViewModel,
                           approvals: approvals,
-                          client: client)
+                          client: client,
+                          secretStore: secretStore)
         }
     }
 }

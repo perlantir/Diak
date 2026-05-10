@@ -174,6 +174,48 @@ public extension HermesCanvasArtifact {
     var browserPreviewHost: String? {
         browserPreviewURL?.host
     }
+
+    /// Inline HTML payload for browser artifacts. This covers generated
+    /// website/landing-page responses captured by the production bridge so the
+    /// Browser canvas renders the page instead of displaying raw source code.
+    /// Markdown fences are tolerated because model responses commonly wrap
+    /// generated HTML in ```html blocks before the bridge persists them.
+    var browserInlineHTML: String? {
+        guard kind == .browser,
+              let candidate = preview?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !candidate.isEmpty else { return nil }
+
+        let html = Self.stripMarkdownFence(candidate).trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowercased = html.lowercased()
+        guard lowercased.contains("<!doctype")
+                || lowercased.contains("<html")
+                || (lowercased.contains("<body") && lowercased.contains("</"))
+                || (lowercased.contains("<main") && lowercased.contains("</")) else {
+            return nil
+        }
+        return html
+    }
+
+    /// True when the browser artifact should be routed to a rendered preview
+    /// surface rather than a plain text snapshot block.
+    var hasRenderableBrowserHTML: Bool {
+        browserInlineHTML != nil
+    }
+
+    private static func stripMarkdownFence(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("```") else { return value }
+
+        var lines = trimmed.components(separatedBy: .newlines)
+        guard lines.count >= 2,
+              lines.first?.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("```") == true,
+              lines.last?.trimmingCharacters(in: .whitespacesAndNewlines) == "```" else {
+            return value
+        }
+        lines.removeFirst()
+        lines.removeLast()
+        return lines.joined(separator: "\n")
+    }
 }
 
 /// Wire payload returned by `GET /sessions/{id}/canvas/artifacts`. The

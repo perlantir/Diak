@@ -245,6 +245,61 @@ class DiakHermesBridgeTests(unittest.TestCase):
         self.assertEqual(composio["validity"], "untested")
         self.assertEqual(composio["saved_non_sensitive_field_ids"], [])
 
+    def test_settings_secrets_save_test_delete_contract_never_echoes_raw_values(self):
+        api_key = "fake-key"
+        status, _, body = self.harness.request("POST", "/settings/secrets/composio", {
+            "id": "composio",
+            "fields": [
+                {"field_id": "api_key", "value": api_key},
+                {"field_id": "base_url", "value": "https://backend.composio.test/api/v1"},
+            ],
+            "acknowledged_keychain_storage": True,
+        })
+        self.assertEqual(status, 200)
+        self.assertNotIn(api_key, body, "Save response must never echo raw secret material")
+        payload = json.loads(body)
+        self.assertEqual(payload["status"]["presence"], "saved")
+        self.assertEqual(payload["status"]["validity"], "untested")
+        self.assertTrue(payload["requires_bridge_restart"])
+        self.assertIn("base_url", payload["status"]["saved_non_sensitive_field_ids"])
+
+        status, _, body = self.harness.request("GET", "/settings/secrets")
+        self.assertEqual(status, 200)
+        self.assertNotIn(api_key, body, "Catalog metadata must never echo raw secret material")
+        catalog = json.loads(body)
+        composio = next(s for s in catalog["statuses"] if s["id"] == "composio")
+        self.assertEqual(composio["presence"], "saved")
+        self.assertIn("base_url", composio["saved_non_sensitive_field_ids"])
+
+        status, _, body = self.harness.request("POST", "/settings/secrets/composio/test", {})
+        self.assertEqual(status, 200)
+        test_result = json.loads(body)
+        self.assertTrue(test_result["is_ok"])
+        self.assertEqual(test_result["validity"], "valid")
+        self.assertNotIn(api_key, body)
+
+        status, _, body = self.harness.request("DELETE", "/settings/secrets/composio")
+        self.assertEqual(status, 200)
+        payload = json.loads(body)
+        self.assertEqual(payload["status"]["presence"], "missing")
+        self.assertTrue(payload["requires_bridge_restart"])
+
+    def test_settings_secrets_save_rejects_missing_ack_and_unknown_slot(self):
+        status, _, body = self.harness.request("POST", "/settings/secrets/composio", {
+            "id": "composio",
+            "fields": [{"field_id": "api_key", "value": "comp_live_no_ack"}],
+            "acknowledged_keychain_storage": False,
+        })
+        self.assertEqual(status, 400)
+        self.assertIn("acknowledged_keychain_storage", body)
+
+        status, _, body = self.harness.request("POST", "/settings/secrets/unknown", {
+            "id": "unknown",
+            "fields": [{"field_id": "api_key", "value": "secret"}],
+            "acknowledged_keychain_storage": True,
+        })
+        self.assertEqual(status, 404)
+
     def test_settings_secrets_reports_saved_and_omits_raw_value_when_composio_env_present(self):
         # Slice 3: when Diak has injected the Composio env via Slice-3 bridge
         # manager, the metadata endpoint reports presence=saved + lists the

@@ -219,6 +219,47 @@ final class ChatCanvasWorkspaceTests: XCTestCase {
         XCTAssertNil(noRef.codePreviewLanguage)
     }
 
+    func testCanvasArtifactBrowserPreviewDetectsInlineHTMLAsRenderablePage() {
+        let artifact = HermesCanvasArtifact(
+            id: "site-html",
+            sessionID: "s",
+            kind: .browser,
+            title: "Generated landing page",
+            preview: """
+            <!doctype html>
+            <html>
+              <head><title>Launch</title></head>
+              <body><main><h1>Rendered website, not raw code</h1></main></body>
+            </html>
+            """,
+            createdAt: Date(),
+            ref: HermesArtifactRef(id: "generated-site", kind: .generated, title: "Generated website", detail: "inline_html")
+        )
+
+        XCTAssertNotNil(artifact.browserInlineHTML, "Browser artifacts carrying HTML must be routed to the rendered WebView preview, not Text(raw source).")
+        XCTAssertTrue(artifact.hasRenderableBrowserHTML)
+        XCTAssertNil(artifact.browserPreviewURL, "Inline HTML should not be misclassified as a URL snapshot.")
+    }
+
+    func testCanvasArtifactBrowserPreviewStripsMarkdownFenceBeforeRenderingHTML() {
+        let artifact = HermesCanvasArtifact(
+            id: "site-fenced-html",
+            sessionID: "s",
+            kind: .browser,
+            title: "Generated landing page",
+            preview: """
+            ```html
+            <!doctype html>
+            <html><body><h1>Launch</h1></body></html>
+            ```
+            """,
+            createdAt: Date()
+        )
+
+        XCTAssertEqual(artifact.browserInlineHTML?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       "<!doctype html>\n<html><body><h1>Launch</h1></body></html>")
+    }
+
     func testCanvasArtifactBrowserPreviewParsesURLAndHost() {
         let now = Date()
         let urlInPreview = HermesCanvasArtifact(

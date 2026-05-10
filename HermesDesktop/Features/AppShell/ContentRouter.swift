@@ -6,6 +6,7 @@ struct ContentRouter: View {
     @ObservedObject var engineViewModel: HermesEngineViewModel
     @ObservedObject var approvals: ApprovalsViewModel
     let client: HermesAPIClient
+    let secretStore: SecretStore?
     @StateObject private var chat: ChatViewModel
     @StateObject private var sessions: SessionsViewModel
     @StateObject private var settings: SettingsViewModel
@@ -19,16 +20,18 @@ struct ContentRouter: View {
          daemon: DaemonStatusViewModel,
          engineViewModel: HermesEngineViewModel,
          approvals: ApprovalsViewModel,
-         client: HermesAPIClient) {
+         client: HermesAPIClient,
+         secretStore: SecretStore? = nil) {
         self.section = section
         self.daemon = daemon
         self.engineViewModel = engineViewModel
         self.approvals = approvals
         self.client = client
+        self.secretStore = secretStore
         _chat = StateObject(wrappedValue: ChatViewModel(client: client))
         _sessions = StateObject(wrappedValue: SessionsViewModel(client: client))
         _settings = StateObject(wrappedValue: SettingsViewModel(client: client))
-        _apiKeys = StateObject(wrappedValue: APIKeysIntegrationsViewModel(client: client))
+        _apiKeys = StateObject(wrappedValue: APIKeysIntegrationsViewModel(client: client, secretStore: secretStore))
         _automations = StateObject(wrappedValue: AutomationsViewModel(client: client))
         _connectors = StateObject(wrappedValue: ConnectorsViewModel(client: client))
         _skills = StateObject(wrappedValue: SkillsViewModel(client: client))

@@ -327,18 +327,28 @@ final class SecretSettingsTests: XCTestCase {
             throw error
         }
 
-        XCTAssertTrue(try store.exists(account: account))
-        XCTAssertEqual(try store.getSecret(account: account), "comp_live_keychain")
+        do {
+            XCTAssertTrue(try store.exists(account: account))
+            XCTAssertEqual(try store.getSecret(account: account), "comp_live_keychain")
 
-        try store.setSecret("comp_live_keychain_v2", account: account)
-        XCTAssertEqual(try store.getSecret(account: account), "comp_live_keychain_v2")
+            try store.setSecret("comp_live_keychain_v2", account: account)
+            XCTAssertEqual(try store.getSecret(account: account), "comp_live_keychain_v2")
 
-        let accounts = try store.listAccounts()
-        XCTAssertTrue(accounts.contains(account))
+            let accounts = try store.listAccounts()
+            XCTAssertTrue(accounts.contains(account))
 
-        try store.deleteSecret(account: account)
-        XCTAssertFalse(try store.exists(account: account))
-        XCTAssertNil(try store.getSecret(account: account))
+            try store.deleteSecret(account: account)
+            XCTAssertFalse(try store.exists(account: account))
+            XCTAssertNil(try store.getSecret(account: account))
+        } catch let error as KeychainSecretStoreError {
+            if case .unhandled(let status) = error,
+               status == errSecMissingEntitlement || status == errSecNotAvailable
+                || status == errSecInteractionNotAllowed || status == errSecAuthFailed {
+                try? store.deleteSecret(account: account)
+                throw XCTSkip("Keychain read/list unavailable in this environment (OSStatus \(status))")
+            }
+            throw error
+        }
     }
 
     // MARK: - URLSession wire shape

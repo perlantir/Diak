@@ -110,6 +110,7 @@ private extension HermesArtifactRef.Kind {
         case .link:    return .link
         case .command: return .command
         case .message: return .other
+        case .generated: return .other
         case .other:   return .other
         case .unknown: return .other
         }

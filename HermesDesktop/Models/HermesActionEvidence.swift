@@ -37,6 +37,7 @@ public struct HermesArtifactRef: Codable, Equatable, Sendable, Hashable, Identif
         case link
         case command
         case message
+        case generated
         case other
         case unknown
 

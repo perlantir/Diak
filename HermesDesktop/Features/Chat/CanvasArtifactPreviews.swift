@@ -1,4 +1,5 @@
 import SwiftUI
+import WebKit
 
 /// Typed canvas artifact previews. Each view renders a single
 /// `HermesCanvasArtifact` selected by `HermesCanvasState.primaryArtifact`
@@ -171,28 +172,96 @@ struct CanvasBrowserPreview: View {
 
     @ViewBuilder
     private var snapshotBlock: some View {
-        VStack(alignment: .leading, spacing: HermesSpacing.xs) {
-            HStack(spacing: HermesSpacing.xs) {
-                Image(systemName: "camera.viewfinder")
-                    .foregroundStyle(HermesColors.muted)
-                Text("Snapshot")
-                    .font(HermesTypography.caption)
-                    .foregroundStyle(HermesColors.muted)
-                Spacer()
+        if let html = artifact.browserInlineHTML {
+            VStack(alignment: .leading, spacing: HermesSpacing.xs) {
+                HStack(spacing: HermesSpacing.xs) {
+                    Image(systemName: "safari")
+                        .foregroundStyle(HermesColors.muted)
+                    Text("Rendered preview")
+                        .font(HermesTypography.caption)
+                        .foregroundStyle(HermesColors.muted)
+                    Spacer()
+                    StatusBadge("HTML", tone: .success)
+                }
+                CanvasInlineHTMLPreview(html: html)
+                    .frame(minHeight: 360)
+                    .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous)
+                            .strokeBorder(HermesColors.border, lineWidth: 1)
+                    )
+                    .accessibilityIdentifier("canvas-browser-rendered-html-\(artifact.id)")
             }
-            Text(artifact.preview ?? "Page snapshot will appear once the daemon captures it.")
-                .font(HermesTypography.body)
-                .foregroundStyle(HermesColors.text)
-                .fixedSize(horizontal: false, vertical: true)
+            .padding(HermesSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(HermesColors.canvas)
+            .overlay(
+                RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous)
+                    .strokeBorder(HermesColors.border, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
+        } else {
+            VStack(alignment: .leading, spacing: HermesSpacing.xs) {
+                HStack(spacing: HermesSpacing.xs) {
+                    Image(systemName: "camera.viewfinder")
+                        .foregroundStyle(HermesColors.muted)
+                    Text("Snapshot")
+                        .font(HermesTypography.caption)
+                        .foregroundStyle(HermesColors.muted)
+                    Spacer()
+                }
+                Text(artifact.preview ?? "Page snapshot will appear once the daemon captures it.")
+                    .font(HermesTypography.body)
+                    .foregroundStyle(HermesColors.text)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(HermesSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(HermesColors.canvas)
+            .overlay(
+                RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous)
+                    .strokeBorder(HermesColors.border, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
         }
-        .padding(HermesSpacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(HermesColors.canvas)
-        .overlay(
-            RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous)
-                .strokeBorder(HermesColors.border, lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
+    }
+}
+
+private struct CanvasInlineHTMLPreview: NSViewRepresentable {
+    let html: String
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
+
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.navigationDelegate = context.coordinator
+        webView.setValue(false, forKey: "drawsBackground")
+        webView.loadHTMLString(html, baseURL: nil)
+        return webView
+    }
+
+    func updateNSView(_ webView: WKWebView, context: Context) {
+        guard context.coordinator.lastHTML != html else { return }
+        context.coordinator.lastHTML = html
+        webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        var lastHTML: String?
+
+        func webView(_ webView: WKWebView,
+                     decidePolicyFor navigationAction: WKNavigationAction,
+                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            if navigationAction.navigationType == .other {
+                decisionHandler(.allow)
+            } else {
+                decisionHandler(.cancel)
+            }
+        }
     }
 }
 
@@ -330,7 +399,7 @@ private struct CanvasArtifactRefRow: View {
         case .file:    return .file
         case .link:    return .link
         case .command: return .command
-        case .message, .other, .unknown: return .other
+        case .message, .generated, .other, .unknown: return .other
         }
     }
 }
