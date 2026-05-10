@@ -15,13 +15,17 @@ struct HermesDesktopApp: App {
     @Environment(\.openWindow) private var openWindow
 
     private let client: HermesAPIClient
+    private let bridgeManager: HermesBridgeProcessManager
 
     init() {
-        // M0: real client by default; an offline daemon surfaces as the
-        // offline/reconnect sheet rather than a crash.
+        // Real client by default; if the endpoint is offline, the daemon view
+        // model asks the bridge manager to launch the production local bridge
+        // and then retries the same health/version checks.
+        let bridgeManager = HermesBridgeProcessManager()
         let client: HermesAPIClient = URLSessionHermesAPIClient()
         self.client = client
-        let daemonVM = DaemonStatusViewModel(client: client)
+        self.bridgeManager = bridgeManager
+        let daemonVM = DaemonStatusViewModel(client: client, bridgeManager: bridgeManager)
         let routerInstance = AppRouter()
         _daemon = StateObject(wrappedValue: daemonVM)
         _engineViewModel = StateObject(wrappedValue: HermesEngineViewModel(daemon: daemonVM))

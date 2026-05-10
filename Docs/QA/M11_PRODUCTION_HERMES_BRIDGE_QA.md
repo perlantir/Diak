@@ -17,6 +17,10 @@ Diak now has a production local bridge script separate from the fixture-only com
 
 ## Production bridge run command
 
+For normal local/private app use, Diak now tries to manage the bridge itself: if `127.0.0.1:8765` is unreachable during daemon refresh, the app launches the bundled `diak_hermes_bridge.py`, waits for `/health`, logs to `~/.hermes/diak/bridge.log`, then retries health/version before showing offline UI.
+
+Manual bridge run command for debugging:
+
 ```bash
 python3 Scripts/diak_hermes_bridge.py --host 127.0.0.1 --port 8765
 ```
@@ -55,19 +59,38 @@ Latest verified evidence:
 
 ```bash
 python3 -m unittest Tests.diak_hermes_bridge_tests
-xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -only-testing:HermesDesktopTests/HermesAPIDecodingTests test
-Scripts/diak_provider_e2e_probe.sh
-```
-
-## Remaining release gates
-
-Before external release, still run the full release gate:
-
-```bash
 xcodegen generate
+xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -only-testing:HermesDesktopTests/DaemonStatusViewModelTests -only-testing:HermesDesktopTests/HermesBridgeProcessManagerTests test
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -configuration Debug build
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' test
+# package/resource/signature smoke checks
+APP=$(echo ~/Library/Developer/Xcode/DerivedData/HermesDesktop-*/Build/Products/Debug/Diak.app | awk '{print $1}')
+test -f "$APP/Contents/Resources/diak_hermes_bridge.py"
+codesign --verify --strict --deep "$APP"
 git diff --check
 ```
 
-And separately complete Developer ID/notary/Gatekeeper validation for distribution builds.
+Latest local gate evidence:
+
+- Python bridge tests: **PASS — 4 tests**.
+- App-managed bridge Swift tests: **PASS — 9 targeted tests**.
+- Debug macOS build: **PASS**.
+- Full macOS XCTest suite: **PASS — 166 tests, 0 failures**.
+- Bundled bridge resource present at `Diak.app/Contents/Resources/diak_hermes_bridge.py`.
+- `codesign --verify --strict --deep`: **PASS** for the Debug app bundle.
+- Latest full test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_10-43-13--0500.xcresult`.
+- `git diff --check`: **PASS**.
+
+## Remaining release gates
+
+Before external release, still run the full signed release gate:
+
+```bash
+Scripts/build_release.sh
+Scripts/create_dmg.sh
+spctl --assess --type execute --verbose <signed Diak.app>
+xcrun notarytool submit <artifact> --wait
+xcrun stapler validate <artifact>
+```
+
+Developer ID/notary/Gatekeeper validation still requires real signing credentials. The Debug/local gates above only prove app-managed bridge packaging and local code-sign integrity.

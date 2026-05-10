@@ -1,6 +1,6 @@
 # Hermes Desktop / Diak Autonomous Build Status
 
-Updated: 2026-05-10 10:26 CDT
+Updated: 2026-05-10 10:43 CDT
 
 ## Current milestone
 
@@ -24,6 +24,12 @@ M0–M10 remain implemented. The prior M10 Phase 4 Claude Code builder was stopp
   - Captures bridge/provider/session evidence under `qa/diak-provider-e2e-*`.
 - Added TDD coverage: `Tests/diak_hermes_bridge_tests.py`.
 - Extended `HermesVersion` decoding with optional production bridge metadata: `mode`, `runtime`, `provider`, `model`.
+- Added app-managed bridge lifecycle for local/private distribution:
+  - `HermesDesktop/Services/Bridge/HermesBridgeManager.swift` launches the bundled bridge when `127.0.0.1:8765` is unreachable.
+  - `DaemonStatusViewModel` now probes, starts the bridge on `.notReachable`, waits for `/health`, retries health/version, and only then shows offline UI.
+  - `project.yml` copies `Scripts/diak_hermes_bridge.py` into `Diak.app/Contents/Resources/diak_hermes_bridge.py` during build.
+  - Bridge stdout/stderr logs to `~/.hermes/diak/bridge.log`.
+  - App Sandbox is disabled for this local-agent distribution path because Hermes runtime/provider config/tool access lives in normal user-local paths.
 - Added QA/runbook docs:
   - `Docs/Plans/M11_PRODUCTION_HERMES_BRIDGE.md`
   - `Docs/QA/M11_PRODUCTION_HERMES_BRIDGE_QA.md`
@@ -37,8 +43,12 @@ python3 -m unittest Tests.diak_hermes_bridge_tests
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -only-testing:HermesDesktopTests/HermesAPIDecodingTests test
 Scripts/diak_provider_e2e_probe.sh
 xcodegen generate
+xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -only-testing:HermesDesktopTests/DaemonStatusViewModelTests -only-testing:HermesDesktopTests/HermesBridgeProcessManagerTests test
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -configuration Debug build
 xcodebuild -scheme HermesDesktop -destination 'platform=macOS' test
+APP=$(echo ~/Library/Developer/Xcode/DerivedData/HermesDesktop-*/Build/Products/Debug/Diak.app | awk '{print $1}')
+test -f "$APP/Contents/Resources/diak_hermes_bridge.py"
+codesign --verify --strict --deep "$APP"
 git diff --check
 ```
 
@@ -46,6 +56,7 @@ Results:
 
 - Python bridge unit tests: **PASS — 4 tests**.
 - Targeted Swift decoding tests: **PASS — 5 tests**.
+- App-managed bridge lifecycle Swift tests: **PASS — 9 targeted tests**.
 - Provider E2E probe: **PASS**.
   - Evidence report: `qa/diak-provider-e2e-20260510-102811/DIAK_PROVIDER_E2E_PROBE_20260510-102811.md`.
   - Bridge mode: `production_bridge`.
@@ -56,8 +67,11 @@ Results:
   - Hermes session: `20260510_102812_ac9682`.
 - `xcodegen generate`: **PASS**.
 - Debug macOS build: **PASS**.
-- Full macOS XCTest suite: **PASS — 162 tests, 0 failures**.
-- Latest full test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_10-25-52--0500.xcresult`.
+- Full macOS XCTest suite: **PASS — 166 tests, 0 failures**.
+- Bundled bridge resource check: **PASS** — `Diak.app/Contents/Resources/diak_hermes_bridge.py` exists.
+- Code-signature integrity check: **PASS** — `codesign --verify --strict --deep` for the Debug app bundle.
+- Debug entitlements confirm `com.apple.security.app-sandbox = false` for the local Hermes bridge path.
+- Latest full test result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_10-43-13--0500.xcresult`.
 - `git diff --check`: **PASS**.
 
 ## Working tree / branch status
@@ -73,8 +87,9 @@ Results:
 - M9 internal dogfood/private beta: **PASS WITH CAVEATS** — app builds/tests and local fixture daemon proof remain available.
 - M10 Chat + Canvas/local UI increments: **PASS locally**.
 - M11 production Hermes bridge proof: **PASS locally** — Diak can now be tested against a real Hermes Agent/provider-backed bridge instead of only `diak-dev-daemon` fixtures.
-- External/public distribution: **STILL BLOCKED** — requires Developer ID signing, notarization, stapling, Gatekeeper validation, packaged bridge/daemon launch strategy, and explicit approval before any real connector writes.
+- M11 app-managed bridge packaging: **PASS locally** — Debug app bundles the production bridge script, launches it on offline daemon refresh, waits for readiness, and passes code-signature/resource smoke checks.
+- External/public distribution: **STILL BLOCKED** — requires Developer ID signing, notarization, stapling, Gatekeeper validation, and explicit approval before any real connector writes.
 
 ## Next action
 
-Decide packaging strategy for the production bridge before external distribution: whether Diak launches/manages `Scripts/diak_hermes_bridge.py`, connects to a separately managed Hermes service, or embeds a signed helper. Then run Developer ID/notary/Gatekeeper release validation.
+Run the signed release/distribution lane with Developer ID credentials: `Scripts/build_release.sh`, `Scripts/create_dmg.sh`, Gatekeeper assessment, notarization submit/wait, stapler validation, then one installed-app smoke test that verifies the app starts the bundled bridge from `/Applications/Diak.app`.

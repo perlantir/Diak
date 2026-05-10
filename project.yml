@@ -28,6 +28,16 @@ targets:
           - "Resources/HermesDesktop.entitlements"
     resources:
       - HermesDesktop/Resources/Assets.xcassets
+    postBuildScripts:
+      - name: Copy Diak Hermes Bridge
+        script: |
+          set -euo pipefail
+          mkdir -p "$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
+          cp "$SRCROOT/Scripts/diak_hermes_bridge.py" "$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/diak_hermes_bridge.py"
+        inputFiles:
+          - "$(SRCROOT)/Scripts/diak_hermes_bridge.py"
+        outputFiles:
+          - "$(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/diak_hermes_bridge.py"
     info:
       path: HermesDesktop/Resources/Info.plist
       properties:
@@ -42,7 +52,7 @@ targets:
     entitlements:
       path: HermesDesktop/Resources/HermesDesktop.entitlements
       properties:
-        com.apple.security.app-sandbox: true
+        com.apple.security.app-sandbox: false
         com.apple.security.network.client: true
         com.apple.security.files.user-selected.read-only: true
     settings:

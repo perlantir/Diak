@@ -89,3 +89,35 @@ git diff --check
 ```
 
 **Done means:** Diak can be tested against a real Hermes/provider-backed bridge; fixture contract tests remain separate and clearly labeled.
+
+---
+
+## Task 6: App-managed bridge lifecycle for internal/private distribution
+
+**Objective:** Remove the manual “start bridge in Terminal first” reliability gap. The app should treat the production bridge as a managed local dependency: if `127.0.0.1:8765` is offline, launch the bundled bridge script, log to `~/.hermes/diak/bridge.log`, and retry health/version before showing offline UI.
+
+**Files:**
+- Create: `HermesDesktop/Services/Bridge/HermesBridgeManager.swift`
+- Modify: `HermesDesktop/Features/DaemonStatus/DaemonStatusViewModel.swift`
+- Modify: `HermesDesktop/App/HermesDesktopApp.swift`
+- Modify: `project.yml`
+- Modify: `HermesDesktop/Resources/HermesDesktop.entitlements`
+- Create: `HermesDesktopTests/HermesBridgeProcessManagerTests.swift`
+- Modify: `HermesDesktopTests/DaemonStatusViewModelTests.swift`
+
+**Requirements:**
+- Bundle `Scripts/diak_hermes_bridge.py` as an app resource.
+- `DaemonStatusViewModel.refresh()` first probes the configured endpoint, then invokes a bridge manager on `notReachable`, then retries the same health/version contract.
+- The bridge manager must not start duplicate processes if an endpoint already responds or if its own child process is still running.
+- Launch via `/usr/bin/env python3 <script> --host 127.0.0.1 --port 8765` with env overrides for Hermes paths/state.
+- Wait for `/health` readiness after launch; if the child exits or never becomes reachable, terminate/fail with a log-path error instead of claiming the daemon is online.
+- Log stdout/stderr to `~/.hermes/diak/bridge.log`.
+- Disable App Sandbox for this Developer ID/local-agent distribution path because the bridge/Hermes runtime needs normal user-local access to `~/.hermes`, provider config, skills, tools, and local files. This is not App Store-sandbox compatible; if App Store distribution is ever required, split the bridge into a separately signed helper/XPC/SMAppService architecture.
+
+**Verification:**
+```bash
+xcodegen generate
+xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -only-testing:HermesDesktopTests/DaemonStatusViewModelTests -only-testing:HermesDesktopTests/HermesBridgeProcessManagerTests test
+xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -configuration Debug build
+codesign -d --entitlements :- ~/Library/Developer/Xcode/DerivedData/HermesDesktop-*/Build/Products/Debug/Diak.app
+```

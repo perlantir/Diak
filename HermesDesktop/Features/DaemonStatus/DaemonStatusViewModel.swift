@@ -7,20 +7,46 @@ public final class DaemonStatusViewModel: ObservableObject {
     @Published public var showOfflineSheet: Bool = false
 
     private let client: HermesAPIClient
+    private let bridgeManager: HermesBridgeManaging?
 
-    public init(client: HermesAPIClient) {
+    public init(client: HermesAPIClient, bridgeManager: HermesBridgeManaging? = nil) {
         self.client = client
+        self.bridgeManager = bridgeManager
     }
 
     public func refresh() async {
         if case .loading = status { return }
         status = .loading
         do {
-            async let h = client.health()
-            async let v = client.version()
-            let (health, version) = try await (h, v)
+            let (health, version) = try await fetchDaemonSnapshot()
             status = .connected(health: health, version: version)
             showOfflineSheet = false
+        } catch let error as HermesAPIError where error == .notReachable && bridgeManager != nil {
+            await startBridgeAndRefresh()
+        } catch let error as HermesAPIError {
+            status = .offline(reason: error.userFacingMessage)
+            showOfflineSheet = true
+        } catch {
+            status = .offline(reason: error.localizedDescription)
+            showOfflineSheet = true
+        }
+    }
+
+    private func fetchDaemonSnapshot() async throws -> (HermesHealth, HermesVersion) {
+        async let h = client.health()
+        async let v = client.version()
+        return try await (h, v)
+    }
+
+    private func startBridgeAndRefresh() async {
+        do {
+            _ = try await bridgeManager?.ensureRunning()
+            let (health, version) = try await fetchDaemonSnapshot()
+            status = .connected(health: health, version: version)
+            showOfflineSheet = false
+        } catch let error as HermesBridgeLaunchError {
+            status = .offline(reason: error.localizedDescription)
+            showOfflineSheet = true
         } catch let error as HermesAPIError {
             status = .offline(reason: error.userFacingMessage)
             showOfflineSheet = true
