@@ -9,6 +9,7 @@ struct ContentRouter: View {
     @StateObject private var chat: ChatViewModel
     @StateObject private var sessions: SessionsViewModel
     @StateObject private var settings: SettingsViewModel
+    @StateObject private var apiKeys: APIKeysIntegrationsViewModel
     @StateObject private var automations: AutomationsViewModel
     @StateObject private var connectors: ConnectorsViewModel
     @StateObject private var skills: SkillsViewModel
@@ -27,6 +28,7 @@ struct ContentRouter: View {
         _chat = StateObject(wrappedValue: ChatViewModel(client: client))
         _sessions = StateObject(wrappedValue: SessionsViewModel(client: client))
         _settings = StateObject(wrappedValue: SettingsViewModel(client: client))
+        _apiKeys = StateObject(wrappedValue: APIKeysIntegrationsViewModel(client: client))
         _automations = StateObject(wrappedValue: AutomationsViewModel(client: client))
         _connectors = StateObject(wrappedValue: ConnectorsViewModel(client: client))
         _skills = StateObject(wrappedValue: SkillsViewModel(client: client))
@@ -61,7 +63,8 @@ struct ContentRouter: View {
                 case .settings:
                     SettingsView(daemon: daemon,
                                  engineViewModel: engineViewModel,
-                                 settings: settings)
+                                 settings: settings,
+                                 apiKeys: apiKeys)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

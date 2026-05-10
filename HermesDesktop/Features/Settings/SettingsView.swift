@@ -4,12 +4,14 @@ struct SettingsView: View {
     @ObservedObject var daemon: DaemonStatusViewModel
     @ObservedObject var engineViewModel: HermesEngineViewModel
     @ObservedObject var settings: SettingsViewModel
+    @ObservedObject var apiKeys: APIKeysIntegrationsViewModel
     @State private var selection: Tab = .general
 
     enum Tab: String, CaseIterable, Identifiable {
         case general
         case hermesEngine
         case modelsProviders
+        case apiKeys
         case toolsPermissions
         case securityPrivacy
         case betaReadiness
@@ -21,6 +23,7 @@ struct SettingsView: View {
             case .general:           return "General"
             case .hermesEngine:      return "Hermes Engine"
             case .modelsProviders:   return "Models & Providers"
+            case .apiKeys:           return "API Keys & Integrations"
             case .toolsPermissions:  return "Tools & Permissions"
             case .securityPrivacy:   return "Security & Privacy"
             case .betaReadiness:     return "Beta Readiness"
@@ -32,6 +35,7 @@ struct SettingsView: View {
             case .general:           return "gearshape"
             case .hermesEngine:      return "bolt.horizontal.circle"
             case .modelsProviders:   return "cpu"
+            case .apiKeys:           return "key.horizontal"
             case .toolsPermissions:  return "wrench.and.screwdriver"
             case .securityPrivacy:   return "lock.shield"
             case .betaReadiness:     return "checkmark.seal"
@@ -75,6 +79,8 @@ struct SettingsView: View {
                                              settings: settings)
                 case .modelsProviders:
                     ModelsProvidersView(viewModel: settings)
+                case .apiKeys:
+                    APIKeysIntegrationsView(viewModel: apiKeys)
                 case .toolsPermissions:
                     ToolsPermissionsView(viewModel: settings)
                 case .securityPrivacy:
