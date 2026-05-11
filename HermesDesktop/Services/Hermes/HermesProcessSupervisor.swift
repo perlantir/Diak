@@ -194,6 +194,22 @@ public final class HermesProcessSupervisor: ObservableObject, HermesProcessSuper
         try await start()
     }
 
+    /// Synchronous SIGTERM for the `applicationWillTerminate` hook.
+    /// AppKit's terminate notification is synchronous, so we can't
+    /// `await stop()` — instead we send SIGTERM fire-and-forget and
+    /// trust the OS to reap the child. The dashboard responds to SIGTERM
+    /// by closing its uvicorn server cleanly; observed termination
+    /// latency is well under the SCOPE.md WU2 5-second budget.
+    public func terminateImmediately() {
+        guard let process = currentProcess else { return }
+        process.terminationHandler = nil
+        currentProcess = nil
+        if process.isRunning {
+            process.terminate()
+        }
+        health = .stopped
+    }
+
     // MARK: Private
 
     private func handleProcessTermination(_ finishedProcess: Process) {

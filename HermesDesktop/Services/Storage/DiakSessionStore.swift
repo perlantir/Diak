@@ -23,7 +23,7 @@ import SwiftData
 /// changes don't require restructuring the store from scratch.
 @available(macOS 14.0, *)
 @MainActor
-public final class DiakSessionStore {
+public final class DiakSessionStore: ObservableObject {
 
     /// Errors raised by the store. SwiftData's own errors are surfaced
     /// via `throws` directly; this enum covers Diak-side classification
