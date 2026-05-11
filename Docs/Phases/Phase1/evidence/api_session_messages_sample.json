@@ -1,0 +1,40 @@
+{
+  "session_id": "20260511...<redacted>",
+  "messages": [
+    {
+      "id": 20143,
+      "session_id": "20260511...<redacted>",
+      "role": "user",
+      "content": "<redacted: 1585 chars>",
+      "tool_call_id": null,
+      "tool_calls": null,
+      "tool_name": null,
+      "timestamp": 1778490306.197024,
+      "token_count": null,
+      "finish_reason": null,
+      "reasoning": null,
+      "reasoning_content": null,
+      "reasoning_details": null,
+      "codex_reasoning_items": null,
+      "codex_message_items": null
+    },
+    {
+      "id": 20144,
+      "session_id": "20260511...<redacted>",
+      "role": "session_meta",
+      "content": null,
+      "tool_call_id": null,
+      "tool_calls": null,
+      "tool_name": null,
+      "timestamp": 1778490306.2152011,
+      "token_count": null,
+      "finish_reason": null,
+      "reasoning": null,
+      "reasoning_content": null,
+      "reasoning_details": null,
+      "codex_reasoning_items": null,
+      "codex_message_items": null
+    }
+  ],
+  "_note": "Original had real message content; redacted to preserve shape."
+}

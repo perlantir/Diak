@@ -1,0 +1,23 @@
+usage: hermes setup [-h] [--non-interactive] [--reset] [--reconfigure]
+                    [--quick]
+                    [{model,tts,terminal,gateway,tools,agent}]
+
+Configure Hermes Agent with an interactive wizard. Run a specific section:
+hermes setup model|tts|terminal|gateway|tools|agent
+
+positional arguments:
+  {model,tts,terminal,gateway,tools,agent}
+                        Run a specific setup section instead of the full
+                        wizard
+
+options:
+  -h, --help            show this help message and exit
+  --non-interactive     Non-interactive mode (use defaults/env vars)
+  --reset               Reset configuration to defaults
+  --reconfigure         (Default on existing installs.) Re-run the full
+                        wizard, showing current values as defaults. Kept for
+                        backwards compatibility — a bare 'hermes setup' now
+                        does this.
+  --quick               On existing installs: only prompt for items that are
+                        missing or unset, instead of running the full
+                        reconfigure wizard.

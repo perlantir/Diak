@@ -1,0 +1,52 @@
+[
+  {
+    "id": "95c25c9c60fa",
+    "name": "hermes-desktop-24-7-builder-monitor",
+    "prompt": "You are Hermes acting as Nick's build manager for Hermes Desktop. This cron job runs autonomously every 30 minutes to keep the SwiftUI macOS Hermes Desktop build moving as fast as safely possible.\n\nIM... <truncated: full length 4095 chars>",
+    "skills": [
+      "claude-code",
+      "ios-production-app-architect",
+      "qa-test-release-engineer"
+    ],
+    "skill": "claude-code",
+    "model": null,
+    "provider": null,
+    "base_url": null,
+    "script": null,
+    "no_agent": false,
+    "context_from": null,
+    "schedule": {
+      "kind": "interval",
+      "minutes": 30,
+      "display": "every 30m"
+    },
+    "schedule_display": "every 30m",
+    "repeat": {
+      "times": null,
+      "completed": 43
+    },
+    "enabled": false,
+    "state": "paused",
+    "paused_at": "2026-05-10T22:20:31.976340-05:00",
+    "paused_reason": null,
+    "created_at": "2026-05-09T22:18:30.031675-05:00",
+    "next_run_at": "2026-05-10T22:49:23.915655-05:00",
+    "last_run_at": "2026-05-10T22:19:23.915655-05:00",
+    "last_status": "ok",
+    "last_error": null,
+    "last_delivery_error": null,
+    "deliver": "origin",
+    "origin": {
+      "platform": "telegram",
+      "chat_id": "<redacted-telegram-id>",
+      "chat_name": "Nick Gallick",
+      "thread_id": null
+    },
+    "enabled_toolsets": [
+      "terminal",
+      "file",
+      "skills"
+    ],
+    "workdir": "/Users/perlantir/Projects/HermesDesktop"
+  }
+]

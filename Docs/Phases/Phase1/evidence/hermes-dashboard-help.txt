@@ -1,0 +1,17 @@
+usage: hermes dashboard [-h] [--port PORT] [--host HOST] [--no-open]
+                        [--insecure] [--tui] [--stop] [--status]
+
+Launch the Hermes Agent web dashboard for managing config, API keys, and
+sessions
+
+options:
+  -h, --help   show this help message and exit
+  --port PORT  Port (default 9119)
+  --host HOST  Host (default 127.0.0.1)
+  --no-open    Don't open browser automatically
+  --insecure   Allow binding to non-localhost (DANGEROUS: exposes API keys on
+               the network)
+  --tui        Expose the in-browser Chat tab (embedded `hermes --tui` via
+               PTY/WebSocket). Alternatively set HERMES_DASHBOARD_TUI=1.
+  --stop       Stop all running hermes dashboard processes and exit
+  --status     List running hermes dashboard processes and exit

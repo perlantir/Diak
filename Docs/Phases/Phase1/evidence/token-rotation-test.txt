@@ -1,0 +1,25 @@
+Test: Does the dashboard's __HERMES_SESSION_TOKEN__ rotate on restart?
+
+Step 1: Read original token from running dashboard (PID 56816, started 2026-05-11 13:14:36 CDT):
+  $ curl -sS http://127.0.0.1:9119/ | grep -oE '__HERMES_SESSION_TOKEN__="[^"]+"'
+  __HERMES_SESSION_TOKEN__="dlwoic9Ds4dMkPckPIY3zt-9L9Z-n_BfHkiUg4ILp9Q"
+
+Step 2: Kill the dashboard:
+  $ kill 56816
+
+Step 3: Restart the dashboard:
+  $ hermes dashboard --no-open --port 9119 --host 127.0.0.1 &
+  (new PID: 59234)
+
+Step 4: Read new token:
+  $ curl -sS http://127.0.0.1:9119/ | grep -oE '__HERMES_SESSION_TOKEN__="[^"]+"'
+  __HERMES_SESSION_TOKEN__="HzZFutCKrgclqff0nRaE42TCds4_BsCDJNenVlS46dU"
+
+Step 5: Confirm old token now rejected on /api routes:
+  $ curl -sS -H 'Authorization: Bearer <old>' http://127.0.0.1:9119/api/sessions -> 401
+  $ curl -sS -H 'Authorization: Bearer <new>' http://127.0.0.1:9119/api/sessions -> 200
+
+Conclusion: token is regenerated on every dashboard process start.
+Source code confirms: hermes_cli/web_server.py line 74:
+  _SESSION_TOKEN = secrets.token_urlsafe(32)
+(generated at module-load time; not configurable via env or config.yaml)
