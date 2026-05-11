@@ -160,13 +160,48 @@ public final class HermesAPIServerClient: @unchecked Sendable {
                         return
                     }
 
-                    // Per HTML5 SSE: each event is a series of `field: value`
-                    // lines terminated by a blank line. We can't use
-                    // `bytes.lines` because Foundation's AsyncLineSequence
-                    // does not surface empty lines (the SSE event
-                    // terminator). Parse byte-by-byte instead: accumulate
-                    // a line buffer until `\n`, emit the buffered line
-                    // (including the empty case), reset.
+                    // ============================================================
+                    // SSE parsing — DO NOT "SIMPLIFY" TO bytes.lines.
+                    // ============================================================
+                    //
+                    // The natural-looking implementation is:
+                    //
+                    //     for try await line in bytes.lines { ... }
+                    //
+                    // That implementation is wrong here, in two distinct ways
+                    // that we discovered live in Work Unit 4:
+                    //
+                    // 1. `URLSession.AsyncBytes.lines` (Foundation's
+                    //    AsyncLineSequence) does NOT surface empty lines.
+                    //    Per HTML5 SSE, the event terminator IS a blank line.
+                    //    Using `.lines` means the parser never sees the
+                    //    terminator — it accumulates fields from event 1
+                    //    through the first field of event 2, then yields
+                    //    one merged event with event 2's `event:` value and
+                    //    event 1's data + event 2's data joined. Symptom in
+                    //    the test that caught this: only one RunEvent was
+                    //    yielded for a two-event stream, and the values were
+                    //    cross-contaminated.
+                    //
+                    // 2. `bytes.lines` ALSO crashed inside Foundation with
+                    //    `Swift/ContiguousArrayBuffer.swift:692: Fatal error:
+                    //    Index out of range` on the second event. The test
+                    //    runner restarted mid-suite. We don't have a public
+                    //    radar for this; the crash is reproducible under
+                    //    Swift 5.9 on macOS 26.4.
+                    //
+                    // Therefore: parse byte-by-byte. Accumulate a line buffer
+                    // until `\n`, then emit (INCLUDING the empty-line case
+                    // which finalizes the in-progress event). Drop `\r` so
+                    // CRLF-terminated SSE streams parse the same as LF.
+                    // The unit test `testClient_RunEvents_StreamsThroughURLProtocolStub`
+                    // exercises this; if you "simplify" this back to
+                    // `bytes.lines`, that test will fail (assuming you don't
+                    // crash the runner first).
+                    //
+                    // Also tracked under Phase 0.5+ Known Issues in
+                    // `Docs/PROJECT_STATE.md`.
+                    // ============================================================
                     var lineBuffer = ""
                     var currentEvent = SSEEventBuilder()
                     for try await byte in bytes {
