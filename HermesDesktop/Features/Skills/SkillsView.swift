@@ -41,11 +41,12 @@ struct SkillsView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
-                .accessibilityIdentifier("skills.addSkillButton")
+                .accessibilityIdentifier(SkillsAccessibilityID.addSkillButton)
                 Button { Task { await viewModel.refresh() } } label: {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier(SkillsAccessibilityID.refreshButton)
             }
             .padding(.horizontal, HermesSpacing.lg)
             .padding(.top, HermesSpacing.lg)
@@ -56,6 +57,7 @@ struct SkillsView: View {
                 TextField("Search skills…", text: $viewModel.searchText)
                     .textFieldStyle(.plain)
                     .font(HermesTypography.body)
+                    .accessibilityIdentifier(SkillsAccessibilityID.searchField)
             }
             .padding(.horizontal, HermesSpacing.md)
             .padding(.vertical, HermesSpacing.sm)
@@ -90,11 +92,13 @@ struct SkillsView: View {
                                 SkillRow(skill: skill,
                                          isSelected: viewModel.selectedSkill?.id == skill.id)
                                     .onTapGesture { viewModel.selectedSkillID = skill.id }
+                                    .accessibilityIdentifier(SkillsAccessibilityID.row(skill.id))
                             }
                         }
                         .padding(.horizontal, HermesSpacing.md)
                         .padding(.bottom, HermesSpacing.lg)
                     }
+                    .accessibilityIdentifier(SkillsAccessibilityID.listContainer)
                 }
             }
         }
@@ -273,6 +277,7 @@ private struct SkillDetailCard: View {
                                      kind: skill.isEnabled ? .secondary : .primary) {
                             Task { await viewModel.toggle(skill) }
                         }
+                        .accessibilityIdentifier(SkillsAccessibilityID.detailToggleButton)
                     } else {
                         Text("This skill is read-only from the desktop boundary.")
                             .font(HermesTypography.caption)
@@ -378,6 +383,7 @@ private struct SkillProvenanceCard: View {
                         Task { await viewModel.loadDraftReview() }
                     }
                     .padding(.top, HermesSpacing.xs)
+                    .accessibilityIdentifier(SkillsAccessibilityID.detailDraftFromSession)
                 }
             }
         }
@@ -424,6 +430,7 @@ private struct SkillDraftReviewSheet: View {
         .padding(HermesSpacing.xl)
         .frame(minWidth: 580, minHeight: 540)
         .background(HermesColors.canvas)
+        .accessibilityIdentifier(SkillsAccessibilityID.sessionDraftSheet)
     }
 
     private var header: some View {
@@ -482,6 +489,7 @@ private struct SkillDraftReviewSheet: View {
                 FieldRow(label: "Name") {
                     TextField("Skill name", text: $viewModel.draftName)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityIdentifier(SkillsAccessibilityID.sessionDraftName)
                 }
                 FieldRow(label: "Summary") {
                     TextEditor(text: $viewModel.draftSummary)
@@ -490,6 +498,7 @@ private struct SkillDraftReviewSheet: View {
                         .padding(HermesSpacing.xs)
                         .background(HermesColors.field)
                         .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
+                        .accessibilityIdentifier(SkillsAccessibilityID.sessionDraftSummary)
                 }
                 FieldRow(label: "Trigger") {
                     TextEditor(text: $viewModel.draftTriggerSummary)
@@ -498,6 +507,7 @@ private struct SkillDraftReviewSheet: View {
                         .padding(HermesSpacing.xs)
                         .background(HermesColors.field)
                         .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
+                        .accessibilityIdentifier(SkillsAccessibilityID.sessionDraftTrigger)
                 }
                 FieldRow(label: "Category") {
                     Picker("", selection: $viewModel.draftCategory) {
@@ -507,6 +517,7 @@ private struct SkillDraftReviewSheet: View {
                     }
                     .pickerStyle(.menu)
                     .labelsHidden()
+                    .accessibilityIdentifier(SkillsAccessibilityID.sessionDraftCategory)
                 }
                 FieldRow(label: "Risk style") {
                     Picker("", selection: $viewModel.draftRiskStyle) {
@@ -516,6 +527,7 @@ private struct SkillDraftReviewSheet: View {
                     }
                     .pickerStyle(.menu)
                     .labelsHidden()
+                    .accessibilityIdentifier(SkillsAccessibilityID.sessionDraftRisk)
                 }
             }
         }
@@ -551,6 +563,7 @@ private struct SkillDraftReviewSheet: View {
                         .foregroundStyle(HermesColors.text)
                 }
                 .toggleStyle(.checkbox)
+                .accessibilityIdentifier(SkillsAccessibilityID.sessionDraftAcknowledge)
                 Text("Submission queues an audit entry. The skill appears as a draft until the daemon finishes installing.")
                     .font(HermesTypography.caption)
                     .foregroundStyle(HermesColors.muted)
@@ -562,10 +575,12 @@ private struct SkillDraftReviewSheet: View {
         HStack(spacing: HermesSpacing.sm) {
             Spacer()
             HermesButton("Close") { viewModel.dismissDraftSheet() }
+                .accessibilityIdentifier(SkillsAccessibilityID.sessionDraftClose)
             HermesButton("Submit draft", kind: .primary) {
                 Task { await viewModel.submitDraft() }
             }
             .disabled(!viewModel.draftAcknowledgedInstall)
+            .accessibilityIdentifier(SkillsAccessibilityID.sessionDraftSubmit)
         }
     }
 }
@@ -646,7 +661,7 @@ private struct SkillDirectAddSheet: View {
         .padding(HermesSpacing.xl)
         .frame(minWidth: 580, minHeight: 580)
         .background(HermesColors.canvas)
-        .accessibilityIdentifier("skills.directAddSheet")
+                    .accessibilityIdentifier(SkillsAccessibilityID.directAddSheet)
     }
 
     private var header: some View {
@@ -678,7 +693,7 @@ private struct SkillDirectAddSheet: View {
                             hasError: viewModel.directDraftFieldErrors.contains(.name)) {
                     TextField("e.g. Project triage summary", text: $viewModel.directDraftName)
                         .textFieldStyle(.roundedBorder)
-                        .accessibilityIdentifier("skills.directAdd.name")
+                        .accessibilityIdentifier(SkillsAccessibilityID.directAddName)
                 }
                 directField(label: "Summary",
                             isRequired: true,
@@ -689,7 +704,7 @@ private struct SkillDirectAddSheet: View {
                         .padding(HermesSpacing.xs)
                         .background(HermesColors.field)
                         .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
-                        .accessibilityIdentifier("skills.directAdd.summary")
+                        .accessibilityIdentifier(SkillsAccessibilityID.directAddSummary)
                 }
                 directField(label: "Trigger",
                             isRequired: true,
@@ -701,7 +716,7 @@ private struct SkillDirectAddSheet: View {
                         .padding(HermesSpacing.xs)
                         .background(HermesColors.field)
                         .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
-                        .accessibilityIdentifier("skills.directAdd.trigger")
+                        .accessibilityIdentifier(SkillsAccessibilityID.directAddTrigger)
                 }
                 HStack(spacing: HermesSpacing.md) {
                     directField(label: "Category", isRequired: false, hasError: false) {
@@ -712,7 +727,7 @@ private struct SkillDirectAddSheet: View {
                         }
                         .pickerStyle(.menu)
                         .labelsHidden()
-                        .accessibilityIdentifier("skills.directAdd.category")
+                        .accessibilityIdentifier(SkillsAccessibilityID.directAddCategory)
                     }
                     directField(label: "Risk style", isRequired: false, hasError: false) {
                         Picker("", selection: $viewModel.directDraftRiskStyle) {
@@ -722,7 +737,7 @@ private struct SkillDirectAddSheet: View {
                         }
                         .pickerStyle(.menu)
                         .labelsHidden()
-                        .accessibilityIdentifier("skills.directAdd.risk")
+                        .accessibilityIdentifier(SkillsAccessibilityID.directAddRisk)
                     }
                 }
                 directField(label: "Instructions",
@@ -735,7 +750,7 @@ private struct SkillDirectAddSheet: View {
                         .padding(HermesSpacing.xs)
                         .background(HermesColors.field)
                         .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
-                        .accessibilityIdentifier("skills.directAdd.instructions")
+                        .accessibilityIdentifier(SkillsAccessibilityID.directAddInstructions)
                 }
             }
         }
@@ -776,7 +791,7 @@ private struct SkillDirectAddSheet: View {
                         .foregroundStyle(HermesColors.text)
                 }
                 .toggleStyle(.checkbox)
-                .accessibilityIdentifier("skills.directAdd.acknowledge")
+                .accessibilityIdentifier(SkillsAccessibilityID.directAddAcknowledge)
                 Text("Submission queues an audit entry. The skill appears as a draft until Hermes Agent finishes installing.")
                     .font(HermesTypography.caption)
                     .foregroundStyle(HermesColors.muted)
@@ -792,7 +807,7 @@ private struct SkillDirectAddSheet: View {
                 Task { await viewModel.submitDirectDraft() }
             }
             .disabled(!viewModel.directDraftAcknowledgedInstall || !viewModel.isDirectDraftValid)
-            .accessibilityIdentifier("skills.directAdd.submit")
+            .accessibilityIdentifier(SkillsAccessibilityID.directAddSubmit)
         }
     }
 

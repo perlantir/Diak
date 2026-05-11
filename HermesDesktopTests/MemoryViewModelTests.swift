@@ -168,4 +168,46 @@ final class MemoryViewModelTests: XCTestCase {
             XCTFail("Expected failed state, got \(viewModel.state)")
         }
     }
+
+    @MainActor
+    func testUATSnapshotMirrorsVisibleMemoryFormGate() async throws {
+        let client = MockHermesAPIClient()
+        client.resetMemoryState()
+        let viewModel = MemoryViewModel(client: client)
+        await viewModel.refresh()
+
+        viewModel.presentCreate()
+        XCTAssertTrue(viewModel.uatSnapshot.isLoaded)
+        XCTAssertTrue(viewModel.uatSnapshot.isEditSheetPresented)
+        XCTAssertTrue(viewModel.uatSnapshot.isCreatingDraft)
+        XCTAssertFalse(viewModel.uatSnapshot.canSaveDraft)
+
+        viewModel.draftAcknowledgedReview = true
+        XCTAssertTrue(viewModel.uatSnapshot.canSaveDraft)
+    }
+
+    func testMemoryAccessibilityIdentifiersAreStableForUAT() {
+        let ids = [
+            MemoryAccessibilityID.listContainer,
+            MemoryAccessibilityID.searchField,
+            MemoryAccessibilityID.refreshButton,
+            MemoryAccessibilityID.addButton,
+            MemoryAccessibilityID.actionBanner,
+            MemoryAccessibilityID.detailEditButton,
+            MemoryAccessibilityID.detailPinButton,
+            MemoryAccessibilityID.detailDeleteButton,
+            MemoryAccessibilityID.editSheet,
+            MemoryAccessibilityID.editTitleField,
+            MemoryAccessibilityID.editBodyField,
+            MemoryAccessibilityID.editScopePicker,
+            MemoryAccessibilityID.editPinnedToggle,
+            MemoryAccessibilityID.editAcknowledge,
+            MemoryAccessibilityID.editSaveButton,
+            MemoryAccessibilityID.editCloseButton,
+            MemoryAccessibilityID.row("mem-001")
+        ]
+        XCTAssertEqual(Set(ids).count, ids.count)
+        XCTAssertEqual(MemoryAccessibilityID.editSaveButton, "memory.editSheet.saveButton")
+        XCTAssertEqual(MemoryAccessibilityID.row("mem-001"), "memory.row.mem-001")
+    }
 }

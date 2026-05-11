@@ -38,6 +38,7 @@ struct AutomationsView: View {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier(AutomationsAccessibilityID.refreshButton)
             }
             .padding(.horizontal, HermesSpacing.lg)
             .padding(.top, HermesSpacing.lg)
@@ -63,13 +64,16 @@ struct AutomationsView: View {
                             ForEach(viewModel.jobs) { job in
                                 AutomationRow(job: job, isSelected: viewModel.selectedJob?.id == job.id)
                                     .onTapGesture { viewModel.selectedJobID = job.id }
+                                    .accessibilityIdentifier(AutomationsAccessibilityID.row(job.id))
                             }
                         }
                         .padding(.horizontal, HermesSpacing.md)
                     }
+                    .accessibilityIdentifier(AutomationsAccessibilityID.listContainer)
                 }
             }
         }
+        .accessibilityIdentifier(AutomationsAccessibilityID.createCard)
     }
 
     @ViewBuilder
@@ -109,6 +113,7 @@ struct AutomationsView: View {
             ActionStateBanner(state: viewModel.actionState) {
                 viewModel.acknowledgeAction()
             }
+            .accessibilityIdentifier(AutomationsAccessibilityID.testRunResultCard)
         }
     }
 }
@@ -158,6 +163,7 @@ private struct CreateAutomationCard: View {
                 ) {
                     TextField("Standup prep", text: $viewModel.draftTitle)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityIdentifier(AutomationsAccessibilityID.createTitleField)
                 }
 
                 fieldGroup(
@@ -170,6 +176,7 @@ private struct CreateAutomationCard: View {
                         .padding(6)
                         .background(HermesColors.field)
                         .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
+                        .accessibilityIdentifier(AutomationsAccessibilityID.createPromptField)
                 }
 
                 schedulePresetSection
@@ -183,6 +190,7 @@ private struct CreateAutomationCard: View {
                             TextField("0 9 * * 1-5", text: $viewModel.draftCustomCron)
                                 .textFieldStyle(.roundedBorder)
                                 .font(.system(.body, design: .monospaced))
+                                .accessibilityIdentifier(AutomationsAccessibilityID.createCustomCronField)
                         }
                         fieldGroup(
                             label: "Schedule label",
@@ -190,6 +198,7 @@ private struct CreateAutomationCard: View {
                         ) {
                             TextField("Weekdays at 9:00 AM", text: $viewModel.draftCustomScheduleLabel)
                                 .textFieldStyle(.roundedBorder)
+                                .accessibilityIdentifier(AutomationsAccessibilityID.createCustomLabelField)
                         }
                     }
                 }
@@ -205,10 +214,12 @@ private struct CreateAutomationCard: View {
                     TextField("local, origin, telegram, or platform target", text: $viewModel.draftDeliveryDestination)
                         .textFieldStyle(.roundedBorder)
                         .disabled(!viewModel.draftNotificationsEnabled)
+                        .accessibilityIdentifier(AutomationsAccessibilityID.createDeliveryField)
                 }
 
                 Toggle("Show in-app delivery status when this runs", isOn: $viewModel.draftNotificationsEnabled)
                     .toggleStyle(.switch)
+                    .accessibilityIdentifier(AutomationsAccessibilityID.createNotificationsToggle)
 
                 automationPreview
 
@@ -222,6 +233,7 @@ private struct CreateAutomationCard: View {
                     Task { await viewModel.createFromDraft() }
                 }
                 .disabled(!viewModel.canCreate)
+                .accessibilityIdentifier(AutomationsAccessibilityID.createSubmitButton)
             }
         }
     }
@@ -260,6 +272,7 @@ private struct CreateAutomationCard: View {
             }
             .labelsHidden()
             .pickerStyle(.segmented)
+            .accessibilityIdentifier(AutomationsAccessibilityID.createSchedulePresetPicker)
             Text(viewModel.draftSchedulePreset.summary)
                 .font(HermesTypography.caption)
                 .foregroundStyle(HermesColors.muted)
@@ -353,11 +366,14 @@ private struct AutomationDetailCard: View {
                         TextField("Cron", text: $cron)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
+                            .accessibilityIdentifier(AutomationsAccessibilityID.detailScheduleCronField)
                         TextField("Description", text: $scheduleDescription)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityIdentifier(AutomationsAccessibilityID.detailScheduleLabelField)
                         HermesButton("Save schedule") {
                             Task { await viewModel.updateSchedule(for: job, cron: cron, description: scheduleDescription) }
                         }
+                        .accessibilityIdentifier(AutomationsAccessibilityID.detailSaveScheduleButton)
                     }
                     HStack {
                         Text("Timezone: \(job.schedule.timezone)")
@@ -372,12 +388,15 @@ private struct AutomationDetailCard: View {
                     HermesButton("Test run", kind: .primary) {
                         Task { await viewModel.testRunSelected() }
                     }
+                    .accessibilityIdentifier(AutomationsAccessibilityID.detailTestRunButton)
                     HermesButton(job.status == .paused ? "Resume" : "Pause") {
                         Task { await viewModel.pauseOrResumeSelected() }
                     }
+                    .accessibilityIdentifier(AutomationsAccessibilityID.detailPauseResumeButton)
                     HermesButton("Delete", kind: .destructive) {
                         viewModel.requestDeleteSelected()
                     }
+                    .accessibilityIdentifier(AutomationsAccessibilityID.detailDeleteButton)
                 }
             }
         }
@@ -418,6 +437,7 @@ private struct TestRunResultCard: View {
                         Button("Dismiss") { viewModel.acknowledgeTestRun() }
                             .buttonStyle(.plain)
                             .font(HermesTypography.caption)
+                            .accessibilityIdentifier(AutomationsAccessibilityID.testRunDismissButton)
                     }
                     Text(run.summary)
                         .font(HermesTypography.body)
@@ -436,6 +456,7 @@ private struct TestRunResultCard: View {
                         .foregroundStyle(HermesColors.muted)
                 }
             }
+            .accessibilityIdentifier(AutomationsAccessibilityID.testRunResultCard)
         case .failed(_, let title, let message):
             HermesCard {
                 VStack(alignment: .leading, spacing: HermesSpacing.sm) {
@@ -448,6 +469,7 @@ private struct TestRunResultCard: View {
                         Button("Dismiss") { viewModel.acknowledgeTestRun() }
                             .buttonStyle(.plain)
                             .font(HermesTypography.caption)
+                            .accessibilityIdentifier(AutomationsAccessibilityID.testRunDismissButton)
                     }
                     Text(message)
                         .font(HermesTypography.body)
@@ -565,5 +587,6 @@ private struct StatusLine: View {
         .padding(HermesSpacing.sm)
         .background(tone.background)
         .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
+        .accessibilityIdentifier(AutomationsAccessibilityID.actionBanner)
     }
 }

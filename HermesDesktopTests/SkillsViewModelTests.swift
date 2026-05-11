@@ -251,4 +251,64 @@ final class SkillsViewModelTests: XCTestCase {
             XCTFail("Expected failed action state, got \(viewModel.actionState)")
         }
     }
+
+    @MainActor
+    func testUATSnapshotMirrorsDirectAddAndSessionDraftGates() async throws {
+        let client = MockHermesAPIClient()
+        client.resetSkillState()
+        let viewModel = SkillsViewModel(client: client)
+        await viewModel.refresh()
+
+        viewModel.presentDirectAddSheet()
+        XCTAssertTrue(viewModel.uatSnapshot.directAdd.isPresented)
+        XCTAssertFalse(viewModel.uatSnapshot.directAdd.canSubmit)
+        XCTAssertTrue(viewModel.uatSnapshot.directAdd.missingFields.contains(.name))
+
+        viewModel.directDraftName = "QA helper"
+        viewModel.directDraftSummary = "Supports QA audit prep."
+        viewModel.directDraftTriggerSummary = "When testing Diak."
+        viewModel.directDraftAcknowledgedInstall = true
+        XCTAssertTrue(viewModel.uatSnapshot.directAdd.canSubmit)
+
+        viewModel.presentDraftSheet(for: "sess-uat")
+        XCTAssertTrue(viewModel.uatSnapshot.sessionDraft.isPresented)
+        XCTAssertEqual(viewModel.uatSnapshot.sessionDraft.sessionID, "sess-uat")
+        XCTAssertFalse(viewModel.uatSnapshot.sessionDraft.canSubmit)
+        viewModel.draftAcknowledgedInstall = true
+        XCTAssertTrue(viewModel.uatSnapshot.sessionDraft.canSubmit)
+    }
+
+    func testSkillsAccessibilityIdentifiersAreStableForUAT() {
+        let ids = [
+            SkillsAccessibilityID.listContainer,
+            SkillsAccessibilityID.searchField,
+            SkillsAccessibilityID.refreshButton,
+            SkillsAccessibilityID.addSkillButton,
+            SkillsAccessibilityID.actionBanner,
+            SkillsAccessibilityID.detailToggleButton,
+            SkillsAccessibilityID.detailDraftFromSession,
+            SkillsAccessibilityID.directAddSheet,
+            SkillsAccessibilityID.directAddName,
+            SkillsAccessibilityID.directAddSummary,
+            SkillsAccessibilityID.directAddTrigger,
+            SkillsAccessibilityID.directAddCategory,
+            SkillsAccessibilityID.directAddRisk,
+            SkillsAccessibilityID.directAddInstructions,
+            SkillsAccessibilityID.directAddAcknowledge,
+            SkillsAccessibilityID.directAddSubmit,
+            SkillsAccessibilityID.sessionDraftSheet,
+            SkillsAccessibilityID.sessionDraftName,
+            SkillsAccessibilityID.sessionDraftSummary,
+            SkillsAccessibilityID.sessionDraftTrigger,
+            SkillsAccessibilityID.sessionDraftCategory,
+            SkillsAccessibilityID.sessionDraftRisk,
+            SkillsAccessibilityID.sessionDraftAcknowledge,
+            SkillsAccessibilityID.sessionDraftSubmit,
+            SkillsAccessibilityID.sessionDraftClose,
+            SkillsAccessibilityID.row("skill-001")
+        ]
+        XCTAssertEqual(Set(ids).count, ids.count)
+        XCTAssertEqual(SkillsAccessibilityID.directAddSubmit, "skills.directAdd.submit")
+        XCTAssertEqual(SkillsAccessibilityID.row("skill-001"), "skills.row.skill-001")
+    }
 }

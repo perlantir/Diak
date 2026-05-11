@@ -46,11 +46,13 @@ struct MemoryView: View {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier(MemoryAccessibilityID.refreshButton)
                 Button { viewModel.presentCreate() } label: {
                     Image(systemName: "plus")
                 }
                 .buttonStyle(.plain)
                 .help("Add memory")
+                .accessibilityIdentifier(MemoryAccessibilityID.addButton)
             }
             .padding(.horizontal, HermesSpacing.lg)
             .padding(.top, HermesSpacing.lg)
@@ -61,6 +63,7 @@ struct MemoryView: View {
                 TextField("Search memories…", text: $viewModel.searchText)
                     .textFieldStyle(.plain)
                     .font(HermesTypography.body)
+                    .accessibilityIdentifier(MemoryAccessibilityID.searchField)
             }
             .padding(.horizontal, HermesSpacing.md)
             .padding(.vertical, HermesSpacing.sm)
@@ -95,11 +98,13 @@ struct MemoryView: View {
                                 MemoryRow(item: item,
                                           isSelected: viewModel.selectedItem?.id == item.id)
                                     .onTapGesture { viewModel.selectedItemID = item.id }
+                                    .accessibilityIdentifier(MemoryAccessibilityID.row(item.id))
                             }
                         }
                         .padding(.horizontal, HermesSpacing.md)
                         .padding(.bottom, HermesSpacing.lg)
                     }
+                    .accessibilityIdentifier(MemoryAccessibilityID.listContainer)
                 }
             }
         }
@@ -315,14 +320,17 @@ private struct MemoryDetailCard: View {
                     HermesButton("Edit", kind: .primary) {
                         viewModel.presentEdit(for: item)
                     }
+                    .accessibilityIdentifier(MemoryAccessibilityID.detailEditButton)
                     HermesButton(item.isPinned ? "Unpin" : "Pin", kind: .secondary) {
                         Task { await viewModel.togglePinned(item) }
                     }
+                    .accessibilityIdentifier(MemoryAccessibilityID.detailPinButton)
                     Spacer()
                     HermesButton("Delete", kind: .destructive) {
                         viewModel.requestDelete(item)
                     }
                     .disabled(!item.supportsDelete)
+                    .accessibilityIdentifier(MemoryAccessibilityID.detailDeleteButton)
                 }
                 if !item.supportsDelete {
                     Text("Imported references are read-only at the desktop boundary.")
@@ -400,6 +408,7 @@ private struct MemoryEditSheet: View {
         .padding(HermesSpacing.xl)
         .frame(minWidth: 560, minHeight: 480)
         .background(HermesColors.canvas)
+        .accessibilityIdentifier(MemoryAccessibilityID.editSheet)
     }
 
     private var header: some View {
@@ -427,6 +436,7 @@ private struct MemoryEditSheet: View {
                 FieldRow(label: "Title") {
                     TextField("Memory title", text: $viewModel.draftTitle)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityIdentifier(MemoryAccessibilityID.editTitleField)
                 }
                 FieldRow(label: "Body") {
                     TextEditor(text: $viewModel.draftBody)
@@ -435,6 +445,7 @@ private struct MemoryEditSheet: View {
                         .padding(HermesSpacing.xs)
                         .background(HermesColors.field)
                         .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
+                        .accessibilityIdentifier(MemoryAccessibilityID.editBodyField)
                 }
                 FieldRow(label: "Scope") {
                     Picker("", selection: $viewModel.draftScope) {
@@ -444,6 +455,7 @@ private struct MemoryEditSheet: View {
                     }
                     .pickerStyle(.menu)
                     .labelsHidden()
+                    .accessibilityIdentifier(MemoryAccessibilityID.editScopePicker)
                 }
                 Toggle(isOn: $viewModel.draftIsPinned) {
                     Text("Pin this memory")
@@ -451,6 +463,7 @@ private struct MemoryEditSheet: View {
                         .foregroundStyle(HermesColors.text)
                 }
                 .toggleStyle(.switch)
+                .accessibilityIdentifier(MemoryAccessibilityID.editPinnedToggle)
             }
         }
     }
@@ -464,6 +477,7 @@ private struct MemoryEditSheet: View {
                         .foregroundStyle(HermesColors.text)
                 }
                 .toggleStyle(.checkbox)
+                .accessibilityIdentifier(MemoryAccessibilityID.editAcknowledge)
                 Text("Edits are applied through the typed daemon API. The Mac app never rewrites the underlying store directly.")
                     .font(HermesTypography.caption)
                     .foregroundStyle(HermesColors.muted)
@@ -475,6 +489,7 @@ private struct MemoryEditSheet: View {
         HStack(spacing: HermesSpacing.sm) {
             Spacer()
             HermesButton("Close") { viewModel.dismissEdit() }
+                .accessibilityIdentifier(MemoryAccessibilityID.editCloseButton)
             HermesButton(viewModel.isCreatingDraft ? "Add memory" : "Save edit", kind: .primary) {
                 Task {
                     if viewModel.isCreatingDraft {
@@ -485,6 +500,7 @@ private struct MemoryEditSheet: View {
                 }
             }
             .disabled(!viewModel.draftAcknowledgedReview)
+            .accessibilityIdentifier(MemoryAccessibilityID.editSaveButton)
         }
     }
 }
@@ -541,5 +557,6 @@ private struct MemoryActionStateBanner: View {
         .padding(HermesSpacing.sm)
         .background(tone.background)
         .clipShape(RoundedRectangle(cornerRadius: HermesRadius.control, style: .continuous))
+        .accessibilityIdentifier(MemoryAccessibilityID.actionBanner)
     }
 }

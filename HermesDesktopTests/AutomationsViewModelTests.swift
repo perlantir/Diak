@@ -205,4 +205,64 @@ final class AutomationsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.jobs.count, initialCount - 1)
     }
 
+    @MainActor
+    func testUATSnapshotMirrorsAutomationCreateDeliveryAndTestRunState() async throws {
+        let client = MockHermesAPIClient()
+        client.resetAutomationState()
+        let viewModel = AutomationsViewModel(client: client)
+        await viewModel.refresh()
+
+        XCTAssertTrue(viewModel.uatSnapshot.isLoaded)
+        XCTAssertFalse(viewModel.uatSnapshot.canCreate)
+
+        viewModel.draftTitle = "QA digest"
+        viewModel.draftPrompt = "Summarize QA blockers for the Diak release."
+        viewModel.selectPreset(.custom)
+        viewModel.draftCustomCron = "0 9 * * 1-5"
+        viewModel.draftCustomScheduleLabel = "Weekdays at 9:00 AM"
+        viewModel.draftDeliveryDestination = "telegram"
+        viewModel.draftNotificationsEnabled = true
+
+        XCTAssertTrue(viewModel.uatSnapshot.canCreate)
+        XCTAssertEqual(viewModel.uatSnapshot.draftSchedulePreset, .custom)
+        XCTAssertEqual(viewModel.uatSnapshot.draftDeliveryDestination, "telegram")
+        XCTAssertEqual(viewModel.uatSnapshot.resolvedCron, "0 9 * * 1-5")
+
+        await viewModel.testRunSelected()
+        XCTAssertTrue(viewModel.uatSnapshot.testRunVisible)
+        XCTAssertEqual(viewModel.uatSnapshot.testRunJobID, viewModel.selectedJobID)
+
+        viewModel.requestDeleteSelected()
+        XCTAssertEqual(viewModel.uatSnapshot.pendingDeleteJobID, viewModel.selectedJobID)
+    }
+
+    func testAutomationsAccessibilityIdentifiersAreStableForUAT() {
+        let ids = [
+            AutomationsAccessibilityID.listContainer,
+            AutomationsAccessibilityID.refreshButton,
+            AutomationsAccessibilityID.actionBanner,
+            AutomationsAccessibilityID.createCard,
+            AutomationsAccessibilityID.createTitleField,
+            AutomationsAccessibilityID.createPromptField,
+            AutomationsAccessibilityID.createSchedulePresetPicker,
+            AutomationsAccessibilityID.createCustomCronField,
+            AutomationsAccessibilityID.createCustomLabelField,
+            AutomationsAccessibilityID.createDeliveryField,
+            AutomationsAccessibilityID.createNotificationsToggle,
+            AutomationsAccessibilityID.createSubmitButton,
+            AutomationsAccessibilityID.detailTestRunButton,
+            AutomationsAccessibilityID.detailPauseResumeButton,
+            AutomationsAccessibilityID.detailDeleteButton,
+            AutomationsAccessibilityID.detailScheduleCronField,
+            AutomationsAccessibilityID.detailScheduleLabelField,
+            AutomationsAccessibilityID.detailSaveScheduleButton,
+            AutomationsAccessibilityID.testRunResultCard,
+            AutomationsAccessibilityID.testRunDismissButton,
+            AutomationsAccessibilityID.row("auto-001")
+        ]
+        XCTAssertEqual(Set(ids).count, ids.count)
+        XCTAssertEqual(AutomationsAccessibilityID.createDeliveryField, "automations.create.deliveryDestinationField")
+        XCTAssertEqual(AutomationsAccessibilityID.row("auto-001"), "automations.row.auto-001")
+    }
+
 }
