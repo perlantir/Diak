@@ -62,7 +62,7 @@ public final class SkillsViewModel: ObservableObject {
     @Published public var directDraftAcknowledgedInstall: Bool = false
     @Published public private(set) var directDraftFieldErrors: Set<DirectDraftField> = []
 
-    public enum DirectDraftField: Hashable {
+    public enum DirectDraftField: Hashable, Sendable {
         case name
         case summary
         case triggerSummary
