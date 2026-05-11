@@ -11,7 +11,7 @@ Last human-authored update: 2026-05-11 (post Phase 0.5, Path B locked)
 **Phase 1: Hermes Runtime Integration — Path B**
 
 Phase 0.5 (Hermes Reality Doc) is complete. See
-`Docs/Phases/Phase1/CHECKPOINTS/<TIMESTAMP-reality-doc-complete.md>` for
+`Docs/Phases/Phase1/CHECKPOINTS/20260511T182314Z-reality-doc-complete.md` for
 findings. The doc surfaced four contradictions with the original Phase 1
 plan. Nick has decided on Path B in response.
 
