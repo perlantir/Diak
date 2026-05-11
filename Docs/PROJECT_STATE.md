@@ -4,30 +4,33 @@ This is the live source-of-truth document for Diak's current state. Update it
 when phases advance or architectural decisions change. Agents read this on
 every run but never write to it.
 
-Last human-authored update: 2026-05-11
+Last human-authored update: 2026-05-11 (post Phase 0 merge)
 
 ## Current Active Phase
 
-**Phase 0: Architectural Reset**
+**Phase 0.5: Hermes Reality Doc**
 
-Phase 0 work is complete on the `phase/0-foundation-reset` branch but has not
-yet been verified against this `SCOPE.md` system or merged to main.
+Phase 0 is complete and merged to main at SHA `2185e7f`. All 9 acceptance
+criteria passed (criterion 8 was ratified after surfacing
+`HermesAPIEndpointConfig.swift` as in-scope refactor-by-extraction). See
+`Docs/Phases/Phase0/CHECKPOINTS/20260511T135332Z-phase-0-complete.md`.
 
-The next work unit is: verify Phase 0 against `Docs/Phases/Phase0/SCOPE.md`
-acceptance criteria, write a retroactive completion checkpoint, then merge to
-main.
+The next work unit is producing `Docs/Phases/Phase1/REALITY.md` by direct
+observation of the real Hermes CLI on this machine. No code changes in this
+phase. The Reality Doc is a hard gate before Phase 1.
 
-Phase branch: `phase/0-foundation-reset`
+Phase branch: `phase/0.5-reality-doc` (to be created from main)
 
-## Phase 0 Commits Already on Branch
+## Phase 0 Status
 
-- 5c475e1 chore: update Phase 0 entitlements and URL scheme
-- 9cd9c23 chore: add Phase 0 app state and lifecycle scaffolding
-- af94bec chore: shape Phase 0 deep-link route type
-- 5421ac8 refactor: consolidate Hermes API client foundation
+COMPLETE and merged to main at SHA `2185e7f` on 2026-05-11. All 9 acceptance
+criteria passed. See checkpoint:
+`Docs/Phases/Phase0/CHECKPOINTS/20260511T135332Z-phase-0-complete.md`.
 
-These commits were created under prior process rules. They need to be verified
-against the current `Docs/Phases/Phase0/SCOPE.md` before merging.
+Calibration note from Phase 0: refactor-by-extraction files that organize
+in-scope functionality differently are considered in-scope. New files that
+introduce new behavior (new endpoints, new dependencies, new types not
+implied by scope) require human approval before being added.
 
 ## Repository State
 
@@ -68,6 +71,10 @@ These are ratified. Do not relitigate without explicit Nick approval.
     generated `.xcodeproj`.
 11. Working tool for this project: Claude Code, invoked from the repo root.
     The Hermes agent is not used for Diak development going forward.
+12. Phase 0 verification model: every phase ends with a checkpoint that
+    records each acceptance criterion as PASS/FAIL with supporting evidence.
+    Nick reviews the checkpoint and performs the merge to main manually.
+    The agent does not merge.
 
 ## The Phase 0–8 Roadmap
 
@@ -115,22 +122,32 @@ concurrency, beta with real users.
 
 ## What the Agent Is Allowed to Do Right Now
 
-- Read this file, CLAUDE.md, and `Docs/Phases/Phase0/SCOPE.md`.
-- Verify the four existing Phase 0 commits against the acceptance criteria in
-  `Docs/Phases/Phase0/SCOPE.md`.
-- Write a retroactive completion checkpoint at
-  `Docs/Phases/Phase0/CHECKPOINTS/<timestamp>-phase-0-complete.md` if
-  verification passes.
-- Push to the `phase/0-foundation-reset` branch.
+- Read `CLAUDE.md`, this file, and `Docs/Phases/Phase1/REALITY-SCOPE.md`.
+- Create branch `phase/0.5-reality-doc` from current main.
+- Produce `Docs/Phases/Phase1/REALITY.md` by direct observation of the
+  Hermes CLI installed on this machine.
+- Write checkpoints to `Docs/Phases/Phase1/CHECKPOINTS/`.
+- Push to `phase/0.5-reality-doc` branch only.
 
 ## What the Agent Is Not Allowed to Do Right Now
 
-- Modify any Swift file. Phase 0 work is already complete; this is verification
-  only.
-- Start the Reality Doc (Phase 0.5) or Phase 1 work.
-- Modify `CLAUDE.md` or this file.
-- Merge `phase/0-foundation-reset` to main. The human will do the merge after
-  reviewing the verification checkpoint.
+- Modify any Swift file. Phase 0.5 is investigation and documentation only.
+- Modify anything outside `Docs/Phases/Phase1/`.
+- Make Path A vs Path B (Python bridge vs direct integration) decisions —
+  Nick decides after reviewing the Reality Doc.
+- Begin any Phase 1 implementation work.
+
+## Known Issues (Deferred)
+
+These were observed during Phase 0 verification but are not Phase 0 issues.
+Address in a later phase.
+
+- Three stale `Diak.app` bundles register the `diak://` URL scheme with
+  LaunchServices (two in `/private/tmp/diak_phase1_e2e_*`, one in stale
+  DerivedData). May cause macOS to route `diak://` URLs to wrong builds.
+  Clean up before public distribution.
+- `zsh` builtin `log` shadows `/usr/bin/log`. Future automation that calls
+  `log show` should use the absolute path.
 
 ## Human Contact
 
