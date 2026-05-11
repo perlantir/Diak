@@ -644,17 +644,43 @@ class DiakHermesBridgeTests(unittest.TestCase):
             return 0, ""
         bridge._run_command = fake_run_command
         try:
-            status, _, body = self.harness.request("POST", "/automations", {"title": "QA cron", "prompt": "Say done", "schedule": {"cron": "30m", "human_description": "Every 30 minutes"}})
+            status, _, body = self.harness.request("POST", "/automations", {"title": "QA cron", "prompt": "Say done", "schedule": {"cron": "30m", "human_description": "Every 30 minutes"}, "delivery_destination": "telegram", "notifications_enabled": True})
             self.assertEqual(status, 200)
             job = json.loads(body)["job"]
             self.assertEqual(job["cron_job_id"], "abcdef123456")
-            self.assertTrue(any(cmd[:3] == ["hermes", "cron", "create"] for cmd in commands))
+            self.assertEqual(job["delivery_destination"], "telegram")
+            create_cmd = next(cmd for cmd in commands if cmd[:3] == ["hermes", "cron", "create"])
+            self.assertIn("--deliver", create_cmd)
+            self.assertEqual(create_cmd[create_cmd.index("--deliver") + 1], "telegram")
 
             status, _, body = self.harness.request("POST", f"/automations/{job['id']}/test-run")
             self.assertEqual(status, 200)
             run = json.loads(body)
             self.assertEqual(run["status"], "succeeded")
             self.assertIn("DONE", run["summary"])
+        finally:
+            bridge._run_command = original
+
+    def test_automation_delete_removes_paired_hermes_cron_job(self):
+        original = bridge._run_command
+        commands = []
+        def fake_run_command(argv, timeout=30):
+            commands.append(argv)
+            if argv[:3] == ["hermes", "cron", "create"]:
+                return 0, "Created job deadbeef1234\n"
+            if argv[:3] == ["hermes", "cron", "remove"]:
+                return 0, "removed\n"
+            return 0, ""
+        bridge._run_command = fake_run_command
+        try:
+            status, _, body = self.harness.request("POST", "/automations", {"title": "Delete me", "prompt": "Say done", "schedule": {"cron": "30m", "human_description": "Every 30 minutes"}})
+            self.assertEqual(status, 200)
+            job = json.loads(body)["job"]
+
+            status, _, body = self.harness.request("DELETE", f"/automations/{job['id']}")
+            self.assertEqual(status, 200)
+            self.assertTrue(json.loads(body)["deleted"])
+            self.assertTrue(any(cmd[:3] == ["hermes", "cron", "remove"] and cmd[3] == "deadbeef1234" for cmd in commands))
         finally:
             bridge._run_command = original
 

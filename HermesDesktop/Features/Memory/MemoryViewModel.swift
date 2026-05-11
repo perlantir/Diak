@@ -46,6 +46,7 @@ public final class MemoryViewModel: ObservableObject {
     @Published public var draftScope: HermesMemoryScope = .user
     @Published public var draftIsPinned: Bool = false
     @Published public var draftAcknowledgedReview: Bool = false
+    @Published public private(set) var isCreatingDraft: Bool = false
 
     /// Pending delete confirmation target. The view shows a confirmation
     /// dialog gated on this — the desktop boundary never deletes silently.
@@ -85,7 +86,7 @@ public final class MemoryViewModel: ObservableObject {
         return HermesMemorySource.allCases.filter { used.contains($0) }
     }
 
-    public var isEditSheetPresented: Bool { editingItemID != nil }
+    public var isEditSheetPresented: Bool { isCreatingDraft || editingItemID != nil }
 
     public var pendingDeleteItem: HermesMemoryItem? {
         guard let id = pendingDeleteItemID else { return nil }
@@ -113,6 +114,7 @@ public final class MemoryViewModel: ObservableObject {
     }
 
     public func presentEdit(for item: HermesMemoryItem) {
+        isCreatingDraft = false
         editingItemID = item.id
         draftTitle = item.title
         draftBody = item.body
@@ -121,13 +123,61 @@ public final class MemoryViewModel: ObservableObject {
         draftAcknowledgedReview = false
     }
 
-    public func dismissEdit() {
+    public func presentCreate() {
+        isCreatingDraft = true
         editingItemID = nil
         draftTitle = ""
         draftBody = ""
         draftScope = .user
         draftIsPinned = false
         draftAcknowledgedReview = false
+    }
+
+    public func dismissEdit() {
+        isCreatingDraft = false
+        editingItemID = nil
+        draftTitle = ""
+        draftBody = ""
+        draftScope = .user
+        draftIsPinned = false
+        draftAcknowledgedReview = false
+    }
+
+    public func saveCreate() async {
+        guard isCreatingDraft else { return }
+        guard draftAcknowledgedReview else {
+            actionState = .failed("Acknowledge the review step before creating.")
+            return
+        }
+        let trimmedTitle = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBody = draftBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else {
+            actionState = .failed("Title cannot be empty.")
+            return
+        }
+        guard !trimmedBody.isEmpty else {
+            actionState = .failed("Memory body cannot be empty.")
+            return
+        }
+
+        actionState = .working("Creating memory…")
+        do {
+            let result = try await client.createMemoryItem(HermesMemoryCreateRequest(
+                title: trimmedTitle,
+                body: trimmedBody,
+                scope: draftScope,
+                isPinned: draftIsPinned,
+                acknowledgedReview: true
+            ))
+            upsert(result.item)
+            selectedItemID = result.item.id
+            actionState = .succeeded(result.note ?? "Memory created.")
+            dismissEdit()
+        } catch let error as HermesAPIError {
+            actionState = .failed(error.userFacingMessage)
+        } catch {
+            actionState = .failed(error.localizedDescription)
+        }
     }
 
     public func saveEdit() async {

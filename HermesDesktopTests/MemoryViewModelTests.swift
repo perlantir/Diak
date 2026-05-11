@@ -49,6 +49,45 @@ final class MemoryViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testCreateRequiresAcknowledgementAndPersistsManualMemory() async throws {
+        let client = MockHermesAPIClient()
+        client.resetMemoryState()
+        let viewModel = MemoryViewModel(client: client)
+        await viewModel.refresh()
+        let initialCount = viewModel.items.count
+
+        viewModel.presentCreate()
+        viewModel.draftTitle = "QA launch rule"
+        viewModel.draftBody = "Never mark Diak release ready without app UI evidence."
+        viewModel.draftScope = .project
+        viewModel.draftIsPinned = true
+
+        await viewModel.saveCreate()
+        XCTAssertEqual(client.createMemoryItemCallCount, 0,
+                       "Create must be locally gated until the review step is acknowledged.")
+        if case .failed(let message) = viewModel.actionState {
+            XCTAssertTrue(message.contains("Acknowledge"))
+        } else {
+            XCTFail("Expected failed action state, got \(viewModel.actionState)")
+        }
+        XCTAssertTrue(viewModel.isEditSheetPresented,
+                      "Create sheet must remain open so the user can acknowledge and retry.")
+
+        viewModel.draftAcknowledgedReview = true
+        await viewModel.saveCreate()
+
+        XCTAssertEqual(client.createMemoryItemCallCount, 1)
+        XCTAssertNil(viewModel.editingItemID, "Create sheet should dismiss after success.")
+        XCTAssertEqual(viewModel.items.count, initialCount + 1)
+        let created = try XCTUnwrap(viewModel.items.first { $0.title == "QA launch rule" })
+        XCTAssertEqual(created.body, "Never mark Diak release ready without app UI evidence.")
+        XCTAssertEqual(created.scope, .project)
+        XCTAssertEqual(created.source, .manual)
+        XCTAssertTrue(created.isPinned)
+        XCTAssertEqual(viewModel.selectedItemID, created.id)
+    }
+
+    @MainActor
     func testTogglePinnedSkipsAcknowledgementGate() async throws {
         let client = MockHermesAPIClient()
         client.resetMemoryState()

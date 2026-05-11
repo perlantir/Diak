@@ -1,0 +1,13 @@
+### listener
+python3.1 PID 98435 LISTEN 127.0.0.1:8765
+
+### version
+{"version":"diak-hermes-bridge-1.0.0","build":"local","profile":"production","mode":"production_bridge","runtime":"hermes-agent","bridge_contract_version":"m12-slice6","supported_routes":["/health","/version","/config","/daemon/logs","/sessions","/automations","/connectors","/skills","/skills/draft","/memory","/approvals","/evidence","/settings/secrets"],"provider":"openai-codex","model":"gpt-5.5"}
+
+### route probes
+/memory: HTTP 200; bridge-owned memory dashboard returned.
+/skills: HTTP 200; skills catalog route available.
+/automations: HTTP 200; automations catalog route available.
+
+### note
+Sanitized local live probe evidence. Full raw catalog output intentionally omitted because it can include local/private user skill and automation names.

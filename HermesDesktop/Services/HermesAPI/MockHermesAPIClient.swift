@@ -441,10 +441,11 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
             createdAt: now,
             updatedAt: now,
             nextRunAt: Self.mockNextRun(after: now),
-            notificationStatus: request.notificationsEnabled ? .daemonUnsupported : .disabled,
+            notificationStatus: request.notificationsEnabled ? .enabled : .disabled,
             notificationSummary: request.notificationsEnabled
-                ? "In-app status only: real desktop notifications require daemon/permission support."
+                ? "Delivery target: \(request.deliveryDestination)."
                 : "Notifications disabled for this automation.",
+            deliveryDestination: request.deliveryDestination,
             modelOverride: request.modelOverride
         )
         automationJobs[id] = job
@@ -460,10 +461,16 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
         if let prompt = update.prompt { job.prompt = prompt }
         if let schedule = update.schedule { job.schedule = schedule; job.nextRunAt = Self.mockNextRun(after: Date()) }
         if let notificationsEnabled = update.notificationsEnabled {
-            job.notificationStatus = notificationsEnabled ? .daemonUnsupported : .disabled
+            job.notificationStatus = notificationsEnabled ? .enabled : .disabled
             job.notificationSummary = notificationsEnabled
-                ? "In-app status only: real desktop notifications require daemon/permission support."
+                ? "Delivery target: \(update.deliveryDestination ?? job.deliveryDestination)."
                 : "Notifications disabled for this automation."
+        }
+        if let deliveryDestination = update.deliveryDestination {
+            job.deliveryDestination = deliveryDestination
+            if job.notificationStatus == .enabled {
+                job.notificationSummary = "Delivery target: \(deliveryDestination)."
+            }
         }
         if update.clearsModelOverride == true { job.modelOverride = nil }
         if let modelOverride = update.modelOverride { job.modelOverride = modelOverride }

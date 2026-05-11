@@ -221,6 +221,7 @@ public struct HermesAutomationJob: Codable, Equatable, Sendable, Identifiable, H
     public var runHistory: [HermesAutomationRun]
     public var notificationStatus: HermesAutomationNotificationStatus
     public var notificationSummary: String
+    public var deliveryDestination: String
     public var modelOverride: HermesModelOverride?
 
     public init(id: String,
@@ -236,6 +237,7 @@ public struct HermesAutomationJob: Codable, Equatable, Sendable, Identifiable, H
                 runHistory: [HermesAutomationRun] = [],
                 notificationStatus: HermesAutomationNotificationStatus = .daemonUnsupported,
                 notificationSummary: String = "Notification delivery is shown in-app until daemon support exists.",
+                deliveryDestination: String = "local",
                 modelOverride: HermesModelOverride? = nil) {
         self.id = id
         self.title = title
@@ -250,6 +252,7 @@ public struct HermesAutomationJob: Codable, Equatable, Sendable, Identifiable, H
         self.runHistory = runHistory
         self.notificationStatus = notificationStatus
         self.notificationSummary = notificationSummary
+        self.deliveryDestination = deliveryDestination
         self.modelOverride = modelOverride
     }
 
@@ -262,6 +265,7 @@ public struct HermesAutomationJob: Codable, Equatable, Sendable, Identifiable, H
         case runHistory = "run_history"
         case notificationStatus = "notification_status"
         case notificationSummary = "notification_summary"
+        case deliveryDestination = "delivery_destination"
         case modelOverride = "model_override"
     }
 
@@ -280,6 +284,7 @@ public struct HermesAutomationJob: Codable, Equatable, Sendable, Identifiable, H
         self.runHistory = try c.decodeIfPresent([HermesAutomationRun].self, forKey: .runHistory) ?? []
         self.notificationStatus = try c.decodeIfPresent(HermesAutomationNotificationStatus.self, forKey: .notificationStatus) ?? .unknown
         self.notificationSummary = try c.decodeIfPresent(String.self, forKey: .notificationSummary) ?? "Notification delivery status unavailable."
+        self.deliveryDestination = try c.decodeIfPresent(String.self, forKey: .deliveryDestination) ?? "local"
         self.modelOverride = try c.decodeIfPresent(HermesModelOverride.self, forKey: .modelOverride)
     }
 
@@ -299,6 +304,7 @@ public struct HermesAutomationJob: Codable, Equatable, Sendable, Identifiable, H
         try c.encode(runHistory, forKey: .runHistory)
         try c.encode(notificationStatus.rawValue, forKey: .notificationStatus)
         try c.encode(notificationSummary, forKey: .notificationSummary)
+        try c.encode(deliveryDestination, forKey: .deliveryDestination)
         try c.encodeIfPresent(modelOverride, forKey: .modelOverride)
     }
 
@@ -321,6 +327,7 @@ public struct HermesAutomationCreateRequest: Codable, Equatable, Sendable {
     public var schedule: HermesAutomationSchedule
     public var projectID: String?
     public var notificationsEnabled: Bool
+    public var deliveryDestination: String
     public var modelOverride: HermesModelOverride?
 
     public init(title: String,
@@ -328,12 +335,14 @@ public struct HermesAutomationCreateRequest: Codable, Equatable, Sendable {
                 schedule: HermesAutomationSchedule,
                 projectID: String? = nil,
                 notificationsEnabled: Bool = true,
+                deliveryDestination: String = "local",
                 modelOverride: HermesModelOverride? = nil) {
         self.title = title
         self.prompt = prompt
         self.schedule = schedule
         self.projectID = projectID
         self.notificationsEnabled = notificationsEnabled
+        self.deliveryDestination = deliveryDestination
         self.modelOverride = modelOverride
     }
 
@@ -341,6 +350,7 @@ public struct HermesAutomationCreateRequest: Codable, Equatable, Sendable {
         case title, prompt, schedule
         case projectID = "project_id"
         case notificationsEnabled = "notifications_enabled"
+        case deliveryDestination = "delivery_destination"
         case modelOverride = "model_override"
     }
 }
@@ -350,6 +360,7 @@ public struct HermesAutomationUpdateRequest: Codable, Equatable, Sendable {
     public var prompt: String?
     public var schedule: HermesAutomationSchedule?
     public var notificationsEnabled: Bool?
+    public var deliveryDestination: String?
     public var modelOverride: HermesModelOverride?
     public var clearsModelOverride: Bool?
 
@@ -357,23 +368,26 @@ public struct HermesAutomationUpdateRequest: Codable, Equatable, Sendable {
                 prompt: String? = nil,
                 schedule: HermesAutomationSchedule? = nil,
                 notificationsEnabled: Bool? = nil,
+                deliveryDestination: String? = nil,
                 modelOverride: HermesModelOverride? = nil,
                 clearsModelOverride: Bool? = nil) {
         self.title = title
         self.prompt = prompt
         self.schedule = schedule
         self.notificationsEnabled = notificationsEnabled
+        self.deliveryDestination = deliveryDestination
         self.modelOverride = modelOverride
         self.clearsModelOverride = clearsModelOverride
     }
 
     public var isEmpty: Bool {
-        title == nil && prompt == nil && schedule == nil && notificationsEnabled == nil && modelOverride == nil && clearsModelOverride != true
+        title == nil && prompt == nil && schedule == nil && notificationsEnabled == nil && deliveryDestination == nil && modelOverride == nil && clearsModelOverride != true
     }
 
     enum CodingKeys: String, CodingKey {
         case title, prompt, schedule
         case notificationsEnabled = "notifications_enabled"
+        case deliveryDestination = "delivery_destination"
         case modelOverride = "model_override"
         case clearsModelOverride = "clear_model_override"
     }

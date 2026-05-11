@@ -1215,13 +1215,13 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
         jobs.sort(key=lambda j: j.get("updated_at", ""), reverse=True)
         return jobs
 
-    def _automation_payload(self, job_id: str, title: str, prompt: str, cron: str, human: str, status: str = "active", cron_job_id: str | None = None, run_history: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    def _automation_payload(self, job_id: str, title: str, prompt: str, cron: str, human: str, status: str = "active", cron_job_id: str | None = None, run_history: list[dict[str, Any]] | None = None, delivery_destination: str = "local", notifications_enabled: bool = True) -> dict[str, Any]:
         now = utc_now()
         return {"id": job_id, "title": title, "prompt": prompt,
                 "schedule": {"cron": cron, "human_description": human, "timezone": os.getenv("TZ", "local")},
                 "status": status, "project": None, "created_at": now, "updated_at": now, "next_run_at": None,
                 "last_run": (run_history or [None])[-1], "run_history": run_history or [],
-                "notification_status": "enabled", "notification_summary": "Managed by Hermes cron when cron_job_id is present.",
+                "notification_status": "enabled" if notifications_enabled else "disabled", "notification_summary": (f"Delivered to {delivery_destination} by Hermes cron." if notifications_enabled else "Notifications disabled for this automation."), "delivery_destination": delivery_destination,
                 "model_override": None, "cron_job_id": cron_job_id}
 
     def _create_automation(self, body: dict[str, Any]) -> None:
@@ -1230,14 +1230,16 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
         schedule = body.get("schedule") or {}
         cron = str(schedule.get("cron") or "").strip()
         human = str(schedule.get("human_description") or cron).strip() or cron
+        delivery_destination = str(body.get("delivery_destination") or "local").strip() or "local"
+        notifications_enabled = bool(body.get("notifications_enabled", True))
         if not (title and prompt and cron):
             return self._send_error(400, "Missing automation title, prompt, or schedule")
         cron_job_id = None
-        rc, out = _run_command(["hermes", "cron", "create", cron, prompt, "--name", f"diak-{title}", "--deliver", "local", "--repeat", "1"], timeout=30)
+        rc, out = _run_command(["hermes", "cron", "create", cron, prompt, "--name", f"diak-{title}", "--deliver", delivery_destination, "--repeat", "1"], timeout=30)
         if rc == 0:
             m = re.search(r"([0-9a-f]{8,})", out)
             cron_job_id = m.group(1) if m else None
-        job = self._automation_payload(make_id("auto"), title, prompt, cron, human, cron_job_id=cron_job_id)
+        job = self._automation_payload(make_id("auto"), title, prompt, cron, human, cron_job_id=cron_job_id, delivery_destination=delivery_destination, notifications_enabled=notifications_enabled)
         if not cron_job_id:
             job["notification_summary"] = f"Hermes cron CLI create failed; stored in Diak bridge only: {out[:200]}"
         with self.server.state._lock:
@@ -1252,6 +1254,12 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
             for key in ("title", "prompt"):
                 if key in body and body[key] is not None: job[key] = str(body[key])
             if isinstance(body.get("schedule"), dict): job["schedule"].update(body["schedule"])
+            if "delivery_destination" in body and body["delivery_destination"] is not None:
+                job["delivery_destination"] = str(body["delivery_destination"] or "local").strip() or "local"
+            if "notifications_enabled" in body and body["notifications_enabled"] is not None:
+                enabled = bool(body["notifications_enabled"])
+                job["notification_status"] = "enabled" if enabled else "disabled"
+                job["notification_summary"] = (f"Delivered to {job.get('delivery_destination', 'local')} by Hermes cron." if enabled else "Notifications disabled for this automation.")
             job["updated_at"] = utc_now(); self.server.state._save_locked()
         return self._send_json(200, {"job": job, "note": "Automation updated in Diak bridge; recreate cron job for schedule changes."})
 
@@ -1286,7 +1294,11 @@ class DiakHermesBridgeHandler(BaseHTTPRequestHandler):
     def _delete_automation(self, job_id: str) -> None:
         with self.server.state._lock:
             job = self.server.state._data.setdefault("automations", {}).pop(job_id, None); self.server.state._save_locked()
-        return self._send_json(200, {"deleted": bool(job), "id": job_id, "note": "Automation removed from Diak bridge. Remove paired Hermes cron job from Cron UI if needed."})
+        note = "Automation removed from Diak bridge."
+        if job and job.get("cron_job_id"):
+            rc, out = _run_command(["hermes", "cron", "remove", str(job["cron_job_id"])], timeout=30)
+            note = "Automation and paired Hermes cron job removed." if rc == 0 else f"Automation removed from Diak bridge; paired Hermes cron remove failed: {out[:200]}"
+        return self._send_json(200, {"deleted": bool(job), "id": job_id, "note": note})
 
     def _memory_dashboard(self) -> dict[str, Any]:
         with self.server.state._lock:

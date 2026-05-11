@@ -46,6 +46,11 @@ struct MemoryView: View {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.plain)
+                Button { viewModel.presentCreate() } label: {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.plain)
+                .help("Add memory")
             }
             .padding(.horizontal, HermesSpacing.lg)
             .padding(.top, HermesSpacing.lg)
@@ -404,10 +409,10 @@ private struct MemoryEditSheet: View {
                 .foregroundStyle(HermesColors.text)
                 .frame(width: 30, height: 30)
             VStack(alignment: .leading, spacing: HermesSpacing.xs) {
-                Text("Edit memory")
+                Text(viewModel.isCreatingDraft ? "Add memory" : "Edit memory")
                     .font(HermesTypography.title)
                     .foregroundStyle(HermesColors.text)
-                Text("The daemon records the diff and updates its index after the change is applied.")
+                Text(viewModel.isCreatingDraft ? "Review and add a manual memory through the daemon-owned store." : "The daemon records the diff and updates its index after the change is applied.")
                     .font(HermesTypography.caption)
                     .foregroundStyle(HermesColors.muted)
             }
@@ -454,7 +459,7 @@ private struct MemoryEditSheet: View {
         HermesCard {
             VStack(alignment: .leading, spacing: HermesSpacing.sm) {
                 Toggle(isOn: $viewModel.draftAcknowledgedReview) {
-                    Text("I have reviewed this edit. The daemon will update its index after applying.")
+                    Text(viewModel.isCreatingDraft ? "I have reviewed this memory. The daemon may use it in future sessions." : "I have reviewed this edit. The daemon will update its index after applying.")
                         .font(HermesTypography.body)
                         .foregroundStyle(HermesColors.text)
                 }
@@ -470,8 +475,14 @@ private struct MemoryEditSheet: View {
         HStack(spacing: HermesSpacing.sm) {
             Spacer()
             HermesButton("Close") { viewModel.dismissEdit() }
-            HermesButton("Save edit", kind: .primary) {
-                Task { await viewModel.saveEdit() }
+            HermesButton(viewModel.isCreatingDraft ? "Add memory" : "Save edit", kind: .primary) {
+                Task {
+                    if viewModel.isCreatingDraft {
+                        await viewModel.saveCreate()
+                    } else {
+                        await viewModel.saveEdit()
+                    }
+                }
             }
             .disabled(!viewModel.draftAcknowledgedReview)
         }

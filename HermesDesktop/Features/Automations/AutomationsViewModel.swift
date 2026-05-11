@@ -107,6 +107,7 @@ public final class AutomationsViewModel: ObservableObject {
     @Published public var draftCustomCron = ""
     @Published public var draftCustomScheduleLabel = ""
     @Published public var draftNotificationsEnabled = true
+    @Published public var draftDeliveryDestination = "local"
     @Published public var draftModelOverride: HermesModelOverride?
     @Published public private(set) var modelOptions: [HermesModelOverride] = []
 
@@ -176,7 +177,7 @@ public final class AutomationsViewModel: ObservableObject {
         let cron = resolvedCron.isEmpty ? "no cron yet" : "cron \(resolvedCron)"
         let model = draftModelOverride?.displayName ?? "the default Hermes model"
         let notificationLine = draftNotificationsEnabled
-            ? "Delivery status will appear in the Diak app."
+            ? "Delivery target: \(draftDeliveryDestination)."
             : "Notifications will stay off for this job."
         return "Hermes Agent will run \(titleText) \(label) (\(cron), \(TimeZone.current.identifier)) using \(model). \(notificationLine)"
     }
@@ -231,6 +232,7 @@ public final class AutomationsViewModel: ObservableObject {
                 timezone: TimeZone.current.identifier
             ),
             notificationsEnabled: draftNotificationsEnabled,
+            deliveryDestination: draftDeliveryDestination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "local" : draftDeliveryDestination.trimmingCharacters(in: .whitespacesAndNewlines),
             modelOverride: draftModelOverride
         )
         do {
@@ -242,6 +244,7 @@ public final class AutomationsViewModel: ObservableObject {
             draftSchedulePreset = .weekdays
             draftCustomCron = ""
             draftCustomScheduleLabel = ""
+            draftDeliveryDestination = "local"
             draftModelOverride = modelOptions.first
             actionState = .succeeded(result.note ?? "Automation created.")
         } catch let error as HermesAPIError {
@@ -277,6 +280,25 @@ public final class AutomationsViewModel: ObservableObject {
             let result = try await client.updateAutomation(id: job.id, update: update)
             upsert(result.job)
             actionState = .succeeded(result.note ?? "Model override updated.")
+        } catch let error as HermesAPIError {
+            actionState = .failed(error.userFacingMessage)
+        } catch {
+            actionState = .failed(error.localizedDescription)
+        }
+    }
+
+    public func updateDelivery(for job: HermesAutomationJob, destination: String, notificationsEnabled: Bool) async {
+        let trimmed = destination.trimmingCharacters(in: .whitespacesAndNewlines)
+        let target = trimmed.isEmpty ? "local" : trimmed
+        actionState = .working("Saving delivery\u{2026}")
+        let update = HermesAutomationUpdateRequest(
+            notificationsEnabled: notificationsEnabled,
+            deliveryDestination: target
+        )
+        do {
+            let result = try await client.updateAutomation(id: job.id, update: update)
+            upsert(result.job)
+            actionState = .succeeded(result.note ?? "Delivery updated.")
         } catch let error as HermesAPIError {
             actionState = .failed(error.userFacingMessage)
         } catch {

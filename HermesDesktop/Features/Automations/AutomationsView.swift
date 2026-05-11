@@ -201,6 +201,12 @@ private struct CreateAutomationCard: View {
                     fallbackText: "Use the default Hermes model"
                 )
 
+                fieldGroup(label: "Delivery target", error: nil) {
+                    TextField("local, origin, telegram, or platform target", text: $viewModel.draftDeliveryDestination)
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(!viewModel.draftNotificationsEnabled)
+                }
+
                 Toggle("Show in-app delivery status when this runs", isOn: $viewModel.draftNotificationsEnabled)
                     .toggleStyle(.switch)
 

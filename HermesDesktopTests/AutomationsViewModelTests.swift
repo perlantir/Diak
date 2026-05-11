@@ -110,7 +110,8 @@ final class AutomationsViewModelTests: XCTestCase {
         let created = try XCTUnwrap(viewModel.selectedJob)
         XCTAssertEqual(created.status, .active)
         XCTAssertEqual(created.schedule.cron, "30 8 * * 1-5")
-        XCTAssertEqual(created.notificationStatus, .daemonUnsupported)
+        XCTAssertEqual(created.notificationStatus, .enabled)
+        XCTAssertEqual(created.deliveryDestination, "local")
         XCTAssertEqual(created.modelOverride?.providerID, "local")
         XCTAssertEqual(created.modelOverride?.model, "deepseek-v4-flash-q2")
 
@@ -154,6 +155,32 @@ final class AutomationsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.selectedJob?.modelOverride, override)
     }
 
+    @MainActor
+    func testCreatePersistsDeliveryDestinationAndUpdateTogglesDelivery() async throws {
+        let client = MockHermesAPIClient()
+        client.resetAutomationState()
+        let viewModel = AutomationsViewModel(client: client)
+        await viewModel.refresh()
+
+        viewModel.draftTitle = "Telegram digest"
+        viewModel.draftPrompt = "Send the daily QA digest to the configured Telegram home chat."
+        viewModel.selectPreset(.dailyMorning)
+        viewModel.draftDeliveryDestination = "telegram"
+        viewModel.draftNotificationsEnabled = true
+
+        await viewModel.createFromDraft()
+
+        let created = try XCTUnwrap(viewModel.selectedJob)
+        XCTAssertEqual(created.deliveryDestination, "telegram")
+        XCTAssertEqual(created.notificationStatus, .enabled)
+        XCTAssertTrue(created.notificationSummary.localizedCaseInsensitiveContains("telegram"))
+
+        await viewModel.updateDelivery(for: created, destination: "local", notificationsEnabled: false)
+
+        XCTAssertEqual(client.updateAutomationCallCount, 1)
+        XCTAssertEqual(viewModel.selectedJob?.deliveryDestination, "local")
+        XCTAssertEqual(viewModel.selectedJob?.notificationStatus, .disabled)
+    }
 
     @MainActor
     func testDeleteAutomationRequiresExplicitConfirmation() async throws {
