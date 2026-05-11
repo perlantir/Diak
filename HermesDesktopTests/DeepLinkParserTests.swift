@@ -2,18 +2,20 @@ import XCTest
 @testable import HermesDesktop
 
 final class DeepLinkParserTests: XCTestCase {
-    func testParseReturnsNilForRegisteredSchemePlaceholder() {
+    func testParseReturnsUnknownForRegisteredSchemePlaceholder() {
         let url = URL(string: "diak://test")!
-        XCTAssertNil(DeepLinkParser.parse(url))
+        // Phase 0 chooses `.unknown` rather than nil for recognized-but-unparsed
+        // URLs so Phase 4 can fill parsing cases without changing call sites.
+        XCTAssertEqual(DeepLinkParser.parse(url), .unknown(url))
     }
 
-    func testParseReturnsNilForOAuthLikeCallbackUntilPhaseFour() {
+    func testParseReturnsUnknownForOAuthLikeCallbackUntilPhaseFour() {
         let url = URL(string: "diak://oauth/callback?code=abc&state=xyz")!
-        XCTAssertNil(DeepLinkParser.parse(url))
+        XCTAssertEqual(DeepLinkParser.parse(url), .unknown(url))
     }
 
-    func testParseReturnsNilForNonDiakURL() {
+    func testParseReturnsUnknownForNonDiakURL() {
         let url = URL(string: "https://example.com/path")!
-        XCTAssertNil(DeepLinkParser.parse(url))
+        XCTAssertEqual(DeepLinkParser.parse(url), .unknown(url))
     }
 }
