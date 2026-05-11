@@ -39,10 +39,21 @@ public final class SessionsViewModel: ObservableObject {
     @Published public var filter: Filter = .all
     @Published public var selectedSessionID: String?
 
-    private let client: HermesAPIClient
+    private let client: HermesAPIClient?
+    private let dashboardClient: HermesDashboardClient?
 
     public init(client: HermesAPIClient) {
         self.client = client
+        self.dashboardClient = nil
+    }
+
+    /// Phase 1 production init: reads the real Hermes dashboard's
+    /// `/api/sessions`. Dashboard records are mapped into the legacy
+    /// `HermesSession` shape with sensible defaults so the existing
+    /// SessionsListView and SessionDetailView render without churn.
+    public init(dashboardClient: HermesDashboardClient) {
+        self.client = nil
+        self.dashboardClient = dashboardClient
     }
 
     public var filteredSessions: [HermesSession] {
@@ -69,12 +80,60 @@ public final class SessionsViewModel: ObservableObject {
     public func refresh() async {
         if case .loading = state { return }
         state = .loading
+        if let dashboardClient {
+            await refreshFromDashboard(dashboardClient)
+            return
+        }
+        guard let client else {
+            state = .failed("No client configured")
+            return
+        }
         do {
             let fetched = try await client.sessions()
             sessions = fetched.sorted(by: { $0.updatedAt > $1.updatedAt })
             state = .loaded
         } catch let error as HermesAPIError {
             state = .failed(error.userFacingMessage)
+            sessions = []
+        } catch {
+            state = .failed(error.localizedDescription)
+            sessions = []
+        }
+    }
+
+    /// Maps `HermesDashboardSession` records into the legacy
+    /// `HermesSession` shape so existing list/detail views render real
+    /// Hermes session data without churn. Dashboard sessions are
+    /// read-only here; chat composer writes go to Diak's own
+    /// `DiakSessionStore` per Decision #14.
+    private func refreshFromDashboard(_ client: HermesDashboardClient) async {
+        do {
+            let response = try await client.sessions(limit: 50, offset: 0)
+            let mapped: [HermesSession] = response.sessions.map { d in
+                let status: HermesSessionStatus = {
+                    if d.isActive == true { return .running }
+                    if d.endReason == "failed" { return .failed }
+                    return .completed
+                }()
+                let created = d.startedAt ?? Date()
+                let updated = d.lastActive ?? d.endedAt ?? created
+                return HermesSession(
+                    id: d.id,
+                    title: d.title ?? "(untitled session)",
+                    summary: d.preview,
+                    status: status,
+                    createdAt: created,
+                    updatedAt: updated,
+                    model: d.model,
+                    project: nil,
+                    hasArtifacts: false,
+                    pendingApprovalsCount: 0
+                )
+            }
+            self.sessions = mapped.sorted(by: { $0.updatedAt > $1.updatedAt })
+            state = .loaded
+        } catch let error as HermesDashboardClient.ClientError {
+            state = .failed(String(describing: error))
             sessions = []
         } catch {
             state = .failed(error.localizedDescription)

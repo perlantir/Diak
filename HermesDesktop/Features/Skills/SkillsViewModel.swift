@@ -48,10 +48,22 @@ public final class SkillsViewModel: ObservableObject {
     @Published public var draftRiskStyle: HermesSkillRiskStyle = .requiresApproval
     @Published public var draftAcknowledgedInstall: Bool = false
 
-    private let client: HermesAPIClient
+    private let client: HermesAPIClient?
+    private let dashboardClient: HermesDashboardClient?
 
     public init(client: HermesAPIClient) {
         self.client = client
+        self.dashboardClient = nil
+    }
+
+    /// Phase 1 production init: reads the real Hermes dashboard's
+    /// `/api/skills`. Skill records are mapped into the legacy
+    /// `HermesSkill` shape with sensible defaults for fields the
+    /// dashboard doesn't return (version, sourceSessionID, etc.) so
+    /// the existing SkillsView renders without churn.
+    public init(dashboardClient: HermesDashboardClient) {
+        self.client = nil
+        self.dashboardClient = dashboardClient
     }
 
     public var selectedSkill: HermesSkill? {
@@ -87,6 +99,14 @@ public final class SkillsViewModel: ObservableObject {
     public func refresh() async {
         if case .loading = state { return }
         state = .loading
+        if let dashboardClient {
+            await refreshFromDashboard(dashboardClient)
+            return
+        }
+        guard let client else {
+            state = .failed("No client configured")
+            return
+        }
         do {
             let catalog = try await client.skills()
             self.skills = catalog.skills
@@ -102,9 +122,58 @@ public final class SkillsViewModel: ObservableObject {
         }
     }
 
+    /// Maps `HermesDashboardSkill` (`name`, `description`, `category`,
+    /// `enabled` only) into the wider `HermesSkill` shape the existing
+    /// SkillsView consumes. Fields the dashboard doesn't provide get
+    /// sensible defaults so the view doesn't show empty cells.
+    private func refreshFromDashboard(_ client: HermesDashboardClient) async {
+        do {
+            let dashboardSkills = try await client.skills()
+            self.skills = dashboardSkills.map { d in
+                HermesSkill(
+                    id: d.name,
+                    name: d.name,
+                    summary: d.description ?? "",
+                    status: d.enabled ? .active : .disabled,
+                    category: parseCategory(d.category),
+                    source: .userCreated,
+                    riskStyle: .requiresApproval,
+                    version: "0.0.0",
+                    triggerSummary: d.description ?? "",
+                    usageNotes: nil,
+                    artifacts: [],
+                    isEnabled: d.enabled,
+                    sourceSessionID: nil,
+                    updatedAt: nil,
+                    installedBy: "Hermes Agent"
+                )
+            }
+            self.boundaryNote = "Real Hermes skills from ~/.hermes/skills (dashboard /api/skills)."
+            if selectedSkillID == nil || !self.skills.contains(where: { $0.id == selectedSkillID }) {
+                selectedSkillID = self.skills.first?.id
+            }
+            state = .loaded
+        } catch let error as HermesDashboardClient.ClientError {
+            state = .failed(String(describing: error))
+        } catch {
+            state = .failed(error.localizedDescription)
+        }
+    }
+
+    private func parseCategory(_ raw: String?) -> HermesSkillCategory {
+        guard let raw, let parsed = HermesSkillCategory(rawValue: raw) else {
+            return .unknown
+        }
+        return parsed
+    }
+
     public func toggle(_ skill: HermesSkill) async {
         guard skill.supportsEnableToggle else {
             actionState = .failed("This skill cannot be toggled from the desktop app.")
+            return
+        }
+        guard let client else {
+            actionState = .failed("Skill enable/disable via the real dashboard lands in Phase 4. The dashboard exposes PUT /api/skills/toggle but Diak hasn't wired it yet.")
             return
         }
         actionState = .working(skill.isEnabled ? "Disabling skill…" : "Enabling skill…")
@@ -143,6 +212,10 @@ public final class SkillsViewModel: ObservableObject {
 
     public func loadDraftReview() async {
         guard let sessionID = draftSessionID else { return }
+        guard let client else {
+            actionState = .failed("Draft-from-session lands in Phase 4 (the dashboard's skill draft contract differs from the bridge's).")
+            return
+        }
         actionState = .working("Asking the daemon for a draft…")
         do {
             let review = try await client.previewSkillDraftFromSession(sessionID: sessionID)
@@ -169,6 +242,10 @@ public final class SkillsViewModel: ObservableObject {
         let trimmedName = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
             actionState = .failed("Give the skill a name before submitting.")
+            return
+        }
+        guard let client else {
+            actionState = .failed("Submitting drafts lands in Phase 4 (POST /api/skills/draft on the dashboard).")
             return
         }
         actionState = .working("Submitting draft to the daemon…")

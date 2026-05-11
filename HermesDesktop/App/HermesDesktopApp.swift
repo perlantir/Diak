@@ -39,6 +39,8 @@ struct HermesDesktopApp: App {
     // legacy `client` is restricted to placeholder fixtures until the
     // owning views move to Diak-native implementations.
     private let client: HermesAPIClient
+    private let dashboardClient: HermesDashboardClient
+    private let apiServerClient: HermesAPIServerClient?
 
     init() {
         // Initialize supervisor first — it owns the dashboard process
@@ -46,6 +48,43 @@ struct HermesDesktopApp: App {
         // `~/.local/bin/hermes`.
         let supervisorInstance = HermesProcessSupervisor()
         _supervisor = StateObject(wrappedValue: supervisorInstance)
+
+        // Dashboard HTTP client — TokenProvider closure reads the
+        // supervisor's live `.health` so token rotation across
+        // dashboard restarts is transparent to callers. `weak` capture
+        // prevents a retain cycle (supervisor outlives the client by
+        // virtue of being held by the @StateObject machinery).
+        let dashboardInstance = HermesDashboardClient(
+            tokenProvider: { @Sendable [weak supervisorInstance] _ in
+                let snapshot = await MainActor.run { supervisorInstance?.health ?? .stopped }
+                if case let .running(_, _, token) = snapshot {
+                    return token
+                }
+                throw HermesDashboardClient.ClientError.notAuthenticated(
+                    reason: "Hermes dashboard supervisor reports \(snapshot)"
+                )
+            }
+        )
+        self.dashboardClient = dashboardInstance
+
+        // API Server client — only constructed when an API_SERVER_KEY
+        // is present in the Keychain (WU4). Phase 1 ships without
+        // automatic enablement; Nick sets the key once outside the app,
+        // we read it here at launch. Absence is the normal path until
+        // Nick signals API_SERVER_ENABLED=true on his machine.
+        var apiServerInstance: HermesAPIServerClient?
+        do {
+            let keychainStore = APIServerKeychainStore()
+            if let key = try keychainStore.loadKey(), !key.isEmpty {
+                apiServerInstance = HermesAPIServerClient(apiKey: key)
+            }
+        } catch {
+            // Keychain read failed — surface as offline chat (per WU6
+            // ChatViewModel offline placeholder path) rather than
+            // crashing.
+            apiServerInstance = nil
+        }
+        self.apiServerClient = apiServerInstance
 
         // Session store — falls back to in-memory if the disk store
         // can't be opened (extremely rare; surfaces as a UI message).
@@ -91,6 +130,8 @@ struct HermesDesktopApp: App {
                      client: client,
                      supervisor: supervisor,
                      sessionStore: sessionStore,
+                     dashboardClient: dashboardClient,
+                     apiServerClient: apiServerClient,
                      openQuickPrompt: openQuickPromptWindow)
             .environmentObject(hermesState)
             .environmentObject(supervisor)
@@ -199,6 +240,8 @@ private struct RootView: View {
     let client: HermesAPIClient
     @ObservedObject var supervisor: HermesProcessSupervisor
     @ObservedObject var sessionStore: DiakSessionStore
+    let dashboardClient: HermesDashboardClient
+    let apiServerClient: HermesAPIServerClient?
     let openQuickPrompt: () -> Void
 
     var body: some View {
@@ -209,6 +252,10 @@ private struct RootView: View {
                              approvals: approvals,
                              router: router,
                              compactWindow: compactWindow,
+                             supervisor: supervisor,
+                             sessionStore: sessionStore,
+                             dashboardClient: dashboardClient,
+                             apiServerClient: apiServerClient,
                              client: client,
                              openQuickPrompt: openQuickPrompt)
             } else {

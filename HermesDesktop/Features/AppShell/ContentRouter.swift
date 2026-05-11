@@ -5,32 +5,48 @@ struct ContentRouter: View {
     @ObservedObject var daemon: DaemonStatusViewModel
     @ObservedObject var engineViewModel: HermesEngineViewModel
     @ObservedObject var approvals: ApprovalsViewModel
+    @ObservedObject var supervisor: HermesProcessSupervisor
+    @ObservedObject var sessionStore: DiakSessionStore
+    let dashboardClient: HermesDashboardClient
+    let apiServerClient: HermesAPIServerClient?
     let client: HermesAPIClient
+
+    // Hermes-owned view models — wired to HermesDashboardClient + the
+    // supervisor's published health per WU6 session 2. Diak-owned tabs
+    // (automations / connectors / memory / actionCenter) are rendered
+    // as placeholder views with no view-model dependency per the
+    // Path B disconnect direction; their previous view models were
+    // deleted in this same commit.
     @StateObject private var chat: ChatViewModel
     @StateObject private var sessions: SessionsViewModel
     @StateObject private var settings: SettingsViewModel
-    @StateObject private var automations: AutomationsViewModel
-    @StateObject private var connectors: ConnectorsViewModel
     @StateObject private var skills: SkillsViewModel
-    @StateObject private var memory: MemoryViewModel
 
     init(section: SidebarNavSection,
          daemon: DaemonStatusViewModel,
          engineViewModel: HermesEngineViewModel,
          approvals: ApprovalsViewModel,
+         supervisor: HermesProcessSupervisor,
+         sessionStore: DiakSessionStore,
+         dashboardClient: HermesDashboardClient,
+         apiServerClient: HermesAPIServerClient?,
          client: HermesAPIClient) {
         self.section = section
         self.daemon = daemon
         self.engineViewModel = engineViewModel
         self.approvals = approvals
+        self.supervisor = supervisor
+        self.sessionStore = sessionStore
+        self.dashboardClient = dashboardClient
+        self.apiServerClient = apiServerClient
         self.client = client
-        _chat = StateObject(wrappedValue: ChatViewModel(client: client))
-        _sessions = StateObject(wrappedValue: SessionsViewModel(client: client))
-        _settings = StateObject(wrappedValue: SettingsViewModel(client: client))
-        _automations = StateObject(wrappedValue: AutomationsViewModel(client: client))
-        _connectors = StateObject(wrappedValue: ConnectorsViewModel(client: client))
-        _skills = StateObject(wrappedValue: SkillsViewModel(client: client))
-        _memory = StateObject(wrappedValue: MemoryViewModel(client: client))
+        _chat = StateObject(wrappedValue: ChatViewModel(
+            sessionStore: sessionStore,
+            apiServerClient: apiServerClient
+        ))
+        _sessions = StateObject(wrappedValue: SessionsViewModel(dashboardClient: dashboardClient))
+        _settings = StateObject(wrappedValue: SettingsViewModel(dashboardClient: dashboardClient))
+        _skills = StateObject(wrappedValue: SkillsViewModel(dashboardClient: dashboardClient))
     }
 
     var body: some View {
@@ -45,17 +61,17 @@ struct ContentRouter: View {
                                      approvals: approvals,
                                      client: client)
                 case .automations:
-                    AutomationsView(viewModel: automations)
+                    AutomationsView()
                 case .connectors:
-                    ConnectorsView(viewModel: connectors)
+                    ConnectorsView()
                 case .skills:
                     SkillsView(viewModel: skills)
                 case .memory:
-                    MemoryView(viewModel: memory)
+                    MemoryView()
                 case .projects:
                     EmptyStateView(icon: "folder",
                                    title: "Projects",
-                                   message: "Trusted folders and project policies. Coming in M3/M5.")
+                                   message: "Trusted folders and project policies. Coming in a later phase.")
                 case .actionCenter:
                     ActionCenterView(viewModel: approvals)
                 case .settings:
