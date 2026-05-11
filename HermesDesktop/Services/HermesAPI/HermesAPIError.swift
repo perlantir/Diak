@@ -2,6 +2,8 @@ import Foundation
 
 public enum HermesAPIError: Error, Equatable, Sendable {
     case notReachable
+    case timeout
+    case invalidRequest(String)
     case invalidURL
     case decoding(String)
     case http(status: Int, body: String?)
@@ -11,6 +13,10 @@ public enum HermesAPIError: Error, Equatable, Sendable {
         switch self {
         case .notReachable:
             return "Could not reach the Hermes daemon."
+        case .timeout:
+            return "Hermes daemon request timed out."
+        case .invalidRequest(let reason):
+            return "The Hermes request is invalid (\(reason))."
         case .invalidURL:
             return "The Hermes daemon endpoint is misconfigured."
         case .decoding(let detail):

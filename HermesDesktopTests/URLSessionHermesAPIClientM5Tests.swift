@@ -66,27 +66,27 @@ final class URLSessionHermesAPIClientM5Tests: XCTestCase {
             _ = try await client.beginConnectorSetup(
                 HermesConnectorSetupRequest(connectorID: "conn-x", acknowledgedDaemonHandoff: false)
             )
-            XCTFail("Expected invalidURL")
+            XCTFail("Expected invalidRequest")
         } catch let error as HermesAPIError {
-            XCTAssertEqual(error, .invalidURL)
+            XCTAssertInvalidRequest(error)
         }
 
         do {
             _ = try await client.beginConnectorSetup(
                 HermesConnectorSetupRequest(connectorID: "  ", acknowledgedDaemonHandoff: true)
             )
-            XCTFail("Expected invalidURL")
+            XCTFail("Expected invalidRequest")
         } catch let error as HermesAPIError {
-            XCTAssertEqual(error, .invalidURL)
+            XCTAssertInvalidRequest(error)
         }
 
         do {
             _ = try await client.updateConnectorPolicy(
                 HermesConnectorPolicyUpdate(connectorID: "  ", writePolicy: .alwaysAsk)
             )
-            XCTFail("Expected invalidURL")
+            XCTFail("Expected invalidRequest")
         } catch let error as HermesAPIError {
-            XCTAssertEqual(error, .invalidURL)
+            XCTAssertInvalidRequest(error)
         }
 
         XCTAssertEqual(URLProtocolConnectorStub.requestCount, 0)
