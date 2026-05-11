@@ -6,6 +6,10 @@ public struct AppShellView: View {
     @ObservedObject var approvals: ApprovalsViewModel
     @ObservedObject var router: AppRouter
     @ObservedObject var compactWindow: CompactWindowViewModel
+    @ObservedObject var supervisor: HermesProcessSupervisor
+    @ObservedObject var sessionStore: DiakSessionStore
+    let dashboardClient: HermesDashboardClient
+    let apiServerClient: HermesAPIServerClient?
     let client: HermesAPIClient
     var openQuickPrompt: () -> Void = {}
 
@@ -14,13 +18,21 @@ public struct AppShellView: View {
                 approvals: ApprovalsViewModel,
                 router: AppRouter,
                 compactWindow: CompactWindowViewModel,
-                client: HermesAPIClient = URLSessionHermesAPIClient(),
+                supervisor: HermesProcessSupervisor,
+                sessionStore: DiakSessionStore,
+                dashboardClient: HermesDashboardClient,
+                apiServerClient: HermesAPIServerClient? = nil,
+                client: HermesAPIClient = MockHermesAPIClient(),
                 openQuickPrompt: @escaping () -> Void = {}) {
         self.daemon = daemon
         self.engineViewModel = engineViewModel
         self.approvals = approvals
         self.router = router
         self.compactWindow = compactWindow
+        self.supervisor = supervisor
+        self.sessionStore = sessionStore
+        self.dashboardClient = dashboardClient
+        self.apiServerClient = apiServerClient
         self.client = client
         self.openQuickPrompt = openQuickPrompt
     }
@@ -57,6 +69,10 @@ public struct AppShellView: View {
                           daemon: daemon,
                           engineViewModel: engineViewModel,
                           approvals: approvals,
+                          supervisor: supervisor,
+                          sessionStore: sessionStore,
+                          dashboardClient: dashboardClient,
+                          apiServerClient: apiServerClient,
                           client: client)
                 .frame(minWidth: 480)
         } detail: {
@@ -102,6 +118,10 @@ public struct AppShellView: View {
                           daemon: daemon,
                           engineViewModel: engineViewModel,
                           approvals: approvals,
+                          supervisor: supervisor,
+                          sessionStore: sessionStore,
+                          dashboardClient: dashboardClient,
+                          apiServerClient: apiServerClient,
                           client: client)
         }
     }

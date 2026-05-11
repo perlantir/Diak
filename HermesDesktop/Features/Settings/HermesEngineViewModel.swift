@@ -14,36 +14,42 @@ public final class HermesEngineViewModel: ObservableObject {
     @Published public var endpoint: String
 
     private let daemon: DaemonStatusViewModel
+    private let supervisor: (any HermesProcessSupervising)?
 
     public init(daemon: DaemonStatusViewModel,
-                endpointConfig: HermesAPIEndpointConfig = .localDefault) {
+                endpoint: String = "http://127.0.0.1:9119",
+                supervisor: (any HermesProcessSupervising)? = nil) {
         self.daemon = daemon
-        self.endpoint = endpointConfig.baseURL.absoluteString
+        self.endpoint = endpoint
+        self.supervisor = supervisor
     }
 
-    public convenience init(daemon: DaemonStatusViewModel,
-                            endpoint: String) {
-        self.init(
-            daemon: daemon,
-            endpointConfig: HermesAPIEndpointConfig(
-                baseURL: URL(string: endpoint) ?? HermesAPIEndpointConfig.localDefault.baseURL
-            )
-        )
-    }
-
-    /// Restart is a non-destructive placeholder in M0 — there is no daemon
-    /// management client yet. We just refresh status.
+    /// Restart the Hermes dashboard via the process supervisor (WU2/WU6
+    /// wiring). When no supervisor is injected (e.g. preview / unit-test
+    /// mode), falls back to a daemon refresh so the action button still
+    /// surfaces the running state for UI testing.
     public func restart() async {
-        await runAction(\.restartState)
+        restartState = .running
+        if let supervisor {
+            do {
+                try await supervisor.restart()
+                await daemon.refresh()
+                restartState = .idle
+            } catch {
+                restartState = .error(String(describing: error))
+            }
+        } else {
+            await daemon.refresh()
+            restartState = .idle
+        }
     }
 
     public func reconnect() async {
-        await runAction(\.reconnectState)
-    }
-
-    private func runAction(_ state: ReferenceWritableKeyPath<HermesEngineViewModel, ActionState>) async {
-        self[keyPath: state] = .running
+        reconnectState = .running
+        // No "reconnect" semantics on the dashboard — the dashboard
+        // either is up (token in supervisor.health) or it isn't. A
+        // reconnect maps to a refresh of the daemon status.
         await daemon.refresh()
-        self[keyPath: state] = .idle
+        reconnectState = .idle
     }
 }

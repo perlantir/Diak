@@ -34,11 +34,26 @@ public final class SettingsViewModel: ObservableObject {
     /// load so the UI can render a loading state without sentinel data.
     @Published public var draft: HermesConfigSnapshot?
 
-    private let client: HermesAPIClient
+    private let client: HermesAPIClient?
+    private let dashboardClient: HermesDashboardClient?
     private var restartRequiredFromLastSave = false
 
     public init(client: HermesAPIClient) {
         self.client = client
+        self.dashboardClient = nil
+    }
+
+    /// Phase 1 production init: reads the real Hermes dashboard's
+    /// `/api/config`. The dashboard returns a much flatter shape than
+    /// the bridge-era `HermesConfigSnapshot`; for Phase 1 the view
+    /// model loads what's available and surfaces the rest as empty.
+    /// Save operations are read-only in this mode and surface a
+    /// "config editing is read-only in Phase 1" message — Phase 4
+    /// wires real dashboard PUTs (the dashboard exposes
+    /// `PUT /api/config` per REALITY.md).
+    public init(dashboardClient: HermesDashboardClient) {
+        self.client = nil
+        self.dashboardClient = dashboardClient
     }
 
     // MARK: - Loading
@@ -46,6 +61,16 @@ public final class SettingsViewModel: ObservableObject {
     public func refresh() async {
         if case .loading = state { return }
         state = .loading
+
+        if let dashboardClient {
+            await refreshFromDashboard(dashboardClient)
+            return
+        }
+
+        guard let client else {
+            state = .failed("No client configured")
+            return
+        }
         do {
             let snapshot = try await client.config()
             saved = snapshot
@@ -61,6 +86,74 @@ public final class SettingsViewModel: ObservableObject {
             }
         } catch let error as HermesAPIError {
             state = .failed(error.userFacingMessage)
+        } catch {
+            state = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Phase 1 production refresh: pulls real dashboard data and
+    /// folds it into a sparse `HermesConfigSnapshot` so the existing
+    /// Settings UI renders without rewrites. Fields the dashboard
+    /// doesn't expose (providers list, tools list, etc.) stay empty
+    /// — Phase 4 wires real config editing through `PUT /api/config`.
+    private func refreshFromDashboard(_ client: HermesDashboardClient) async {
+        do {
+            async let configCall = client.config()
+            async let statusCall = client.status()
+            async let modelCall = client.modelInfo()
+            async let profilesCall = client.profiles()
+            let (config, dashStatus, modelInfo, profilesResp) = try await (
+                configCall, statusCall, modelCall, profilesCall
+            )
+
+            let profiles: [HermesProfile] = profilesResp.profiles.enumerated().map { (i, p) in
+                HermesProfile(
+                    id: "prof-\(p.name)",
+                    displayName: p.name,
+                    role: .unknown,
+                    defaultProjectLabel: nil,
+                    isActive: p.isDefault ?? (i == 0)
+                )
+            }
+            let activeProfileID = profiles.first(where: { $0.isActive })?.id
+
+            // Build a minimal HermesConfigSnapshot from dashboard data.
+            // Unmodeled blocks get empty defaults.
+            let snapshot = HermesConfigSnapshot(
+                profiles: profiles,
+                activeProfileID: activeProfileID,
+                providers: [],
+                tools: [],
+                security: HermesSecuritySettings(
+                    trustedFolders: [],
+                    logRedaction: .strict,
+                    logRetentionDays: 14,
+                    telemetryEnabled: false,
+                    offlineModeEnabled: false,
+                    restartRequired: false
+                ),
+                daemon: HermesDaemonLogSummary(
+                    version: dashStatus.version,
+                    build: nil,
+                    profile: "production",
+                    uptimeSeconds: nil,
+                    logPath: dashStatus.hermesHome.map { "\($0)/logs/agent.log" },
+                    recentLines: [
+                        "hermes \(dashStatus.version) on \(dashStatus.hermesHome ?? "~/.hermes")",
+                        modelInfo.model.map { "Active model: \($0)" } ?? "(no model selected)",
+                        config.timezone.map { "Timezone: \($0)" } ?? "(no timezone configured)",
+                    ],
+                    lastCheckedAt: Date()
+                )
+            )
+            self.saved = snapshot
+            if draft == nil || !hasUnsavedChanges {
+                self.draft = snapshot
+            }
+            state = .loaded
+            saveState = .ready
+        } catch let error as HermesDashboardClient.ClientError {
+            state = .failed(String(describing: error))
         } catch {
             state = .failed(error.localizedDescription)
         }
@@ -126,6 +219,10 @@ public final class SettingsViewModel: ObservableObject {
         let update = Self.diff(saved: saved, draft: draft)
         guard !update.isEmpty else {
             saveState = .savedClean
+            return
+        }
+        guard let client else {
+            saveState = .failed("Config editing is read-only in Phase 1. Phase 4 wires real updates through the dashboard's PUT /api/config.")
             return
         }
         saveState = .saving
@@ -198,6 +295,13 @@ public final class SettingsViewModel: ObservableObject {
     // MARK: - Daemon lifecycle (M3 surface)
 
     public func restartDaemon() async {
+        guard let client else {
+            // Dashboard-mode (Phase 1): restart goes through the
+            // supervisor wired into HermesEngineViewModel, not through
+            // this view model. Surface a hint.
+            saveState = .failed("Use Settings → Hermes Engine → Restart to restart the dashboard process.")
+            return
+        }
         do {
             _ = try await client.restartDaemon()
             restartRequiredFromLastSave = false
@@ -212,6 +316,10 @@ public final class SettingsViewModel: ObservableObject {
     }
 
     public func reconnectDaemon() async {
+        guard let client else {
+            saveState = .failed("Reconnect lands in Phase 2/4 once the dashboard exposes a reconnect surface.")
+            return
+        }
         do {
             _ = try await client.reconnectDaemon()
             await refresh()

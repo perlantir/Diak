@@ -1378,7 +1378,7 @@ public enum MockHermesData {
         uptimeSeconds: 4321,
         logPath: "/Users/nick/Library/Logs/Hermes/daemon.log",
         recentLines: [
-            "[2026-05-09 22:30:01] hermes.daemon ready on 127.0.0.1:8765",
+            "[2026-05-09 22:30:01] hermes.dashboard ready on 127.0.0.1:9119",
             "[2026-05-09 22:30:14] provider:anthropic ready",
             "[2026-05-09 22:30:14] provider:ollama ready",
             "[2026-05-09 22:31:02] tool:files registered (read+write)",
