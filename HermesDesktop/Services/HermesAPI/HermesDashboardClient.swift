@@ -2,9 +2,9 @@ import Foundation
 
 /// HTTP client for the real Hermes dashboard at port 9119 (default).
 ///
-/// Distinct from the legacy `URLSessionHermesAPIClient` (which speaks the
-/// Python bridge's contract at port 8765, removed from the runtime path
-/// in Work Unit 6). This client speaks the real Hermes contract documented
+/// Distinct from the legacy `URLSessionHermesAPIClient` (which speaks
+/// the Python bridge's contract; removed from Diak's runtime path in
+/// Work Unit 6). This client speaks the real Hermes contract documented
 /// in `Docs/Phases/Phase1/REALITY.md` — `/api/*` paths, JSON bodies, with
 /// auth via `Authorization: Bearer <ephemeral-session-token>` injected on
 /// every request.
