@@ -2,6 +2,8 @@ import SwiftUI
 
 @main
 struct HermesDesktopApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @StateObject private var hermesState = HermesState()
     @StateObject private var daemon: DaemonStatusViewModel
     @StateObject private var engineViewModel: HermesEngineViewModel
     @StateObject private var onboarding = OnboardingViewModel()
@@ -42,6 +44,10 @@ struct HermesDesktopApp: App {
                      compactWindow: compactWindow,
                      client: client,
                      openQuickPrompt: openQuickPromptWindow)
+            .environmentObject(hermesState)
+            .onOpenURL { url in
+                _ = DeepLinkParser.parse(url)
+            }
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified)

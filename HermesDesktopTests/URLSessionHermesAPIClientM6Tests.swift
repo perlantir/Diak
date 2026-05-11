@@ -76,9 +76,9 @@ final class URLSessionHermesAPIClientM6Tests: XCTestCase {
                                         riskStyle: .safe,
                                         acknowledgedDaemonInstall: false)
             )
-            XCTFail("Expected invalidURL")
+            XCTFail("Expected invalidRequest")
         } catch let error as HermesAPIError {
-            XCTAssertEqual(error, .invalidURL)
+            XCTAssertInvalidRequest(error)
         }
 
         do {
@@ -91,16 +91,16 @@ final class URLSessionHermesAPIClientM6Tests: XCTestCase {
                                         riskStyle: .safe,
                                         acknowledgedDaemonInstall: true)
             )
-            XCTFail("Expected invalidURL")
+            XCTFail("Expected invalidRequest")
         } catch let error as HermesAPIError {
-            XCTAssertEqual(error, .invalidURL)
+            XCTAssertInvalidRequest(error)
         }
 
         do {
             _ = try await client.setSkillEnabled(id: "  ", isEnabled: true)
-            XCTFail("Expected invalidURL")
+            XCTFail("Expected invalidRequest")
         } catch let error as HermesAPIError {
-            XCTAssertEqual(error, .invalidURL)
+            XCTAssertInvalidRequest(error)
         }
 
         XCTAssertEqual(URLProtocolM6Stub.requestCount, 0)
@@ -157,9 +157,9 @@ final class URLSessionHermesAPIClientM6Tests: XCTestCase {
             _ = try await client.updateMemoryItem(
                 HermesMemoryUpdate(id: "mem-x", acknowledgedReview: true)
             )
-            XCTFail("Expected invalidURL")
+            XCTFail("Expected invalidRequest")
         } catch let error as HermesAPIError {
-            XCTAssertEqual(error, .invalidURL)
+            XCTAssertInvalidRequest(error)
         }
 
         do {
@@ -168,9 +168,9 @@ final class URLSessionHermesAPIClientM6Tests: XCTestCase {
                                    title: "x",
                                    acknowledgedReview: false)
             )
-            XCTFail("Expected invalidURL")
+            XCTFail("Expected invalidRequest")
         } catch let error as HermesAPIError {
-            XCTAssertEqual(error, .invalidURL)
+            XCTAssertInvalidRequest(error)
         }
 
         do {
@@ -179,9 +179,9 @@ final class URLSessionHermesAPIClientM6Tests: XCTestCase {
                                    title: "x",
                                    acknowledgedReview: true)
             )
-            XCTFail("Expected invalidURL")
+            XCTFail("Expected invalidRequest")
         } catch let error as HermesAPIError {
-            XCTAssertEqual(error, .invalidURL)
+            XCTAssertInvalidRequest(error)
         }
 
         XCTAssertEqual(URLProtocolM6Stub.requestCount, 0)

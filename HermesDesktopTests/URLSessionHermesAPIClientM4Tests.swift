@@ -73,16 +73,16 @@ final class URLSessionHermesAPIClientM4Tests: XCTestCase {
                 prompt: "Prompt",
                 schedule: HermesAutomationSchedule(cron: "* * * * *", humanDescription: "Every minute")
             ))
-            XCTFail("Expected invalidURL")
+            XCTFail("Expected invalidRequest")
         } catch let error as HermesAPIError {
-            XCTAssertEqual(error, .invalidURL)
+            XCTAssertInvalidRequest(error)
         }
 
         do {
             _ = try await client.updateAutomation(id: "auto-digest", update: HermesAutomationUpdateRequest())
-            XCTFail("Expected invalidURL")
+            XCTFail("Expected invalidRequest")
         } catch let error as HermesAPIError {
-            XCTAssertEqual(error, .invalidURL)
+            XCTAssertInvalidRequest(error)
         }
 
         XCTAssertEqual(URLProtocolAutomationStub.requestCount, 0)

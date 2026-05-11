@@ -16,22 +16,34 @@ public final class HermesEngineViewModel: ObservableObject {
     private let daemon: DaemonStatusViewModel
 
     public init(daemon: DaemonStatusViewModel,
-                endpoint: String = "http://127.0.0.1:8765") {
+                endpointConfig: HermesAPIEndpointConfig = .localDefault) {
         self.daemon = daemon
-        self.endpoint = endpoint
+        self.endpoint = endpointConfig.baseURL.absoluteString
+    }
+
+    public convenience init(daemon: DaemonStatusViewModel,
+                            endpoint: String) {
+        self.init(
+            daemon: daemon,
+            endpointConfig: HermesAPIEndpointConfig(
+                baseURL: URL(string: endpoint) ?? HermesAPIEndpointConfig.localDefault.baseURL
+            )
+        )
     }
 
     /// Restart is a non-destructive placeholder in M0 — there is no daemon
     /// management client yet. We just refresh status.
     public func restart() async {
-        restartState = .running
-        await daemon.refresh()
-        restartState = .idle
+        await runAction(\.restartState)
     }
 
     public func reconnect() async {
-        reconnectState = .running
+        await runAction(\.reconnectState)
+    }
+
+    private func runAction(_ state: ReferenceWritableKeyPath<HermesEngineViewModel, ActionState>) async {
+        self[keyPath: state] = .running
         await daemon.refresh()
-        reconnectState = .idle
+        self[keyPath: state] = .idle
     }
 }

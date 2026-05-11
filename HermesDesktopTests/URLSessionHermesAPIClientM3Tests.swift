@@ -53,9 +53,9 @@ final class URLSessionHermesAPIClientM3Tests: XCTestCase {
 
         do {
             _ = try await client.updateConfig(HermesConfigUpdate())
-            XCTFail("Expected invalidURL")
+            XCTFail("Expected invalidRequest")
         } catch let error as HermesAPIError {
-            XCTAssertEqual(error, .invalidURL)
+            XCTAssertInvalidRequest(error)
         }
         XCTAssertEqual(URLProtocolStub.requestCount, 0)
     }
