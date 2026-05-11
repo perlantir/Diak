@@ -18,7 +18,10 @@ to change, document the proposed change in a checkpoint and wait for Nick.
 ## Absolute Prohibitions
 
 1. Never modify `CLAUDE.md` or `Docs/PROJECT_STATE.md`.
-2. Never push to `main`. Push only to the current phase branch.
+2. Never push to `main` except for scope-defining and constitution-level
+   documents: `CLAUDE.md`, `Docs/PROJECT_STATE.md`, and any file under
+   `Docs/Phases/Phase*/` whose name ends in `SCOPE.md` or `REALITY-SCOPE.md`.
+   All other commits push to the current phase branch.
 3. Never force-push any branch.
 4. Never modify branches matching `archive/*`.
 5. Never invent milestone numbers. Use Phase 0 through Phase 8 only.

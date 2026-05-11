@@ -4,7 +4,7 @@ This is the live source-of-truth document for Diak's current state. Update it
 when phases advance or architectural decisions change. Agents read this on
 every run but never write to it.
 
-Last human-authored update: 2026-05-11 (post Phase 0 merge)
+Last human-authored update: 2026-05-11 (post Phase 0 merge, CLAUDE.md scope-doc carve-out added)
 
 ## Current Active Phase
 
