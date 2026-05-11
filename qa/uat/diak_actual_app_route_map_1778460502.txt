@@ -1,0 +1,13 @@
+exit 0
+1:Home
+2:Sessions
+3:Automations
+4:Connectors
+5:Skills
+6:Memory
+7:Projects
+8:Action Center
+9:Settings
+
+
+STDERR

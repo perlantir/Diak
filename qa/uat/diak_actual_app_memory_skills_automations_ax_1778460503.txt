@@ -1,0 +1,24 @@
+exit 0
+ROUTE=Automations
+TEXT:Automations
+BUTTON id=automations.create.card
+BUTTON id=automations.create.submitButton
+BUTTON id=automations.detail.saveScheduleButton
+BUTTON id=automations.detail.testRunButton
+BUTTON id=automations.detail.pauseResumeButton
+BUTTON id=automations.detail.deleteButton
+
+ROUTE=Skills
+TEXT:Skills
+BUTTON id=skills.addSkillButton
+BUTTON id=skills.refreshButton
+BUTTON id=skills.detail.toggleButton
+
+ROUTE=Memory
+TEXT:Memory
+BUTTON id=memory.refreshButton
+BUTTON id=memory.addButton
+
+NOTE: Raw AX output was sanitized before commit to remove unlabeled system controls and preserve only the product identifiers relevant to this UAT proof.
+
+STDERR

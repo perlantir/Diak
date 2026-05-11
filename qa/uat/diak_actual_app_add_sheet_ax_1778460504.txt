@@ -1,0 +1,35 @@
+exit 0
+MEMORY_AFTER_ADD_WINDOW=Memory
+ID:HermesDesktop.(redacted).RootView-1-AppWindow-1
+ID:HermesDesktop.(redacted).RootView-1-AppWindow-1, SidebarNavigationSplitView
+ID:memory.refreshButton
+ID:memory.addButton
+ID:memory.searchField
+ID:memory.editSheet
+ID:memory.editSheet.titleField
+ID:memory.editSheet.bodyField
+ID:memory.editSheet.scopePicker
+ID:memory.editSheet.pinnedToggle
+ID:memory.editSheet.acknowledgeToggle
+
+SKILLS_AFTER_ADD_WINDOW=Skills
+ID:HermesDesktop.(redacted).RootView-1-AppWindow-1
+ID:HermesDesktop.(redacted).RootView-1-AppWindow-1, SidebarNavigationSplitView
+ID:skills.addSkillButton
+ID:skills.refreshButton
+ID:skills.searchField
+ID:skills.list
+ID:skills.row.<redacted-catalog-skill-id>
+ID:skills.detail.toggleButton
+ID:skills.directAddSheet
+ID:skills.directAdd.name
+ID:skills.directAdd.summary
+ID:skills.directAdd.trigger
+ID:skills.directAdd.category
+ID:skills.directAdd.risk
+ID:skills.directAdd.instructions
+ID:skills.directAdd.acknowledge
+
+NOTE: Raw AX output was sanitized before commit to avoid preserving private/local skill catalog names or process context IDs.
+
+STDERR
