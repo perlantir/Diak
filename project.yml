@@ -39,12 +39,18 @@ targets:
         LSApplicationCategoryType: public.app-category.productivity
         NSHumanReadableCopyright: "© 2026 Diak"
         NSHighResolutionCapable: true
+        CFBundleURLTypes:
+          - CFBundleURLName: com.uberkiwi.diak
+            CFBundleURLSchemes:
+              - diak
     entitlements:
       path: HermesDesktop/Resources/HermesDesktop.entitlements
       properties:
-        com.apple.security.app-sandbox: true
+        com.apple.security.app-sandbox: false
         com.apple.security.network.client: true
-        com.apple.security.files.user-selected.read-only: true
+        com.apple.security.cs.allow-jit: true
+        com.apple.security.cs.disable-library-validation: true
+        com.apple.security.cs.allow-unsigned-executable-memory: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.uberkiwi.diak
