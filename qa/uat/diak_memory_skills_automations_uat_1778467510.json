@@ -1,0 +1,81 @@
+{
+  "status": "PASS",
+  "state_path": "/var/folders/b2/cl2rv8q13bg48zl073ctm_fc0000gq/T/tmpoaeyd30i/state.json",
+  "results": [
+    {
+      "name": "Memory create/edit/read/delete persists",
+      "status": "PASS",
+      "elapsed_ms": 4,
+      "data": {
+        "created_id": "mem-eb54e1e8a8024795",
+        "persisted_body": "Updated UAT memory body persisted.",
+        "deleted": true
+      }
+    },
+    {
+      "name": "Skill direct draft create/enable persists",
+      "status": "PASS",
+      "elapsed_ms": 100,
+      "data": {
+        "draft_id": "skill-direct-uat-qa-skill",
+        "enabled": true,
+        "status": "active"
+      }
+    },
+    {
+      "name": "Automation create/delivery update/test-run/delete cron pair",
+      "status": "PASS",
+      "elapsed_ms": 3,
+      "data": {
+        "job_id": "auto-65b669ad7b6242f4",
+        "run_status": "succeeded",
+        "deleted": true
+      }
+    }
+  ],
+  "commands": [
+    [
+      "hermes",
+      "cron",
+      "create",
+      "30m",
+      "Return DONE for UAT automation test run.",
+      "--name",
+      "diak-UAT automation",
+      "--deliver",
+      "telegram",
+      "--repeat",
+      "1"
+    ],
+    [
+      "hermes",
+      "cron",
+      "run",
+      "cafebabe12345678"
+    ],
+    [
+      "hermes",
+      "cron",
+      "remove",
+      "cafebabe12345678"
+    ]
+  ],
+  "state_keys": [
+    "approvals",
+    "artifacts",
+    "automations",
+    "connectors",
+    "events",
+    "memory",
+    "messages",
+    "secrets",
+    "sessions",
+    "skill_drafts",
+    "skills"
+  ],
+  "remaining_counts": {
+    "memory": 0,
+    "skill_drafts": 1,
+    "automations": 0
+  }
+}

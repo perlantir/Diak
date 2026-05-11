@@ -558,7 +558,15 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
     public func resetConnectorState() {
         connectorIndex = MockHermesData.connectorIndex
         connectorBoundaryNote = MockHermesData.connectorBoundaryNote
+        nextConnectorSetupChallenge = nil
     }
+
+    /// Pinned response for the next `beginConnectorSetup` call whose
+    /// request matches `connectorID`. Cleared after one use. Lets the
+    /// app-state UAT exercise both `configurationRequired` and
+    /// `awaitingOAuth` outcomes deterministically without standing up
+    /// the real bridge handshake.
+    public var nextConnectorSetupChallenge: HermesConnectorSetupChallenge?
 
     public func resetSkillState() {
         skillIndex = MockHermesData.skillIndex
@@ -601,6 +609,21 @@ public final class MockHermesAPIClient: HermesAPIClient, @unchecked Sendable {
         guard request.acknowledgedDaemonHandoff else { throw HermesAPIError.invalidURL }
         guard var connector = connectorIndex[request.connectorID] else {
             throw HermesAPIError.http(status: 404, body: "no connector \(request.connectorID)")
+        }
+
+        if let pinned = nextConnectorSetupChallenge, pinned.connectorID == request.connectorID {
+            nextConnectorSetupChallenge = nil
+            // `configurationRequired` is a soft block: the daemon would
+            // refuse to begin handoff, so the catalog row stays in its
+            // prior status. Every other pinned state mirrors the
+            // real-bridge effect of marking the connector pending with
+            // the carried approvalID.
+            if pinned.state != .configurationRequired {
+                connector.status = .pending
+                connector.pendingApprovalID = pinned.approvalID
+                connectorIndex[request.connectorID] = connector
+            }
+            return pinned
         }
 
         // Generate a deterministic-ish approval id for the audit trail.

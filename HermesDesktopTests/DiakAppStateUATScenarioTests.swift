@@ -104,6 +104,93 @@ final class DiakAppStateUATScenarioTests: XCTestCase {
                                     "Update delivery + update schedule each flow through update endpoint.")
     }
 
+    // MARK: - Settings (M12 Slice 10)
+
+    @MainActor
+    func testSettingsScenarioFormFlowPasses() async {
+        let client = MockHermesAPIClient()
+        client.resetSecretState()
+
+        let report = await DiakAppStateUATScenario.runSettingsScenario(client: client)
+
+        XCTAssertEqual(report.feature, "settings")
+        XCTAssertTrue(report.passed,
+                      "Settings app-state UAT scenario reported a failure: \(failedDetails(report.steps))")
+        XCTAssertGreaterThanOrEqual(report.steps.count, 6,
+                                    "Settings scenario must exercise load + blocked save + save + test + restart + remove.")
+
+        let stepNames = Set(report.steps.map { $0.name })
+        XCTAssertTrue(stepNames.contains("API keys catalog loads Composio slot in configuration-required state"))
+        XCTAssertTrue(stepNames.contains("Save without keychain acknowledgement is blocked at the view model"))
+        XCTAssertTrue(stepNames.contains("Save with acknowledgement persists Composio metadata and clears raw drafts"))
+        XCTAssertTrue(stepNames.contains("Test connection routes through daemon verdict"))
+        XCTAssertTrue(stepNames.contains("Restart bridge clears per-slot restart prompts"))
+        XCTAssertTrue(stepNames.contains("Remove tears Composio slot back down to missing"))
+
+        XCTAssertEqual(client.saveSecretCallCount, 1)
+        XCTAssertEqual(client.testSecretCallCount, 1)
+        XCTAssertEqual(client.deleteSecretCallCount, 1)
+        XCTAssertEqual(client.restartDaemonCallCount, 1)
+
+        // Raw secret material must never end up in evidence fingerprints.
+        for step in report.steps {
+            XCTAssertFalse(step.snapshotFingerprint.contains("comp_uat_key_placeholder"),
+                           "Settings fingerprint leaked raw API key: \(step.snapshotFingerprint)")
+        }
+    }
+
+    // MARK: - Connectors (M12 Slice 10)
+
+    @MainActor
+    func testConnectorsScenarioFormFlowPasses() async {
+        let client = MockHermesAPIClient()
+        client.resetConnectorState()
+
+        let report = await DiakAppStateUATScenario.runConnectorsScenario(client: client)
+
+        XCTAssertEqual(report.feature, "connectors")
+        XCTAssertTrue(report.passed,
+                      "Connectors app-state UAT scenario reported a failure: \(failedDetails(report.steps))")
+        XCTAssertGreaterThanOrEqual(report.steps.count, 4)
+
+        let stepNames = Set(report.steps.map { $0.name })
+        XCTAssertTrue(stepNames.contains("Connectors catalog loads"))
+        XCTAssertTrue(stepNames.contains("Setup blocked with configuration_required when Composio is missing"))
+        XCTAssertTrue(stepNames.contains("Setup proceeds and opens OAuth handoff once Composio presence is satisfied"))
+        XCTAssertTrue(stepNames.contains("Disconnect honors safety confirmation and clears connected state"))
+
+        XCTAssertEqual(client.beginConnectorSetupCallCount, 2,
+                       "Connector setup must be exercised twice (blocked + ready).")
+        XCTAssertEqual(client.disconnectConnectorCallCount, 1)
+    }
+
+    // MARK: - Chat / sessions (M12 Slice 10)
+
+    @MainActor
+    func testChatSessionsScenarioFormFlowPasses() async {
+        let client = MockHermesAPIClient()
+
+        let report = await DiakAppStateUATScenario.runChatSessionsScenario(client: client)
+
+        XCTAssertEqual(report.feature, "chat")
+        XCTAssertTrue(report.passed,
+                      "Chat app-state UAT scenario reported a failure: \(failedDetails(report.steps))")
+        XCTAssertGreaterThanOrEqual(report.steps.count, 5)
+
+        let stepNames = Set(report.steps.map { $0.name })
+        XCTAssertTrue(stepNames.contains("Sessions rail loads catalog"))
+        XCTAssertTrue(stepNames.contains("Open existing chat A restores prior messages"))
+        XCTAssertTrue(stepNames.contains("Continue chat A keeps prior messages and calls continueSession"))
+        XCTAssertTrue(stepNames.contains("Start a brand-new chat B creates a separate session"))
+        XCTAssertTrue(stepNames.contains("Switch back to chat A restores its transcript independently of chat B"))
+
+        XCTAssertGreaterThanOrEqual(client.continueSessionCallCount, 1,
+                                    "Continuing an existing chat must route through continueSession.")
+        XCTAssertGreaterThanOrEqual(client.createSessionCallCount, 1,
+                                    "Starting a brand-new chat must route through createSession.")
+        XCTAssertGreaterThanOrEqual(client.sessionsCallCount, 1)
+    }
+
     // MARK: - Aggregate
 
     @MainActor
@@ -115,13 +202,22 @@ final class DiakAppStateUATScenarioTests: XCTestCase {
               memory: \(report.memory.passed)
               skills: \(report.skills.passed)
               automations: \(report.automations.passed)
+              settings: \(report.settings.passed)
+              connectors: \(report.connectors.passed)
+              chat: \(report.chat.passed)
             Failed step details: memory=\(failedDetails(report.memory.steps)), \
             skills=\(failedDetails(report.skills.steps)), \
-            automations=\(failedDetails(report.automations.steps))
+            automations=\(failedDetails(report.automations.steps)), \
+            settings=\(failedDetails(report.settings.steps)), \
+            connectors=\(failedDetails(report.connectors.steps)), \
+            chat=\(failedDetails(report.chat.steps))
             """)
         XCTAssertEqual(report.memory.feature, "memory")
         XCTAssertEqual(report.skills.feature, "skills")
         XCTAssertEqual(report.automations.feature, "automations")
+        XCTAssertEqual(report.settings.feature, "settings")
+        XCTAssertEqual(report.connectors.feature, "connectors")
+        XCTAssertEqual(report.chat.feature, "chat")
     }
 
     // MARK: - Sanitized evidence
@@ -148,11 +244,22 @@ final class DiakAppStateUATScenarioTests: XCTestCase {
                        "Sanitized evidence must not include automation titles users typed in.")
         XCTAssertFalse(serialized.contains("Stay read-only."),
                        "Sanitized evidence must not include direct-add instructions.")
+        XCTAssertFalse(serialized.contains("comp_uat_key_placeholder"),
+                       "Sanitized evidence must not include raw Composio API key drafts.")
+        XCTAssertFalse(serialized.contains("Slice 10 UAT follow-up"),
+                       "Sanitized evidence must not include chat prompt text users typed in.")
+        XCTAssertFalse(serialized.contains("Slice 10 UAT brand-new chat"),
+                       "Sanitized evidence must not include chat prompt text users typed in.")
+        XCTAssertFalse(serialized.contains("https://composio.uat.local"),
+                       "Sanitized evidence must not include base URL drafts users typed in.")
 
         XCTAssertTrue(serialized.contains("\"status\""))
         XCTAssertTrue(serialized.contains("\"memory\""))
         XCTAssertTrue(serialized.contains("\"skills\""))
         XCTAssertTrue(serialized.contains("\"automations\""))
+        XCTAssertTrue(serialized.contains("\"settings\""))
+        XCTAssertTrue(serialized.contains("\"connectors\""))
+        XCTAssertTrue(serialized.contains("\"chat\""))
     }
 
     @MainActor

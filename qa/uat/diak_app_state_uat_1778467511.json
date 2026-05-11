@@ -1,0 +1,42 @@
+{
+  "status": "PASS",
+  "returncode": 0,
+  "elapsed_ms": 2741,
+  "scheme": "HermesDesktop",
+  "test_bundle": "HermesDesktopTests",
+  "test_class": "DiakAppStateUATScenarioTests",
+  "summary_lines": [
+    "Test Suite 'DiakAppStateUATScenarioTests' passed at 2026-05-10 21:45:13.395.",
+    "Test Suite 'HermesDesktopTests.xctest' passed at 2026-05-10 21:45:13.398.",
+    "Test Suite 'Selected tests' passed at 2026-05-10 21:45:13.398.",
+    "** TEST SUCCEEDED **"
+  ],
+  "test_results": [
+    {
+      "test": "testAutomationsScenarioFormFlowPasses",
+      "status": "passed"
+    },
+    {
+      "test": "testMemoryScenarioFormFlowPasses",
+      "status": "passed"
+    },
+    {
+      "test": "testRunAllAggregatesEveryFeatureScenarioToPass",
+      "status": "passed"
+    },
+    {
+      "test": "testSanitizedJSONObjectIsLeakSafeAndJSONEncodable",
+      "status": "passed"
+    },
+    {
+      "test": "testSkillsScenarioFormFlowPasses",
+      "status": "passed"
+    },
+    {
+      "test": "testSnapshotFingerprintsChangeAsFormStateChanges",
+      "status": "passed"
+    }
+  ],
+  "status_note": "App-state UAT XCTest class passed.",
+  "note": "Slice 9 Swift app-state UAT. Drives MemoryViewModel, SkillsViewModel, and AutomationsViewModel through their full create / edit / submit / delete form flows against MockHermesAPIClient. No daemon, cron, or external account side effects. Raw xcodebuild output is intentionally not committed; only test names + pass/fail status are persisted so private fixture content cannot leak through evidence."
+}

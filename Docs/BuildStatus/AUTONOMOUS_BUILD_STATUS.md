@@ -1,79 +1,74 @@
 # Autonomous Build Status
 
-Last updated: 2026-05-10 21:11:41 CDT
+Last updated: 2026-05-10 22:18:25 CDT
 
 ## Current milestone
 
 - Active milestone: M12 — In-app setup and core UX fixes / live dogfood hardening.
-- Current verdict: PARTIAL release readiness. Slice 9 app-state UAT seam is locally verified: Swift app-state tests now drive Memory / Skills / Automations form reducers/view models through create/edit/submit/delete paths and emit sanitized PASS evidence. Actual full-app typed/clicked visual XCUITest remains BLOCKED/PARTIAL in this unattended cron environment by macOS/Xcode UI-test runner policy.
+- Current verdict: PARTIAL release readiness. Slices 1-9 are locally verified; Slice 10 is now running as a focused recovery rerun because the previous Slice 10 builder appears to have exited without app/test implementation changes.
 - Product boundary remains unchanged: SwiftUI owns Diak UI/control center; Hermes Agent / Hermes Engine remains behind the local daemon/API boundary.
 
 ## Builder status
 
-- Previous Slice 9 Claude Code builder is no longer active.
-- This cron pass independently verified the uncommitted Slice 9 output and made one deterministic recovery fix before committing: the Skills toggle scenario now selects an existing `.disabled` fixture row rather than the newly direct-added `.draft` row, because draft enablement intentionally does not promote to `.active` until daemon install completes.
-- Slice 9 implementation was committed locally as `ba2241b test: add app-state UAT seam`.
-- No new Claude Code builder is currently running for `/Users/perlantir/Projects/HermesDesktop`.
+- No trustworthy active HermesDesktop `claude -p` builder from the prior Slice 10 launch was found in this fresh cron context.
+- Prior recorded builder was `proc_51b0a107661f` / wrapper PID `64450` / child PID `64455`; those were no longer visible.
+- Current working tree before recovery rerun still contained only status/prompt/evidence changes, not Slice 10 implementation/test changes.
+- Started exactly one new bounded Claude Code builder for M12 Slice 10 recovery.
+  - Hermes background session: `proc_eac447ecad7c`.
+  - Wrapper PID observed: `74884`.
+  - Child `claude -p` PID observed: `74889`.
+  - Prompt: `Docs/Prompts/CLAUDE_CODE_M12_SLICE10_APP_STATE_UAT_SETTINGS_CONNECTORS_CHAT_KICKOFF.md` plus an explicit recovery instruction to actually implement code/test/harness changes.
+- Do **not** start another builder while PID/session above is active.
 - No push performed from cron.
 
-## This verification pass
+## This cron pass
 
-1. Inspected repo state and confirmed `project.yml` plus `HermesDesktop.xcodeproj` are present.
-2. Confirmed no active HermesDesktop Claude Code builder by process inspection.
-3. Reviewed Slice 9 additions: `DiakAppStateUATScenario`, `DiakAppStateUATScenarioTests`, and `qa/uat/app_state_uat.py`.
-4. Regenerated the Xcode project and ran `xcodebuild -list`.
-5. Ran the full default Swift/macOS test gate; initial result failed on two new Slice 9 Skills app-state assertions because the scenario toggled the newly direct-added draft skill row.
-6. Recovered deterministically by selecting an existing disabled skill fixture for disabled -> active toggle proof, preserving the direct-add draft assertions separately.
-7. Re-ran targeted Slice 9 tests, the full default Swift/macOS test suite, Python bridge tests, deterministic Memory / Skills / Automations UAT, app-state UAT evidence harness, full-app XCUITest harness, and whitespace checks.
-8. Sanitized evidence review: committed evidence contains test names/statuses and sanitized route/state facts only; no raw screenshots, raw xcodebuild logs, credentials, local catalog dumps, or desktop captures.
+1. Inspected repo state on local `main`.
+2. Confirmed `project.yml` and `HermesDesktop.xcodeproj` are present.
+3. Checked Claude Code prerequisites: `/opt/homebrew/bin/claude`, version `2.1.121`, authenticated via Claude Max account.
+4. Ran `xcodebuild -list -project HermesDesktop.xcodeproj`: PASS; scheme `HermesDesktop`, targets `HermesDesktop`, `HermesDesktopTests`, `HermesDesktopUITests`.
+5. Detected the previous Slice 10 builder was no longer active and that the working tree did not yet contain Slice 10 implementation changes.
+6. Restarted Slice 10 in Claude Code print mode with `--max-turns 80 --output-format json --permission-mode acceptEdits` and `< /dev/null`.
+7. Polled the new Hermes background process once; it was running.
 
-## Verification evidence from this pass
+## Current git state at Slice 10 recovery launch
 
-- `xcodegen generate`: PASS; regenerated `HermesDesktop.xcodeproj`.
-- `xcodebuild -list`: PASS; scheme `HermesDesktop`, targets `HermesDesktop`, `HermesDesktopTests`, `HermesDesktopUITests`.
-- `xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -only-testing:HermesDesktopTests/DiakAppStateUATScenarioTests test`: PASS, 6 tests, 0 failures.
-  - Result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_21-09-20--0500.xcresult`.
-- `xcodebuild -scheme HermesDesktop -destination 'platform=macOS' test`: PASS, 259 tests, 0 failures.
-  - Result bundle: `/Users/perlantir/Library/Developer/Xcode/DerivedData/HermesDesktop-bolrhhijfkugdtajbptthtffutoz/Logs/Test/Test-HermesDesktop-2026.05.10_21-09-29--0500.xcresult`.
-- `python3 -m unittest Tests.diak_hermes_bridge_tests`: PASS, 22 tests.
-- `python3 qa/uat/memory_skills_automations_uat.py`: PASS.
-  - Evidence JSON: `qa/uat/diak_memory_skills_automations_uat_1778465397.json`.
-- `python3 qa/uat/app_state_uat.py`: PASS.
-  - Evidence JSON: `qa/uat/diak_app_state_uat_1778465398.json`.
-- `python3 qa/uat/full_app_xcuitest_uat.py`: BLOCKED verdict recorded, exits 0 for release-gate hygiene because the XCUITest harness exists but the unattended macOS UI-test runner cannot execute it here.
-  - Evidence JSON: `qa/uat/diak_full_app_xcuitest_uat_1778465418.json`.
-- `git diff --check`: PASS.
-- Added-lines secret-like scan over implementation/test/prompt/evidence files: PASS.
+- Latest local commit: `9151202 fix: make direct skill draft fields sendable`.
+- Previous status/evidence commit: `3ac6332 docs: record M12 slice 9 UAT evidence`.
+- `origin/main...HEAD`: local main is ahead by 46 commits; no push performed.
+- Pre-recovery working tree:
+  - `M Docs/BuildStatus/AUTONOMOUS_BUILD_STATUS.md`
+  - `?? Docs/Prompts/CLAUDE_CODE_M12_SLICE10_APP_STATE_UAT_SETTINGS_CONNECTORS_CHAT_KICKOFF.md`
+  - `?? qa/uat/diak_app_state_uat_1778467511.json`
+  - `?? qa/uat/diak_full_app_xcuitest_uat_1778467513.json`
+  - `?? qa/uat/diak_memory_skills_automations_uat_1778467510.json`
 
-## What changed in Slice 9
+## Required verification after Slice 10 exits
 
-- Added `HermesDesktop/Features/AppStateUAT/DiakAppStateUATScenario.swift`.
-  - Drives Memory, Skills, and Automations view models against `MockHermesAPIClient` through full app-state form flows.
-  - Emits sanitized scenario reports with opaque fingerprints instead of user-entered text.
-- Added `HermesDesktopTests/DiakAppStateUATScenarioTests.swift`.
-  - Verifies Memory create/edit/pin/delete gates.
-  - Verifies Skills direct-add validation, acknowledgement, creation, and fixture enable toggle.
-  - Verifies Automations create/schedule/delivery/test-run/update/delete flows.
-  - Verifies aggregate PASS and sanitized JSON encoding.
-- Added `qa/uat/app_state_uat.py` plus sanitized PASS evidence JSON.
-- Added Slice 9 kickoff prompt and refreshed this autonomous status file.
+Next cron pass should inspect Claude output, `git status`, and all diffs, then independently run:
 
-## Current git state
+```bash
+xcodegen generate
+xcodebuild -list
+xcodebuild -scheme HermesDesktop -destination 'platform=macOS' -only-testing:HermesDesktopTests/DiakAppStateUATScenarioTests test
+xcodebuild -scheme HermesDesktop -destination 'platform=macOS' test
+python3 -m unittest Tests.diak_hermes_bridge_tests
+python3 qa/uat/app_state_uat.py
+git diff --check
+```
 
-- Local `main` latest verified implementation commit: `ba2241b test: add app-state UAT seam`.
-- Previous commit before Slice 9: `3c344ef docs: record M12 slice 8 UAT evidence`.
-- `main...origin/main`: local main is ahead by 44 commits after the implementation commit; no push performed.
-- Working tree contains only this status refresh, the Slice 9 kickoff prompt, and sanitized evidence JSON pending the docs/evidence commit.
+Also run a sanitized added-lines secret scan before staging/committing any Slice 10 changes. Keep raw screenshots/private catalogs out of git.
 
 ## Known limits / blocked items
 
-- Full actual-app typed Memory / Skills / Automations visual UI PASS is still PARTIAL/BLOCKED in cron because the macOS XCUITest runner could not execute under unattended ad-hoc local signing/scheme policy.
-- Swift app-state UAT PASS is stronger than API-only UAT, but it is not the same as actual visual typed/clicked UI evidence.
+- Full actual-app typed visual UI PASS is still PARTIAL/BLOCKED in cron because the macOS XCUITest runner cannot execute under unattended ad-hoc local signing/scheme policy.
+- Swift app-state UAT PASS is stronger than API-only UAT, but it is not equivalent to actual visual typed/clicked UI evidence.
 - External Developer ID notarization/stapling/Gatekeeper remains NOT TESTED because signing/notary credentials are intentionally not used here.
 - Real connector OAuth credentials/templates remain NOT TESTED.
 
 ## Next action
 
-1. Commit the Slice 9 status/prompt/sanitized evidence refresh locally.
-2. Next bounded slice should target the remaining visual/dogfood gap without relying on unattended XCUITest: either add a pure Swift app-state/view-model UAT seam for another high-risk flow, or improve signed/local visual UAT instructions/evidence capture. Do not claim full visual PASS until the built app is launched, typed/clicked, and verified in a suitable UI-test session.
-3. Keep the release verdict PARTIAL until external signing/notarization and true visual UAT are proven.
+1. First check whether `proc_eac447ecad7c` / wrapper PID `74884` / child PID `74889` are still active.
+2. If active, do not start another builder; inspect progress only.
+3. If finished, verify Slice 10 independently with regenerated Swift tests, Python bridge tests, app-state UAT harness, `git diff --check`, and a sanitized added-lines secret scan before committing.
+4. Keep the release verdict PARTIAL until signed/local actual-app visual UAT and external distribution signing/notarization are proven.

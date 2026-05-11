@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""Run the M12 Slice 9 Swift app-state UAT scenario and emit sanitized evidence.
+"""Run the M12 Slice 9 + Slice 10 Swift app-state UAT scenarios and emit
+sanitized evidence.
 
-The scenario is implemented in Swift under
+The scenarios are implemented in Swift under
 ``HermesDesktop/Features/AppStateUAT/DiakAppStateUATScenario.swift``.
-It drives the real Memory / Skills / Automations view models against
+They drive the real Memory / Skills / Automations / Settings (API keys
+& Integrations) / Connectors / Chat view models against
 ``MockHermesAPIClient`` so the same reducer/state machine the SwiftUI
-screens use is exercised through a full form-submission flow.
+screens use is exercised through full form-submission and navigation
+flows.
 
-This Python harness invokes ``xcodebuild test`` filtered to the new
+This Python harness invokes ``xcodebuild test`` filtered to the
 ``DiakAppStateUATScenarioTests`` class, sanitizes the output (no raw
 fixture text, no DerivedData paths), and writes a verdict file.
 
@@ -127,13 +130,32 @@ def main() -> int:
         "test_results": sanitized["test_results"],
         "status_note": status_note,
         "note": (
-            "Slice 9 Swift app-state UAT. Drives MemoryViewModel, "
-            "SkillsViewModel, and AutomationsViewModel through their full "
-            "create / edit / submit / delete form flows against "
+            "Slice 9 + Slice 10 Swift app-state UAT. Drives "
+            "MemoryViewModel, SkillsViewModel, AutomationsViewModel, "
+            "APIKeysIntegrationsViewModel, ConnectorsViewModel, "
+            "SessionsViewModel, and ChatViewModel through their full "
+            "create / edit / submit / delete / setup / disconnect / "
+            "multi-chat switching form flows against "
             "MockHermesAPIClient. No daemon, cron, or external account "
-            "side effects. Raw xcodebuild output is intentionally not "
-            "committed; only test names + pass/fail status are persisted "
-            "so private fixture content cannot leak through evidence."
+            "side effects; no browser launch, no OAuth, no real "
+            "connector writes. Raw xcodebuild output is intentionally "
+            "not committed; only test names + pass/fail status are "
+            "persisted so private fixture content cannot leak through "
+            "evidence."
+        ),
+        "covered_features": [
+            "memory",
+            "skills",
+            "automations",
+            "settings",
+            "connectors",
+            "chat",
+        ],
+        "full_typed_clicked_xcuitest_status": (
+            "PARTIAL/BLOCKED in unattended cron. See "
+            "qa/uat/full_app_xcuitest_uat.py — it remains gated on "
+            "signed local UI-test sessions and is intentionally not "
+            "claimed PASS by this harness."
         ),
     }
 
