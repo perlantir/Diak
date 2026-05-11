@@ -236,6 +236,13 @@ Out-of-scope:
   Diak sessions are Diak-owned)
 - Memory entries (Phase 5)
 - Approvals storage (Phase 3)
+- Migrating data from the existing Python bridge's `bridge_state.json`.
+  Investigation of `~/.hermes/diak/bridge_state.json` during Work Unit 1
+  confirmed it contains only test/QA artifacts (5 stub sessions, 1
+  orphan automation pointing at a deleted Hermes cron job, 2 failed
+  connector setup attempts in error state, no memory, no secrets, no
+  approvals). No real user data exists in the bridge state. Diak starts
+  fresh.
 
 Acceptance:
 - Create a session, add messages, retrieve them, persistence survives
@@ -248,43 +255,66 @@ When complete: checkpoint, push, stop, Nick ratifies.
 ### Work Unit 6: UI Wiring + Bridge Decommission
 
 Tie the supervisor, dashboard client, API Server client, and session
-store together through the existing Diak UI. Decommission the bridge.
+store together through the existing Diak UI. Confirm the bridge is
+fully out of Diak's runtime path.
+
+Important context from Work Unit 1's findings: no Swift code on current
+main launches the Python bridge. The bridge process observed running on
+the dev machine at PID 64039 (port 8765) is an orphan from previous
+agent activity, not from current Diak. So "bridge decommission" for
+Phase 1 means three things:
+
+1. Verify no Swift code launches the bridge (confirm absence, not removal).
+2. Verify no Swift code calls the bridge at port 8765 (the existing
+   `HermesAPIEndpointConfig.swift` default and `URLSessionHermesAPIClient`
+   endpoint constants must be replaced with real dashboard / API Server
+   targets).
+3. Stop the orphan bridge process before final acceptance testing.
 
 In-scope:
-- Wire `HermesProcessSupervisor` into the app launch flow (replacing
-  whatever currently starts the bridge)
+- Wire `HermesProcessSupervisor` into the app launch flow.
 - Wire the dashboard client to the existing settings, skills, and
-  status views — they show real Hermes data
+  status views — they show real Hermes data.
 - Wire the API Server client + session store to the chat composer —
   sending a message creates a local session, sends to the API Server,
-  streams the response back into the session, persists it
+  streams the response back into the session, persists it.
 - Update `HermesEngineViewModel.restart()` to call the supervisor's
-  real restart method (replacing the placeholder from Phase 0)
-- Remove all calls to `Scripts/diak_hermes_bridge.py` from Swift code
-- Leave the bridge file itself in place (it stays as
-  archive/bridge-experiment reference) but Diak no longer starts it
-- Update `project.yml` if needed to drop bridge-related build steps
+  real restart method (replacing the placeholder from Phase 0).
+- Confirm `grep -r "8765" HermesDesktop/` returns no remaining
+  references after this work unit. Replace any hardcoded `8765` or
+  `diak_hermes_bridge` references with the dashboard / API Server
+  targets per Decisions #5 and #6.
+- Before final acceptance: stop the orphan bridge process. From the
+  user's machine, kill any process listening on port 8765:
+  `pgrep -f diak_hermes_bridge | xargs kill 2>/dev/null` or equivalent.
+  Verify `lsof -nP -iTCP:8765 -sTCP:LISTEN` returns empty.
+- Note that the bridge file at `Scripts/diak_hermes_bridge.py` does not
+  exist on current main (it was removed during the M9 reset and lives
+  only on `archive/bridge-experiment`). So there is no file to remove
+  from main; just verify Swift code makes no reference to it.
 
 Out-of-scope:
 - New UI components (use what exists from prior commits)
 - Approval flow (Phase 3)
 - Composio (Phase 4)
+- Modifying or deleting anything on `archive/bridge-experiment`. The
+  archived bridge stays read-only per Decision #13.
 
 Acceptance:
 - App launches, Hermes dashboard starts via the supervisor, dashboard
-  data populates the existing UI
+  data populates the existing UI.
 - User types a message in the chat composer, it sends, the response
-  streams in, both messages persist across app restart
+  streams in, both messages persist across app restart.
 - Settings → Restart Hermes Engine actually restarts the dashboard
-  (PID before and after differ)
-- No process listening on port 8765 after a clean Diak launch (the
-  bridge is no longer started)
-- All existing tests still pass; new tests added for the wiring
+  (PID before and after differ).
+- `grep -r "8765" HermesDesktop/` returns no matches.
+- `lsof -nP -iTCP:8765 -sTCP:LISTEN` returns empty after the orphan is
+  stopped (and a clean Diak launch does not bring it back).
+- All existing tests still pass; new tests added for the wiring.
 
 When complete: this completes Phase 1. Write a Phase 1 completion
 checkpoint summarizing all six work units. Nick reviews and merges to
 main.
-
 ## Acceptance Criteria (entire Phase 1)
 
 Phase 1 is complete when all six work units have been ratified AND:
@@ -297,7 +327,9 @@ Phase 1 is complete when all six work units have been ratified AND:
    local session store; the API Server streams a response back; the
    response persists.
 5. Settings → Restart Hermes Engine actually restarts the dashboard.
-6. No orphan Hermes or bridge processes after Cmd-Q.
+6. No `hermes dashboard` orphans after Cmd-Q. The pre-existing Python
+   bridge orphan at port 8765 has been stopped per Work Unit 6 and does
+   not respawn on Diak launch.
 7. All existing Phase 0 tests still pass.
 8. New Phase 1 tests added per work units 2-6 all pass.
 9. `xcodebuild build` and `xcodebuild test` clean.
