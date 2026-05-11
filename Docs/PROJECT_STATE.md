@@ -4,7 +4,7 @@ This is the live source-of-truth document for Diak's current state. Update it
 when phases advance or architectural decisions change. Agents read this on
 every run but never write to it.
 
-Last human-authored update: 2026-05-11 (post Phase 0.5, Path B locked)
+Last human-authored update: 2026-05-11 (post Phase 1 WU5, macOS 14 + SSE workaround locked)
 
 ## Current Active Phase
 
@@ -133,6 +133,15 @@ These are ratified. Do not relitigate without explicit Nick approval.
     builder, memory dashboard, and chat with the real model must work
     before any v1 ship. No timeline pressure on when v1 ships, but no
     early ship of a reduced-scope product. (Recorded 2026-05-11 per Nick.)
+16. Minimum macOS deployment target: macOS 14.0 (Sonoma, released October
+    2023). Required for SwiftData, which is Diak's persistence layer across
+    Phase 1 WU5 (sessions/messages/runs), Phase 3 (approvals), Phase 4
+    (connector configs), and Phase 5 (memory dashboard, automation
+    definitions). Authorized 2026-05-11 as a one-time Prohibition #9
+    exception during Phase 1 Work Unit 5. Affects `project.yml`
+    (`MACOSX_DEPLOYMENT_TARGET`, `deploymentTarget`) and Info.plist's
+    `LSMinimumSystemVersion`. Future minimum-OS bumps require fresh
+    authorization.
 
 ## The Phase 0–8 Roadmap
 
@@ -231,6 +240,14 @@ Address in a later phase.
 - Hermes itself reports being 426 commits behind upstream at the time of
   Phase 0.5 investigation. Diak development targets the installed
   v0.13.0; a future `hermes update` may require revisiting REALITY.md.
+- Foundation's `URLSession.AsyncBytes.lines` (AsyncLineSequence) has two
+  bugs that break SSE consumption: empty lines (which are SSE event
+  separators) are silently dropped, and the iterator crashes on the
+  second event. Discovered during Phase 1 Work Unit 4. Workaround:
+  byte-level SSE parsing in `HermesAPIServerClient.swift` with a
+  `DO NOT SIMPLIFY` banner comment. Do not refactor back to
+  AsyncLineSequence under any condition. If a future Foundation update
+  fixes this, verify with a targeted test before changing the parser.
 
 ## Human Contact
 
