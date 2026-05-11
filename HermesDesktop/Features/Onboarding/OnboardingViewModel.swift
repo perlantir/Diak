@@ -29,7 +29,11 @@ public final class OnboardingViewModel: ObservableObject {
     @Published public var step: OnboardingStep = .welcome
     @Published public var hasCompleted: Bool = false
 
-    public init() {}
+    public init() {
+        if DiakUATMode.isActive {
+            hasCompleted = true
+        }
+    }
 
     public func next() {
         switch step {

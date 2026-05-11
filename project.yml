@@ -80,6 +80,20 @@ targets:
         BUNDLE_LOADER: "$(TEST_HOST)"
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Diak.app/Contents/MacOS/Diak"
 
+  HermesDesktopUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - HermesDesktopUITests
+    dependencies:
+      - target: HermesDesktop
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.uberkiwi.diak.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: HermesDesktop
+
 schemes:
   HermesDesktop:
     build:

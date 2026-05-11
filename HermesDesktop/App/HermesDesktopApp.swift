@@ -15,16 +15,23 @@ struct HermesDesktopApp: App {
     @Environment(\.openWindow) private var openWindow
 
     private let client: HermesAPIClient
-    private let bridgeManager: HermesBridgeProcessManager
+    private let bridgeManager: HermesBridgeProcessManager?
     private let secretStore: SecretStore
 
     init() {
         // Real client by default; if the endpoint is offline, the daemon view
         // model asks the bridge manager to launch the production local bridge
-        // and then retries the same health/version checks.
+        // and then retries the same health/version checks. Under
+        // `--diak-uat-mode` the launch swaps in the in-memory mock client and
+        // skips bridge supervision so the XCUITest harness drives a fully
+        // deterministic UI without external side effects.
         let secretStore = KeychainSecretStore()
-        let bridgeManager = HermesBridgeProcessManager(secretStore: secretStore)
-        let client: HermesAPIClient = URLSessionHermesAPIClient()
+        let bridgeManager: HermesBridgeProcessManager? = DiakUATMode.isActive
+            ? nil
+            : HermesBridgeProcessManager(secretStore: secretStore)
+        let client: HermesAPIClient = DiakUATMode.isActive
+            ? MockHermesAPIClient(outcome: .success)
+            : URLSessionHermesAPIClient()
         self.client = client
         self.bridgeManager = bridgeManager
         self.secretStore = secretStore
