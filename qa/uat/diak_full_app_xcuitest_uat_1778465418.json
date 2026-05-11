@@ -1,0 +1,11 @@
+{
+  "status": "BLOCKED",
+  "returncode": 70,
+  "elapsed_ms": 562,
+  "scheme": "HermesDesktop",
+  "test_bundle": "HermesDesktopUITests",
+  "summary_lines": [],
+  "test_results": [],
+  "status_note": "Full-app XCUITest launch was blocked by macOS/Xcode UI-test harness policy in this unattended cron environment; keep visual/form verdict PARTIAL until run under a signed/local UI-test session.",
+  "note": "Slice 8 full-app XCUITest harness. App launches with --diak-uat-mode (MockHermesAPIClient, onboarding skipped) when the UI-test runner is permitted by the host. Memory / Skills / Automations form flows are defined against stable accessibility identifiers. No daemon, cron, or external account side effects. Raw xcodebuild output and screenshots are intentionally not committed to avoid leaking local fixture data or desktop captures."
+}
