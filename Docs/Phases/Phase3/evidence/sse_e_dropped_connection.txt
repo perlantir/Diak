@@ -1,0 +1,12 @@
+HTTP/1.1 200 OK
+Content-Type: text/event-stream
+Cache-Control: no-cache
+X-Accel-Buffering: no
+X-Hermes-Session-Id: api-512ca11cf442054a
+Transfer-Encoding: chunked
+Date: Tue, 12 May 2026 02:04:54 GMT
+Server: Python/3.11 aiohttp/3.13.5
+
+data: {"id": "chatcmpl-933ff9f57df44e009e957728d92c5", "object": "chat.completion.chunk", "created": 1778551494, "model": "hermes-agent", "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": null}]}
+
+curl: (18) transfer closed with outstanding read data remaining

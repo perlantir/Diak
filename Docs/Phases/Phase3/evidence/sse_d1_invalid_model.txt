@@ -1,0 +1,37 @@
+HTTP/1.1 200 OK
+Content-Type: text/event-stream
+Cache-Control: no-cache
+X-Accel-Buffering: no
+X-Hermes-Session-Id: api-25f140a6575bf25c
+Transfer-Encoding: chunked
+Date: Tue, 12 May 2026 02:04:11 GMT
+Server: Python/3.11 aiohttp/3.13.5
+
+data: {"id": "chatcmpl-a3e0f176c7cd4b8bbb183e8c190df", "object": "chat.completion.chunk", "created": 1778551451, "model": "this-model-does-not-exist", "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-a3e0f176c7cd4b8bbb183e8c190df", "object": "chat.completion.chunk", "created": 1778551451, "model": "this-model-does-not-exist", "choices": [{"index": 0, "delta": {"content": "Hi"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-a3e0f176c7cd4b8bbb183e8c190df", "object": "chat.completion.chunk", "created": 1778551451, "model": "this-model-does-not-exist", "choices": [{"index": 0, "delta": {"content": " Nick"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-a3e0f176c7cd4b8bbb183e8c190df", "object": "chat.completion.chunk", "created": 1778551451, "model": "this-model-does-not-exist", "choices": [{"index": 0, "delta": {"content": "."}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-a3e0f176c7cd4b8bbb183e8c190df", "object": "chat.completion.chunk", "created": 1778551451, "model": "this-model-does-not-exist", "choices": [{"index": 0, "delta": {"content": " What"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-a3e0f176c7cd4b8bbb183e8c190df", "object": "chat.completion.chunk", "created": 1778551451, "model": "this-model-does-not-exist", "choices": [{"index": 0, "delta": {"content": " are"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-a3e0f176c7cd4b8bbb183e8c190df", "object": "chat.completion.chunk", "created": 1778551451, "model": "this-model-does-not-exist", "choices": [{"index": 0, "delta": {"content": " we"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-a3e0f176c7cd4b8bbb183e8c190df", "object": "chat.completion.chunk", "created": 1778551451, "model": "this-model-does-not-exist", "choices": [{"index": 0, "delta": {"content": " building"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-a3e0f176c7cd4b8bbb183e8c190df", "object": "chat.completion.chunk", "created": 1778551451, "model": "this-model-does-not-exist", "choices": [{"index": 0, "delta": {"content": " or"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-a3e0f176c7cd4b8bbb183e8c190df", "object": "chat.completion.chunk", "created": 1778551451, "model": "this-model-does-not-exist", "choices": [{"index": 0, "delta": {"content": " checking"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-a3e0f176c7cd4b8bbb183e8c190df", "object": "chat.completion.chunk", "created": 1778551451, "model": "this-model-does-not-exist", "choices": [{"index": 0, "delta": {"content": " tonight"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-a3e0f176c7cd4b8bbb183e8c190df", "object": "chat.completion.chunk", "created": 1778551451, "model": "this-model-does-not-exist", "choices": [{"index": 0, "delta": {"content": "?"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-a3e0f176c7cd4b8bbb183e8c190df", "object": "chat.completion.chunk", "created": 1778551451, "model": "this-model-does-not-exist", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 27016, "completion_tokens": 15, "total_tokens": 27031}}
+
+data: [DONE]
+

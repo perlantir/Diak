@@ -1,0 +1,4 @@
+data: {"event": "run.cancelled", "run_id": "run_19ab1f1444004046af9b303aac50544c", "timestamp": 1778551599.028219}
+
+: stream closed
+

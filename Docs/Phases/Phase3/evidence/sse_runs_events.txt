@@ -1,0 +1,176 @@
+data: {"event": "tool.started", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551556.0137331, "tool": "read_file", "preview": "/tmp/sse_a_simple.sh"}
+
+data: {"event": "tool.completed", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551557.3387442, "tool": "read_file", "duration": 1.325, "error": false}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.01047, "delta": "\n\n/tmp"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.0283651, "delta": "/s"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.047071, "delta": "se"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.0688262, "delta": "_a"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.086289, "delta": "_simple"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.109588, "delta": ".sh"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.1274712, "delta": " is"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.146789, "delta": " a"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.167098, "delta": " small"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.168777, "delta": " Bash"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.18644, "delta": " script"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.211702, "delta": " that"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.236632, "delta": " sends"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.258038, "delta": " a"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.260986, "delta": " streaming"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.279213, "delta": " Open"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.296095, "delta": "AI"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.323503, "delta": "-compatible"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.359062, "delta": " chat"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.370477, "delta": " completion"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.37352, "delta": " request"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.432561, "delta": " to"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.4451861, "delta": " a"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.44712, "delta": " local"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.4485812, "delta": " Hermes"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.503498, "delta": " Agent"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.521191, "delta": " API"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.5221992, "delta": " at"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.527471, "delta": " http"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.528694, "delta": "://"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.553677, "delta": "127"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.566559, "delta": "."}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.591187, "delta": "0"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.6142368, "delta": "."}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.6269498, "delta": "0"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.648181, "delta": "."}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.674241, "delta": "1"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.6868129, "delta": ":"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.724808, "delta": "864"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.7258902, "delta": "2"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.729271, "delta": "/v"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.760993, "delta": "1"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.773828, "delta": "/chat"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.7906299, "delta": "/com"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.8203561, "delta": "plet"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.8334348, "delta": "ions"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.8358772, "delta": ".\n\n"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.8559518, "delta": "It"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.872535, "delta": " uses"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.901525, "delta": " a"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.914012, "delta": " bearer"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.936939, "delta": " token"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.954099, "delta": ","}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.972977, "delta": " asks"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551559.991195, "delta": " the"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.032636, "delta": " herm"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.032973, "delta": "es"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.034461, "delta": "-agent"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.056382, "delta": " model"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.071072, "delta": " to"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.090815, "delta": " reply"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.110336, "delta": " exactly"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.1305752, "delta": " \u201c"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.1608121, "delta": "hello"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.170479, "delta": "\u201d,"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.1884139, "delta": " enables"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.209405, "delta": " SSE"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.235591, "delta": " streaming"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.2369869, "delta": " with"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.250168, "delta": " \""}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.274857, "delta": "stream"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.289021, "delta": "\":"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.309163, "delta": " true"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.33148, "delta": ","}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.351805, "delta": " and"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.368167, "delta": " caps"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.3925161, "delta": " the"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.412837, "delta": " response"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.413512, "delta": " at"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.4318578, "delta": " "}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.452846, "delta": "20"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.467773, "delta": " tokens"}
+
+data: {"event": "message.delta", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551560.4898849, "delta": "."}
+
+data: {"event": "reasoning.available", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551562.150388, "text": "/tmp/sse_a_simple.sh is a small Bash script that sends a streaming OpenAI-compatible chat completion request to a local Hermes Agent API at http://127.0.0.1:8642/v1/chat/completions.\n\nIt uses a bearer token, asks the hermes-agent model to reply exactly \u201chello\u201d, enables SSE streaming with \"stream\": true, and caps the response at 20 tokens."}
+
+data: {"event": "run.completed", "run_id": "run_df8e16be14994e57b04db984e49884e9", "timestamp": 1778551562.160713, "output": "/tmp/sse_a_simple.sh is a small Bash script that sends a streaming OpenAI-compatible chat completion request to a local Hermes Agent API at http://127.0.0.1:8642/v1/chat/completions.\n\nIt uses a bearer token, asks the hermes-agent model to reply exactly \u201chello\u201d, enables SSE streaming with \"stream\": true, and caps the response at 20 tokens.", "usage": {"input_tokens": 54371, "output_tokens": 139, "total_tokens": 54510}}
+
+: stream closed
+

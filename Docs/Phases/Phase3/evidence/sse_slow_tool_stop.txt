@@ -1,0 +1,6 @@
+data: {"event": "tool.started", "run_id": "run_b84c66665a36424a8d8a5a4dbff18648", "timestamp": 1778551869.942445, "tool": "terminal", "preview": "sleep 10 && echo done"}
+
+data: {"event": "run.cancelled", "run_id": "run_b84c66665a36424a8d8a5a4dbff18648", "timestamp": 1778551870.062347}
+
+: stream closed
+
