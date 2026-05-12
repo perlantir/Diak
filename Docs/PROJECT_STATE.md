@@ -4,26 +4,34 @@ This is the live source-of-truth document for Diak's current state. Update it
 when phases advance or architectural decisions change. Agents read this on
 every run but never write to it.
 
-Last human-authored update: 2026-05-12 (post Phase 2 merge, Phase 3 active)
+Last human-authored update: 2026-05-12 (post Phase 3 WU3.1, Decision #17 locked)
 
 ## Current Active Phase
 
 **Phase 3: Chat plus Canvas**
 
 Phase 2 is complete and merged to main at SHA `8e6cfe1`. All 10 acceptance
-criteria passed, including the live multi-window propagation test (2s SLA)
-and the live external-Hermes-change propagation test (5s SLA verified
-against real `hermes dashboard`). Phase 2's full history is in main's git
-log from `7c2d556` (WU2.1) through `8e6cfe1` (merge commit).
+criteria passed. Phase 2's full history is in main's git log from `7c2d556`
+(WU2.1) through `8e6cfe1` (merge commit).
 
-Phase 3 has not yet had a Reality investigation. The first work unit is
-WU3.1: producing `Docs/Phases/Phase3/REALITY.md` by direct observation of
-real SSE event flows from the API Server during chat runs that exercise
-tool calls, reasoning content, errors, and dropped connections. No code
-changes in WU3.1. The Reality Doc is a hard gate before WU3.2 (Streaming
-Markdown Renderer).
+WU3.1 (Phase 3 Reality investigation) is complete. See
+`Docs/Phases/Phase3/REALITY.md` (1,172 lines) and the WU3.1 completion
+checkpoint at `Docs/Phases/Phase3/CHECKPOINTS/`. Six investigation areas
+delivered substantive findings: /v1/runs/{id}/events as the streaming surface
+(cleaner Hermes-native event types vs OpenAI's chat completions endpoint);
+apple/swift-markdown + hand-written SwiftUI visitor (Down is stale,
+MarkdownUI is in maintenance mode with known crash bugs); existing
+ChatViewModel already has the right seams for streaming integration;
+Best-Effort Stop approval pattern with true gating deferred to Phase 4;
+inline tool-call cards (Cursor/Claude/ChatGPT style); per-window
+StreamingMessageState fast lane required because 20-50 Hz token rate
+incompatible with the global reducer.
 
-Phase branch: `phase/3-chat-and-canvas` (to be created from current main)
+Phase 3 SCOPE.md ratified. Six work units decomposed across four
+ratification gates per Nick's standing bundling preference. Highlightr
+syntax highlighting locked into WU3.2.
+
+Phase branch: `phase/3-chat-and-canvas` (at 8eff0e8, pushed to origin)
 
 ## Recent Phases
 
@@ -37,22 +45,18 @@ COMPLETE and merged to main on 2026-05-11. Path B locked based on findings.
 ### Phase 1: Hermes Runtime Integration — Path B
 COMPLETE and merged to main at SHA `6ef6b37` on 2026-05-11. All 10 acceptance
 criteria passed, including live API Server integration. Six work units
-completed (Bridge Reality Doc, Process Supervisor, Dashboard HTTP Client,
-API Server Client, Diak Session Store, UI Wiring + Bridge Decommission).
-Test count grew from 140 to 209 across the phase. Python bridge fully
-deprecated; Diak now talks to real Hermes via Swift code.
+completed. Test count grew from 140 to 209 across the phase. Python bridge
+fully deprecated; Diak now talks to real Hermes via Swift code.
 
 ### Phase 2: Diak-Side Reactive State
 COMPLETE and merged to main at SHA `8e6cfe1` on 2026-05-12. All 10 acceptance
 criteria passed. Three work units completed (Reality Investigation, Reducer
 Foundation, Polling Coordinator + View-Model Migration bundled). Test count
-grew from 209 to 266 across the phase. HermesState became the real
-canonical source of truth via reducer-driven mutations; four race policies
-encoded; three-tier polling cadence (2s/10s/60s) running live with
-diff-before-dispatch; multi-window 2s SLA verified; external Hermes change
-5s SLA verified against real `hermes dashboard`. Decision #8 implemented
-for the first time. See
-`Docs/Phases/Phase2/CHECKPOINTS/20260512T015155Z-phase-2-complete.md`.
+grew from 209 to 266. HermesState became the real canonical source of truth
+via reducer-driven mutations; four race policies encoded; three-tier polling
+cadence (2s/10s/60s) running live with diff-before-dispatch; multi-window
+2s SLA verified; external Hermes change 5s SLA verified against real
+`hermes dashboard`. Decision #8 implemented for the first time.
 
 Critical Phase 2 outputs carried forward:
 - `HermesState` is canonical for all Diak-displayed state. Views observe
@@ -67,15 +71,11 @@ Critical Phase 2 outputs carried forward:
   race policy 1 in production.
 - `DiakSessionStore.attach(hermesState:)` dispatches `.diakSession*`
   actions on every CRUD via SwiftData `didSave` hook.
-- VM-local typed `@Published` projections on SessionsViewModel and
-  SkillsViewModel are accepted as a small documented pattern (deviation
-  noted in Phase 2 completion checkpoint; may be revisited in Phase 3 if
-  chat/approvals view rewrites establish a different convention).
 
 ## Repository State
 
 - Main branch: at `8e6cfe1` after Phase 2 merge
-- Active phase branch: `phase/3-chat-and-canvas` (to be created)
+- Active phase branch: `phase/3-chat-and-canvas` (at 8eff0e8)
 - Archive branches preserved (never modify):
   - `archive/pre-reset-full-snapshot`
   - `archive/pre-reset-wip`
@@ -119,7 +119,11 @@ These are ratified. Do not relitigate without explicit Nick approval.
    supervisor health dedup). Hermes-owned state polled at three-tier
    cadence (2s/10s/60s) by `HermesPollingCoordinator` with
    diff-before-dispatch. Diak-owned state mutations dispatched via
-   SwiftData `didSave` hook through `DiakSessionStore`.
+   SwiftData `didSave` hook through `DiakSessionStore`. EXCEPTION for
+   streaming chat: per-window `StreamingMessageState` fast lane bypasses
+   the global reducer for 20-50 Hz token deltas. Completion-time events
+   (message.complete, run.completed) dispatch to HermesState. Per
+   Decision #17, multi-window-live-stream is scoped out for v1.
 9. State container: `HermesState` is a `@MainActor ObservableObject` exposed
    via `@EnvironmentObject`.
 10. Project generation: via XcodeGen from `project.yml`. Do not hand-edit
@@ -149,6 +153,20 @@ These are ratified. Do not relitigate without explicit Nick approval.
     exception during Phase 1 Work Unit 5. Affects `project.yml` and
     Info.plist's `LSMinimumSystemVersion`. Future minimum-OS bumps
     require fresh authorization.
+17. Approval flow staging (locked 2026-05-12 per WU3.1 Reality findings):
+    Phase 3 ships "Best-Effort Stop" — Diak observes /v1/runs/{id}/events,
+    surfaces tool calls in the UI as they arrive, and offers a stop button
+    that issues /v1/runs/{id}/stop (~120ms latency). For slow tools (over
+    ~150ms execution), stop arrives before completion and the tool is
+    interrupted. For fast tools (under ~150ms), stop arrives after
+    completion and the tool is surfaced as "Already Executed" rather than
+    pretending to have blocked it. This is interruption, not pre-execution
+    gating. True approval (pre-execution gating with deny capability) is
+    deferred to Phase 4, implemented via Diak-as-MCP-server: Diak presents
+    wrapper tools to Hermes whose internal implementation requires user
+    approval before executing the real underlying capability. The Diak UI
+    in Phase 3 must clearly distinguish "interrupted" from "executed"
+    states; it must not imply that Best-Effort Stop is true approval.
 
 ## The Phase 0–8 Roadmap
 
@@ -170,20 +188,23 @@ race policies, three-tier polling with diff-before-dispatch, multi-window
 propagation.
 
 ### Phase 3: Chat plus Canvas (ACTIVE)
-Real streaming markdown rendering, tool-call cards, approval flow
-round-trip (Diak-owned approvals — see Decision #13), right-side inspector
-showing live activity and artifacts. Highest risk phase by margin —
-streaming markdown is hard and the approval protocol is novel (Hermes
-doesn't expose approvals natively). Provisional structure: 6 work units
-across 4 ratification gates with WU3.3+WU3.4 and WU3.5+WU3.6 pre-authorized
-for bundled execution per Nick's standing preference. WU3.1 Reality
-investigation lands first; SCOPE.md gets written after based on findings.
+Real streaming markdown rendering via apple/swift-markdown AST with
+hand-written SwiftUI visitor, Highlightr syntax highlighting on code
+block completion, tool-call cards inline interleaved with assistant text,
+Best-Effort Stop approval pattern per Decision #17, right-side inspector
+showing live activity and artifacts. Streaming uses /v1/runs/{id}/events
+via the existing HermesAPIServerClient. Per-window StreamingMessageState
+fast lane for 20-50 Hz token rate. Six work units across four
+ratification gates with WU3.3+WU3.4 and WU3.5+WU3.6 pre-authorized for
+bundled execution.
 
-### Phase 4: Skills, Connectors, OAuth
+### Phase 4: Skills, Connectors, OAuth, True Approval
 OAuth round-trip via system browser and URL scheme callback, Composio
 connector setup (Diak-owned, integrated via Composio's HTTP API directly
 from Swift since there is no Swift SDK), skill install/enable/disable
-(via the dashboard API), Keychain-backed secrets.
+(via the dashboard API), Keychain-backed secrets. Additionally:
+Diak-as-MCP-server implementation that brings true pre-execution
+approval gating per Decision #17 (deferred from Phase 3).
 
 ### Phase 5: Automations and Memory
 Conversational automation builder (Diak-owned scheduler), scheduled
@@ -204,19 +225,25 @@ concurrency, beta with real users.
 
 ## What the Agent Is Allowed to Do Right Now
 
-- Read `CLAUDE.md`, this file, and any existing `Docs/Phases/Phase3/`
-  documents (none yet — WU3.1 produces the first).
-- Create branch `phase/3-chat-and-canvas` from current main (`8e6cfe1`).
-- Work through WU3.1 (Reality investigation) as specified in the kickoff
-  prompt. No SCOPE.md exists yet — that gets written after WU3.1.
+- Read `CLAUDE.md`, this file, and `Docs/Phases/Phase3/SCOPE.md` (to be
+  written next).
+- Work through Phase 3 SCOPE.md as specified, in the order specified.
+- Phase 3 has four ratification gates: WU3.1 (already ratified), WU3.2 alone,
+  WU3.3+WU3.4 bundled, WU3.5+WU3.6 bundled.
 - Write checkpoints to `Docs/Phases/Phase3/CHECKPOINTS/`.
 - Push to `phase/3-chat-and-canvas` branch only.
 
 ## What the Agent Is Not Allowed to Do Right Now
 
-- Modify any file outside `Docs/Phases/Phase3/` during WU3.1.
-- Begin WU3.2 (Streaming Markdown Renderer) code work before the Reality
-  Doc lands and is ratified.
+- Modify any file outside `Docs/Phases/Phase3/` and the Swift source files
+  named in Phase 3 SCOPE.md.
+- Begin WU3.3+WU3.4 work before WU3.2 is ratified.
+- Begin WU3.5+WU3.6 work before WU3.3+WU3.4 is ratified.
+- Implement true pre-execution approval gating in Phase 3 (deferred to
+  Phase 4 per Decision #17). Phase 3 ships Best-Effort Stop only.
+- Build Diak-as-MCP-server in Phase 3 (Phase 4 work).
+- Add multi-window live-stream propagation (scoped out of v1 per
+  Decision #8 exception).
 - Make Hermes configuration changes (`~/.hermes/.env`, etc.) without
   explicit Nick approval.
 - Delete or modify anything on `archive/` branches.
@@ -225,29 +252,37 @@ concurrency, beta with real users.
 ## Known Issues (Deferred)
 
 - Three stale `Diak.app` bundles register the `diak://` URL scheme with
-  LaunchServices (two in `/private/tmp/diak_phase1_e2e_*`, one in stale
-  DerivedData). Clean up before public distribution.
+  LaunchServices. Clean up before public distribution.
 - `zsh` builtin `log` shadows `/usr/bin/log`. Future automation that calls
   `log show` should use the absolute path.
 - Hermes itself reports being 426 commits behind upstream at the time of
   Phase 0.5 investigation. A future `hermes update` may require revisiting
   REALITY.md.
 - Foundation's `URLSession.AsyncBytes.lines` (AsyncLineSequence) has two
-  bugs that break SSE consumption: empty lines (which are SSE event
-  separators) are silently dropped, and the iterator crashes on the
-  second event. Discovered during Phase 1 Work Unit 4. Workaround:
-  byte-level SSE parsing in `HermesAPIServerClient.swift` with a
-  `DO NOT SIMPLIFY` banner comment. Do not refactor back to
-  AsyncLineSequence under any condition.
+  bugs that break SSE consumption. Workaround in `HermesAPIServerClient.swift`
+  with `DO NOT SIMPLIFY` banner comment.
 - API Server key (`API_SERVER_KEY` in `~/.hermes/.env`) requires manual
-  xcscheme env var injection to run the live integration test, because
-  the xcodeproj is regenerated by XcodeGen and is gitignored. Documented
-  in the Phase 1 completion checkpoint's "Live API Server Verification"
-  section.
+  xcscheme env var injection to run the live integration test.
 - VM-local typed `@Published` projections on SessionsViewModel and
   SkillsViewModel coexist with HermesState as the source of truth.
   Pattern accepted in Phase 2; may be revisited if Phase 3 establishes a
   convention that obsoletes the VM projection layer.
+
+## Known Behaviors (Hermes-side, informational)
+
+- Hermes' gateway (which hosts the API Server) is managed by launchd with
+  auto-respawn. A `kill -9` of the API Server PID results in the gateway
+  respawning within ~3 seconds. Token rotates on respawn (handled by
+  Phase 2's TokenEpochObserver). Implication for Diak: the supervisor
+  doesn't need to worry about Hermes staying dead during a session;
+  observed-down state is typically transient.
+- Hermes' `tool_execution: "server"` config means tools execute
+  server-side with no client-side hook. Confirmed via source check during
+  WU3.1. This is the constraint that motivates Decision #17's deferral
+  of true approval to Phase 4 via Diak-as-MCP-server.
+- Hermes' `approvals.mode: manual` configuration setting is NOT wired
+  through the API Server (verified during WU3.1). Setting it in
+  Hermes config has no effect on /v1/runs behavior. Don't rely on it.
 
 ## Human Contact
 
