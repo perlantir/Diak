@@ -11,16 +11,20 @@ public final class HermesEngineViewModel: ObservableObject {
 
     @Published public private(set) var restartState: ActionState = .idle
     @Published public private(set) var reconnectState: ActionState = .idle
-    @Published public var endpoint: String
+
+    /// Fixed at `http://127.0.0.1:9119` per Decision #5 (PROJECT_STATE.md).
+    /// Phase 2 WU2.4-C retired the editable `@Published var endpoint`
+    /// surface; the dashboard URL is supervisor-owned and not
+    /// user-configurable. Exposed as `let` so existing read sites
+    /// (`HermesEngineSettingsView`) still compile.
+    public let endpoint: String = "http://127.0.0.1:9119"
 
     private let daemon: DaemonStatusViewModel
     private let supervisor: (any HermesProcessSupervising)?
 
     public init(daemon: DaemonStatusViewModel,
-                endpoint: String = "http://127.0.0.1:9119",
                 supervisor: (any HermesProcessSupervising)? = nil) {
         self.daemon = daemon
-        self.endpoint = endpoint
         self.supervisor = supervisor
     }
 

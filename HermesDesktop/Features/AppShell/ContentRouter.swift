@@ -28,6 +28,7 @@ struct ContentRouter: View {
          approvals: ApprovalsViewModel,
          supervisor: HermesProcessSupervisor,
          sessionStore: DiakSessionStore,
+         hermesState: HermesState,
          dashboardClient: HermesDashboardClient,
          apiServerClient: HermesAPIServerClient?,
          client: HermesAPIClient) {
@@ -44,9 +45,18 @@ struct ContentRouter: View {
             sessionStore: sessionStore,
             apiServerClient: apiServerClient
         ))
-        _sessions = StateObject(wrappedValue: SessionsViewModel(dashboardClient: dashboardClient))
-        _settings = StateObject(wrappedValue: SettingsViewModel(dashboardClient: dashboardClient))
-        _skills = StateObject(wrappedValue: SkillsViewModel(dashboardClient: dashboardClient))
+        // Phase 2 WU2.4: production wires the HermesState-backed
+        // inits. Views subscribe to HermesState slices via Combine;
+        // refresh() dispatches user-initiated actions.
+        _sessions = StateObject(wrappedValue: SessionsViewModel(
+            hermesState: hermesState, dashboardClient: dashboardClient
+        ))
+        _settings = StateObject(wrappedValue: SettingsViewModel(
+            hermesState: hermesState, dashboardClient: dashboardClient
+        ))
+        _skills = StateObject(wrappedValue: SkillsViewModel(
+            hermesState: hermesState, dashboardClient: dashboardClient
+        ))
     }
 
     var body: some View {

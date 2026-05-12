@@ -8,6 +8,7 @@ public struct AppShellView: View {
     @ObservedObject var compactWindow: CompactWindowViewModel
     @ObservedObject var supervisor: HermesProcessSupervisor
     @ObservedObject var sessionStore: DiakSessionStore
+    @ObservedObject var hermesState: HermesState
     let dashboardClient: HermesDashboardClient
     let apiServerClient: HermesAPIServerClient?
     let client: HermesAPIClient
@@ -20,6 +21,7 @@ public struct AppShellView: View {
                 compactWindow: CompactWindowViewModel,
                 supervisor: HermesProcessSupervisor,
                 sessionStore: DiakSessionStore,
+                hermesState: HermesState,
                 dashboardClient: HermesDashboardClient,
                 apiServerClient: HermesAPIServerClient? = nil,
                 client: HermesAPIClient = MockHermesAPIClient(),
@@ -31,6 +33,7 @@ public struct AppShellView: View {
         self.compactWindow = compactWindow
         self.supervisor = supervisor
         self.sessionStore = sessionStore
+        self.hermesState = hermesState
         self.dashboardClient = dashboardClient
         self.apiServerClient = apiServerClient
         self.client = client
@@ -71,6 +74,7 @@ public struct AppShellView: View {
                           approvals: approvals,
                           supervisor: supervisor,
                           sessionStore: sessionStore,
+                          hermesState: hermesState,
                           dashboardClient: dashboardClient,
                           apiServerClient: apiServerClient,
                           client: client)
@@ -120,6 +124,7 @@ public struct AppShellView: View {
                           approvals: approvals,
                           supervisor: supervisor,
                           sessionStore: sessionStore,
+                          hermesState: hermesState,
                           dashboardClient: dashboardClient,
                           apiServerClient: apiServerClient,
                           client: client)
