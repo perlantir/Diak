@@ -19,7 +19,7 @@ struct HermesDesktopApp: App {
     //   chat composer asks for one. Phase 1 holds it via `apiServerKey`.
     @StateObject private var supervisor: HermesProcessSupervisor
     @StateObject private var sessionStore: DiakSessionStore
-    @StateObject private var hermesState = HermesState()
+    @StateObject private var hermesState: HermesState
     @StateObject private var daemon: DaemonStatusViewModel
     @StateObject private var engineViewModel: HermesEngineViewModel
     @StateObject private var onboarding = OnboardingViewModel()
@@ -105,7 +105,18 @@ struct HermesDesktopApp: App {
         let legacyClient: HermesAPIClient = MockHermesAPIClient()
         self.client = legacyClient
 
-        let daemonVM = DaemonStatusViewModel(client: legacyClient)
+        // Phase 2 WU2.2: HermesState is canonical. Construct it
+        // before any view model that observes it. The daemon view
+        // model is the WU2.2 proof-of-pattern — it derives status
+        // from HermesState's dashboard + supervisorHealth slices.
+        let hermesStateInstance = HermesState()
+        _hermesState = StateObject(wrappedValue: hermesStateInstance)
+
+        let daemonVM = DaemonStatusViewModel(
+            hermesState: hermesStateInstance,
+            dashboardClient: dashboardInstance,
+            legacyClient: legacyClient
+        )
         let routerInstance = AppRouter()
         _daemon = StateObject(wrappedValue: daemonVM)
         _engineViewModel = StateObject(wrappedValue: HermesEngineViewModel(
@@ -146,6 +157,14 @@ struct HermesDesktopApp: App {
                     // Logged through supervisor.health = .crashed already;
                     // do not crash the app.
                 }
+            }
+            .onReceive(supervisor.$health) { newHealth in
+                // Phase 2 WU2.2: bridge supervisor → HermesState so
+                // the reducer sees process lifecycle transitions.
+                // The DaemonStatusViewModel reads
+                // `hermesState.supervisorHealth` to compose its
+                // banner status.
+                hermesState.dispatch(.supervisorHealthChanged(newHealth))
             }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
                 // SCOPE.md WU6 acceptance #6: "No orphan Hermes or bridge
