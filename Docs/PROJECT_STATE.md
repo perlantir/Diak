@@ -4,20 +4,29 @@ This is the live source-of-truth document for Diak's current state. Update it
 when phases advance or architectural decisions change. Agents read this on
 every run but never write to it.
 
-Last human-authored update: 2026-05-11 (post Phase 1 WU5, macOS 14 + SSE workaround locked)
+Last human-authored update: 2026-05-11 (post Phase 1 merge, Phase 2 active)
 
 ## Current Active Phase
 
-**Phase 1: Hermes Runtime Integration — Path B**
+**Phase 2: Diak-Side Reactive State**
 
-Phase 0.5 (Hermes Reality Doc) is complete. See
-`Docs/Phases/Phase1/CHECKPOINTS/20260511T182314Z-reality-doc-complete.md` for
-findings. The doc surfaced four contradictions with the original Phase 1
-plan. Nick has decided on Path B in response.
+Phase 1 is complete and merged to main at SHA `6ef6b37`. All 10 acceptance
+criteria passed, including the live API Server integration test (chat
+completion round-trip in 5.029s). Phase 1's full history is in main's git log
+from the Phase 0 merge through `6ef6b37`.
 
-The next work unit is documented in `Docs/Phases/Phase1/SCOPE.md`.
+WU2.1 (Phase 2 Reality investigation) is complete. See
+`Docs/Phases/Phase2/REALITY.md` and the WU2.1 completion checkpoint. Major
+findings: HermesState is fully vestigial; dashboard endpoint latencies span
+three orders of magnitude; SwiftData's ModelContext.didSave gives free
+reactive plumbing for Diak-owned state; races are logical not data;
+recommend pausing polling during supervisor restart.
 
-Phase branch: `phase/1-hermes-runtime-integration` (to be created from main)
+Phase 2 SCOPE.md ratified. Three ratification gates: WU2.2 (reducer
+foundation) alone, then WU2.3+WU2.4 bundled (polling layer + Diak-owned
+event emission).
+
+Phase branch: `phase/2-reactive-state` (at 06300d5, pushed to origin)
 
 ## Recent Phases
 
@@ -34,11 +43,18 @@ scope) require human approval before being added.
 ### Phase 0.5: Hermes Reality Doc
 COMPLETE and merged to main on 2026-05-11. Direct observation of real Hermes
 v0.13.0 documented in `Docs/Phases/Phase1/REALITY.md`. Four contradictions
-with the prior Phase 1 plan surfaced; see
-`Docs/Phases/Phase1/CHECKPOINTS/20260511T182314Z-reality-doc-complete.md` for
-the full list.
+with the prior Phase 1 plan surfaced; Path B was locked in response.
 
-Critical findings:
+### Phase 1: Hermes Runtime Integration — Path B
+COMPLETE and merged to main at SHA `6ef6b37` on 2026-05-11. All 10 acceptance
+criteria passed, including live API Server integration. Six work units
+completed (Bridge Reality Doc, Process Supervisor, Dashboard HTTP Client,
+API Server Client, Diak Session Store, UI Wiring + Bridge Decommission).
+Test count grew from 140 to 209 across the phase. Python bridge fully
+deprecated; Diak now talks to real Hermes via Swift code. See
+`Docs/Phases/Phase1/CHECKPOINTS/20260511T224705Z-phase-1-complete.md`.
+
+Critical findings carried forward:
 - Hermes has no `daemon` subcommand. The HTTP server is `hermes dashboard`
   (port 9119, FastAPI/uvicorn).
 - Dashboard auth is per-process ephemeral. Token rotates every restart.
@@ -47,18 +63,13 @@ Critical findings:
   (sessions, skills, config, cron, profiles, providers/oauth) but does
   NOT expose: approvals, Composio-style connectors, automation builder
   shape, memory dashboard, or session-state event streams.
-- The Python bridge at port 8765 (`Scripts/diak_hermes_bridge.py`) has
-  been impersonating "the daemon" for all Diak development to date. It
-  provides the surface real Hermes lacks.
 - API Server (port 8642, OpenAI-compatible) has SSE on
-  `/v1/runs/{run_id}/events` but is currently disabled and exposes
-  chat-completion run events, not session-state events.
+  `/v1/runs/{run_id}/events`. Currently enabled on the dev machine.
 
 ## Repository State
 
-- Main branch: tracking continuous progress (Phase 0 merged at `2185e7f`,
-  Phase 0.5 merged subsequently)
-- Active phase branch: `phase/1-hermes-runtime-integration` (to be created)
+- Main branch: at `6ef6b37` after Phase 1 merge
+- Active phase branch: `phase/2-reactive-state` (at 06300d5)
 - Archive branches preserved (never modify):
   - `archive/pre-reset-full-snapshot`
   - `archive/pre-reset-wip`
@@ -78,7 +89,7 @@ These are ratified. Do not relitigate without explicit Nick approval.
    `cs.allow-unsigned-executable-memory`.
 3. Hermes runs bundled inside `Diak.app/Contents/Resources/hermes-runtime/`.
    Diak owns its lifecycle. (Bundling itself is deferred to a later phase;
-   for the duration of Phase 1, Diak uses the system-installed Hermes at
+   for the duration of Phase 1-2, Diak uses the system-installed Hermes at
    `~/.hermes/`.)
 4. Hermes data lives at `~/Library/Application Support/Diak/hermes/` once
    bundled. Until then, Hermes uses its standalone install at `~/.hermes/`.
@@ -89,7 +100,7 @@ These are ratified. Do not relitigate without explicit Nick approval.
    `API_SERVER_ENABLED=true`). Diak uses both: dashboard for
    Hermes-self-management surface (sessions, skills, config), API Server
    for chat completion inference. The legacy port 8765 belonging to the
-   Python bridge is being deprecated as part of Path B.
+   Python bridge has been removed from production source.
 6. Auth mechanism: dashboard uses per-process ephemeral Bearer token,
    scraped from `GET /` SPA HTML on each Hermes start. API Server uses
    persistent `$API_SERVER_KEY` Bearer token configured at Hermes setup
@@ -98,11 +109,17 @@ These are ratified. Do not relitigate without explicit Nick approval.
    key lives in Diak's Keychain entry.
 7. URL scheme: `diak` registered in `Info.plist`. OAuth callbacks land at
    `diak://oauth-callback`.
-8. Single source of truth for Diak-owned state: `HermesState`. Diak owns
+8. Single source of truth for Diak-owned state: `HermesState` (target
+   architecture, being built in Phase 2). WU2.1 confirmed HermesState was
+   vestigial after Phase 1 — declared and injected but no views read it
+   and no services wrote to it. Phase 2 implements Decision #8 for the
+   first time: HermesState becomes canonical, mutations flow through a
+   reducer, views observe slices and re-render on change. Diak owns
    approvals, Composio connectors, session message persistence, memory,
    automation definitions. For Hermes-owned state (skills, config, cron
    jobs, profiles, providers/OAuth), the dashboard is the source of truth
-   and `HermesState` caches a projection.
+   and HermesState caches a projection updated via polling per the WU2.1
+   three-tier cadence (2s/10s/60s by tier).
 9. State container: `HermesState` is a `@MainActor ObservableObject` exposed
    via `@EnvironmentObject`.
 10. Project generation: via XcodeGen from `project.yml`. Do not hand-edit
@@ -118,17 +135,16 @@ These are ratified. Do not relitigate without explicit Nick approval.
     the automation builder. Real Hermes is used as inference backend (chat
     completions via API Server) and as the management surface for what
     Hermes itself owns (skills toggle, config, cron jobs, provider OAuth,
-    profiles). The Python bridge will be deprecated and removed from the
-    shipped product. Diak's Swift code will replace its functionality
-    with native implementations where needed. The bridge stays on
-    `archive/bridge-experiment` as historical reference only.
+    profiles). The Python bridge has been deprecated and removed from the
+    shipped product (Phase 1 WU6). Diak's Swift code now talks directly to
+    real Hermes. The bridge stays on `archive/bridge-experiment` as
+    historical reference only.
 14. Diak data storage: Diak owns its own SwiftData store for sessions,
     messages, approvals, connector configurations, memory entries, and
     automation definitions. Hermes' own state at `~/.hermes/` (eventually
     `~/Library/Application Support/Diak/hermes/` once bundled) is for
-    Hermes' use. Diak's app-state lives separately at
-    `~/Library/Application Support/Diak/diak/` (final path confirmed in
-    Phase 1 Work Unit 5).
+    Hermes' use. Diak's app-state lives at
+    `~/Library/Application Support/Diak/diak/`.
 15. v1 ship target: All of approval flow, Composio connectors, automation
     builder, memory dashboard, and chat with the real model must work
     before any v1 ship. No timeline pressure on when v1 ships, but no
@@ -153,25 +169,19 @@ off, URL scheme, AppDelegate, HermesState scaffold, API client cleanups.
 Document what real Hermes exposes by direct observation. Path B locked
 based on findings.
 
-### Phase 1: Hermes Runtime Integration — Path B (ACTIVE)
-Replace the Python bridge with native Swift integrations to real Hermes.
-HermesProcessSupervisor for `hermes dashboard`, dashboard HTTP client for
-Hermes-self-management endpoints, API Server client for chat inference
-with SSE streaming, Diak-owned SwiftData session store, UI wiring,
-bridge decommission.
+### Phase 1: Hermes Runtime Integration — Path B (COMPLETE)
+Python bridge replaced with native Swift integrations. HermesProcessSupervisor,
+dashboard HTTP client, API Server client with SSE streaming, Diak-owned
+SwiftData session store, UI wiring, bridge decommission. All 6 work units
+ratified.
 
-### Phase 2: Diak-Side Reactive State
-Real Hermes' dashboard has no event stream and the API Server's SSE is at
-the wrong abstraction (chat-completion runs, not state events). Phase 2
-therefore implements Diak-side reactivity: `HermesState` is the single
-source of truth, mutations go through a reducer, views observe slices,
-and Diak generates its own state-change events when its operations (send
-message, approve action, install skill, update memory) complete. For
-Hermes-side state we don't own (e.g. cron job last_run_at), Diak polls
-the dashboard at appropriate intervals and synthesizes events on diff.
-Acceptance: a UI action in one window reflects in a second window within
-2 seconds; an external Hermes change (CLI invocation) reflects in Diak
-within 5 seconds.
+### Phase 2: Diak-Side Reactive State (ACTIVE)
+HermesState becomes the canonical source of truth (target architecture, being
+built in Phase 2 per Decision #8). Reducer-driven mutations, views observe
+slices, polling synthesizes diffs into reducer actions per the WU2.1 three-tier
+cadence. Diak-owned operations emit actions on completion. Multi-window
+propagation acceptance: UI action in one window reflects in another within
+2 seconds; external Hermes change reflects in Diak within 5 seconds.
 
 ### Phase 3: Chat plus Canvas
 Real streaming markdown rendering, tool-call cards, approval flow round-
@@ -203,28 +213,22 @@ concurrency, beta with real users.
 
 ## What the Agent Is Allowed to Do Right Now
 
-- Read `CLAUDE.md`, this file, and `Docs/Phases/Phase1/SCOPE.md`.
-- Create branch `phase/1-hermes-runtime-integration` from current main.
-- Work through Phase 1 SCOPE.md as specified, in the order specified.
-- Phase 1 begins with the Bridge Reality Doc as its first work unit.
-  No bridge replacement code is written until that doc is human-ratified.
-- Write checkpoints to `Docs/Phases/Phase1/CHECKPOINTS/`.
-- Push to `phase/1-hermes-runtime-integration` branch only.
+- Read `CLAUDE.md`, this file, and `Docs/Phases/Phase2/SCOPE.md`.
+- Work through Phase 2 SCOPE.md as specified, in the order specified.
+- Phase 2 has three ratification gates: WU2.2 alone, then WU2.3+WU2.4 bundled.
+- Write checkpoints to `Docs/Phases/Phase2/CHECKPOINTS/`.
+- Push to `phase/2-reactive-state` branch only.
 
 ## What the Agent Is Not Allowed to Do Right Now
 
-- Modify any file outside `Docs/Phases/Phase1/` and the Swift source files
-  named in Phase 1 SCOPE.md.
-- Begin code work before the Bridge Reality Doc lands and is ratified.
-- Make Hermes API Server enable/disable decisions on the user's machine
-  without explicit Nick approval. The API Server is currently disabled;
-  enabling it for development testing requires Nick's explicit go-ahead
-  per Phase 1 SCOPE.md Work Unit 4.
-- Delete, rename, or modify `Scripts/diak_hermes_bridge.py` or any file
-  on the `archive/bridge-experiment` branch. The bridge stays read-only
-  for reference during Phase 1.
-- Begin Phase 2 work (Diak-side reactive state) before Phase 1 acceptance
-  criteria pass.
+- Modify any file outside `Docs/Phases/Phase2/` and the Swift source files
+  named in Phase 2 SCOPE.md.
+- Begin WU2.3+WU2.4 work before WU2.2 is ratified.
+- Build Phase 3 features (chat streaming, approvals, tool-call cards). Those
+  views remain EmptyStateView placeholders. Phase 2 wires their eventual
+  reactive plumbing only.
+- Modify HermesProcessSupervisor's external API contract. Phase 2 may add
+  observer hooks for restart pause/resume but does not redesign the supervisor.
 
 ## Known Issues (Deferred)
 
@@ -248,6 +252,11 @@ Address in a later phase.
   `DO NOT SIMPLIFY` banner comment. Do not refactor back to
   AsyncLineSequence under any condition. If a future Foundation update
   fixes this, verify with a targeted test before changing the parser.
+- API Server key (API_SERVER_KEY in ~/.hermes/.env) requires manual
+  xcscheme env var injection to run the live integration test, because
+  the xcodeproj is regenerated by XcodeGen and is gitignored. Documented
+  in the Phase 1 completion checkpoint's "Live API Server Verification"
+  section. Future test infrastructure may want a less manual path.
 
 ## Human Contact
 
