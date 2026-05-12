@@ -39,6 +39,21 @@ public final class DiakSessionStore: ObservableObject {
     public let storeURL: URL?
     public let isInMemory: Bool
 
+    /// Phase 2 WU2.4-D: optional HermesState reference. When set,
+    /// every successful session CRUD operation dispatches a
+    /// corresponding `HermesAction.diakSession*` so the reducer's
+    /// `diakSessions` slice stays in sync with the SwiftData
+    /// store. Phase 2 doesn't yet emit `.diakMessageAppended` (the
+    /// reducer has no slice for it; Phase 3 may add one).
+    private weak var hermesState: HermesState?
+
+    /// Wire the store to a `HermesState`. Idempotent. Production
+    /// calls this from `HermesDesktopApp.init` after both objects
+    /// are alive; tests that don't care can leave it unset.
+    public func attach(hermesState: HermesState) {
+        self.hermesState = hermesState
+    }
+
     // MARK: Defaults
 
     /// `~/Library/Application Support/Diak/diak/store.sqlite` — the
@@ -121,6 +136,7 @@ public final class DiakSessionStore: ObservableObject {
         )
         context.insert(session)
         try context.save()
+        hermesState?.dispatch(.diakSessionCreated(session.id))
         return session
     }
 
@@ -149,8 +165,10 @@ public final class DiakSessionStore: ObservableObject {
     }
 
     public func deleteSession(_ session: DiakSession) throws {
+        let id = session.id
         context.delete(session)
         try context.save()
+        hermesState?.dispatch(.diakSessionDeleted(id))
     }
 
     // MARK: Message CRUD
@@ -255,8 +273,16 @@ public final class DiakSessionStore: ObservableObject {
     /// Drop every session (and via cascade rules, every message + run).
     /// Used by tests and by potential future "reset Diak state" UX.
     public func deleteAllSessions() throws {
+        // Capture IDs before the delete so we can emit one
+        // `.diakSessionDeleted` per session afterward.
+        let ids = try allSessions().map(\.id)
         try context.delete(model: DiakSession.self)
         try context.save()
+        if let hermesState {
+            for id in ids {
+                hermesState.dispatch(.diakSessionDeleted(id))
+            }
+        }
     }
 
     /// Total session count without materializing the array.

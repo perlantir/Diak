@@ -1,0 +1,57 @@
+Phase 2 WU2.1 — Per-endpoint dashboard latency
+Method: curl 5x against each endpoint, real Hermes dashboard
+        at 127.0.0.1:9119, host machine (macOS 26.4, M-series).
+Token scraped via GET /. Auth: Bearer <token>.
+Recorded: 2026-05-11 from this session.
+
+Format per endpoint:
+  run<N>: <seconds.fractional> <bytes>
+
+--- /api/status ---
+  run1: 0.048193 570
+  run2: 0.020720 570
+  run3: 0.020300 570
+  run4: 0.020773 570
+  run5: 0.020754 570
+--- /api/sessions ---
+  run1: 0.007877 930356
+  run2: 0.007323 930356
+  run3: 0.007532 930356
+  run4: 0.007640 930356
+  run5: 0.007974 930356
+--- /api/skills ---
+  run1: 0.772391 94172
+  run2: 0.797471 94172
+  run3: 0.834401 94172
+  run4: 0.827845 94172
+  run5: 0.786438 94172
+--- /api/config ---
+  run1: 0.002194 12197
+  run2: 0.001966 12197
+  run3: 0.002183 12197
+  run4: 0.002255 12197
+  run5: 0.002859 12197
+--- /api/cron/jobs ---
+  run1: 0.001613 5108
+  run2: 0.001694 5108
+  run3: 0.002800 5108
+  run4: 0.002904 5108
+  run5: 0.002879 5108
+--- /api/profiles ---
+  run1: 0.360843 3629
+  run2: 0.302190 3629
+  run3: 0.332619 3629
+  run4: 0.302410 3629
+  run5: 0.298872 3629
+--- /api/model/info ---
+  run1: 0.002165 295
+  run2: 0.001692 295
+  run3: 0.001885 295
+  run4: 0.002081 295
+  run5: 0.002082 295
+--- /api/providers/oauth ---
+  run1: 0.075379 1958
+  run2: 0.059131 1958
+  run3: 0.061044 1958
+  run4: 0.061775 1958
+  run5: 0.060888 1958

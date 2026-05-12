@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 
 @MainActor
 public final class SkillsViewModel: ObservableObject {
@@ -50,20 +51,43 @@ public final class SkillsViewModel: ObservableObject {
 
     private let client: HermesAPIClient?
     private let dashboardClient: HermesDashboardClient?
+    private let hermesState: HermesState?
+    private var cancellables: Set<AnyCancellable> = []
 
     public init(client: HermesAPIClient) {
         self.client = client
         self.dashboardClient = nil
+        self.hermesState = nil
     }
 
-    /// Phase 1 production init: reads the real Hermes dashboard's
-    /// `/api/skills`. Skill records are mapped into the legacy
-    /// `HermesSkill` shape with sensible defaults for fields the
-    /// dashboard doesn't return (version, sourceSessionID, etc.) so
-    /// the existing SkillsView renders without churn.
+    /// Phase 1 production init.
     public init(dashboardClient: HermesDashboardClient) {
         self.client = nil
         self.dashboardClient = dashboardClient
+        self.hermesState = nil
+    }
+
+    /// Phase 2 WU2.4-B init — reads from `HermesState.skills` via
+    /// Combine subscription. `refresh()` dispatches a user-
+    /// initiated action and the polling coordinator + reducer
+    /// handle race policies.
+    public init(hermesState: HermesState, dashboardClient: HermesDashboardClient) {
+        self.client = nil
+        self.dashboardClient = dashboardClient
+        self.hermesState = hermesState
+
+        hermesState.$skills
+            .sink { [weak self] dashboardSkills in
+                self?.skills = Self.mapToLegacy(dashboardSkills)
+                if let sel = self?.selectedSkillID,
+                   !(self?.skills.contains(where: { $0.id == sel }) ?? false) {
+                    self?.selectedSkillID = self?.skills.first?.id
+                } else if self?.selectedSkillID == nil {
+                    self?.selectedSkillID = self?.skills.first?.id
+                }
+                self?.boundaryNote = "Real Hermes skills from ~/.hermes/skills (HermesState polling)."
+            }
+            .store(in: &cancellables)
     }
 
     public var selectedSkill: HermesSkill? {
@@ -98,6 +122,12 @@ public final class SkillsViewModel: ObservableObject {
 
     public func refresh() async {
         if case .loading = state { return }
+
+        if let hermesState, let dashboardClient {
+            await refreshViaState(hermesState, client: dashboardClient)
+            return
+        }
+
         state = .loading
         if let dashboardClient {
             await refreshFromDashboard(dashboardClient)
@@ -122,32 +152,64 @@ public final class SkillsViewModel: ObservableObject {
         }
     }
 
-    /// Maps `HermesDashboardSkill` (`name`, `description`, `category`,
-    /// `enabled` only) into the wider `HermesSkill` shape the existing
-    /// SkillsView consumes. Fields the dashboard doesn't provide get
-    /// sensible defaults so the view doesn't show empty cells.
+    // MARK: - Phase 2 state-driven refresh
+
+    private func refreshViaState(_ state: HermesState, client: HermesDashboardClient) async {
+        self.state = .loading
+        state.dispatch(.userInitiatedRefresh(endpoint: .skills))
+        let epoch = state.currentEpoch
+        do {
+            let dashboardSkills = try await client.skills()
+            state.dispatch(.skillsObserved(
+                dashboardSkills,
+                epoch: epoch,
+                source: .userInitiated
+            ))
+            self.state = .loaded
+        } catch {
+            let reason = Self.reasonString(for: error)
+            state.dispatch(.userRefreshFailed(endpoint: .skills, reason: reason))
+            self.state = .failed(reason)
+        }
+    }
+
+    private static func reasonString(for error: Error) -> String {
+        if let clientErr = error as? HermesDashboardClient.ClientError {
+            return String(describing: clientErr)
+        }
+        return error.localizedDescription
+    }
+
+    // MARK: - Mapping (shared)
+
+    static func mapToLegacy(_ dashboardSkills: [HermesDashboardSkill]) -> [HermesSkill] {
+        dashboardSkills.map { d in
+            HermesSkill(
+                id: d.name,
+                name: d.name,
+                summary: d.description ?? "",
+                status: d.enabled ? .active : .disabled,
+                category: parseCategory(d.category),
+                source: .userCreated,
+                riskStyle: .requiresApproval,
+                version: "0.0.0",
+                triggerSummary: d.description ?? "",
+                usageNotes: nil,
+                artifacts: [],
+                isEnabled: d.enabled,
+                sourceSessionID: nil,
+                updatedAt: nil,
+                installedBy: "Hermes Agent"
+            )
+        }
+    }
+
+    // MARK: - Phase 1 dashboard path (no HermesState)
+
     private func refreshFromDashboard(_ client: HermesDashboardClient) async {
         do {
             let dashboardSkills = try await client.skills()
-            self.skills = dashboardSkills.map { d in
-                HermesSkill(
-                    id: d.name,
-                    name: d.name,
-                    summary: d.description ?? "",
-                    status: d.enabled ? .active : .disabled,
-                    category: parseCategory(d.category),
-                    source: .userCreated,
-                    riskStyle: .requiresApproval,
-                    version: "0.0.0",
-                    triggerSummary: d.description ?? "",
-                    usageNotes: nil,
-                    artifacts: [],
-                    isEnabled: d.enabled,
-                    sourceSessionID: nil,
-                    updatedAt: nil,
-                    installedBy: "Hermes Agent"
-                )
-            }
+            self.skills = Self.mapToLegacy(dashboardSkills)
             self.boundaryNote = "Real Hermes skills from ~/.hermes/skills (dashboard /api/skills)."
             if selectedSkillID == nil || !self.skills.contains(where: { $0.id == selectedSkillID }) {
                 selectedSkillID = self.skills.first?.id
@@ -160,7 +222,7 @@ public final class SkillsViewModel: ObservableObject {
         }
     }
 
-    private func parseCategory(_ raw: String?) -> HermesSkillCategory {
+    private static func parseCategory(_ raw: String?) -> HermesSkillCategory {
         guard let raw, let parsed = HermesSkillCategory(rawValue: raw) else {
             return .unknown
         }

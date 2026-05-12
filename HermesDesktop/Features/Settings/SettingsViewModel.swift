@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 
 /// Owns the M3 settings vertical: load → edit a draft snapshot →
 /// save through the typed API boundary. Boundary discipline: the view
@@ -36,30 +37,125 @@ public final class SettingsViewModel: ObservableObject {
 
     private let client: HermesAPIClient?
     private let dashboardClient: HermesDashboardClient?
+    private let hermesState: HermesState?
+    private var cancellables: Set<AnyCancellable> = []
     private var restartRequiredFromLastSave = false
 
     public init(client: HermesAPIClient) {
         self.client = client
         self.dashboardClient = nil
+        self.hermesState = nil
     }
 
-    /// Phase 1 production init: reads the real Hermes dashboard's
-    /// `/api/config`. The dashboard returns a much flatter shape than
-    /// the bridge-era `HermesConfigSnapshot`; for Phase 1 the view
-    /// model loads what's available and surfaces the rest as empty.
-    /// Save operations are read-only in this mode and surface a
-    /// "config editing is read-only in Phase 1" message — Phase 4
-    /// wires real dashboard PUTs (the dashboard exposes
-    /// `PUT /api/config` per REALITY.md).
+    /// Phase 1 production init.
     public init(dashboardClient: HermesDashboardClient) {
         self.client = nil
         self.dashboardClient = dashboardClient
+        self.hermesState = nil
+    }
+
+    /// Phase 2 WU2.4-C init — reads from `HermesState` slices
+    /// (config + dashboard + modelInfo + profiles) via Combine
+    /// subscription. The polling coordinator keeps these slices
+    /// fresh; `refresh()` is a user-initiated kick that dispatches
+    /// across all four endpoints and runs parallel fetches.
+    public init(hermesState: HermesState, dashboardClient: HermesDashboardClient) {
+        self.client = nil
+        self.dashboardClient = dashboardClient
+        self.hermesState = hermesState
+
+        Publishers.CombineLatest4(
+            hermesState.$config,
+            hermesState.$dashboard,
+            hermesState.$modelInfo,
+            hermesState.$profiles
+        )
+        .sink { [weak self] config, dashboard, modelInfo, profiles in
+            self?.applyStateSlices(
+                config: config,
+                dashboard: dashboard,
+                modelInfo: modelInfo,
+                profiles: profiles
+            )
+        }
+        .store(in: &cancellables)
+    }
+
+    private func applyStateSlices(
+        config: HermesDashboardConfig?,
+        dashboard: HermesDashboardSlice,
+        modelInfo: HermesDashboardModelInfo?,
+        profiles: [HermesDashboardProfile]
+    ) {
+        // Only assemble a snapshot once any slice has data —
+        // otherwise the initial four-empty combination would
+        // overwrite a user's draft with placeholders.
+        let hasAnyData = config != nil || dashboard.version != nil
+            || modelInfo != nil || !profiles.isEmpty
+        guard hasAnyData else { return }
+
+        let mappedProfiles: [HermesProfile] = profiles.enumerated().map { (i, p) in
+            HermesProfile(
+                id: "prof-\(p.name)",
+                displayName: p.name,
+                role: .unknown,
+                defaultProjectLabel: nil,
+                isActive: p.isDefault ?? (i == 0)
+            )
+        }
+        let activeProfileID = mappedProfiles.first(where: { $0.isActive })?.id
+
+        let snapshot = HermesConfigSnapshot(
+            profiles: mappedProfiles,
+            activeProfileID: activeProfileID,
+            providers: [],
+            tools: [],
+            security: HermesSecuritySettings(
+                trustedFolders: [],
+                logRedaction: .strict,
+                logRetentionDays: 14,
+                telemetryEnabled: false,
+                offlineModeEnabled: false,
+                restartRequired: false
+            ),
+            daemon: HermesDaemonLogSummary(
+                version: dashboard.version ?? "?",
+                build: nil,
+                profile: "production",
+                uptimeSeconds: nil,
+                logPath: dashboard.hermesHome.map { "\($0)/logs/agent.log" },
+                recentLines: [
+                    "hermes \(dashboard.version ?? "?") on \(dashboard.hermesHome ?? "~/.hermes")",
+                    modelInfo?.model.map { "Active model: \($0)" } ?? "(no model selected)",
+                    config?.timezone.map { "Timezone: \($0)" } ?? "(no timezone configured)",
+                ],
+                lastCheckedAt: Date()
+            )
+        )
+        self.saved = snapshot
+        if draft == nil || !hasUnsavedChanges {
+            self.draft = snapshot
+        }
+        if state != .loaded {
+            state = .loaded
+        }
+        if case .ready = saveState {} else {
+            // Reset save state once data lands; the user's prior
+            // failure / success message should not persist across
+            // a poll-driven re-render.
+        }
     }
 
     // MARK: - Loading
 
     public func refresh() async {
         if case .loading = state { return }
+
+        if let hermesState, let dashboardClient {
+            await refreshViaState(hermesState, client: dashboardClient)
+            return
+        }
+
         state = .loading
 
         if let dashboardClient {
@@ -88,6 +184,51 @@ public final class SettingsViewModel: ObservableObject {
             state = .failed(error.userFacingMessage)
         } catch {
             state = .failed(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Phase 2 state-driven refresh
+
+    private func refreshViaState(_ state: HermesState, client: HermesDashboardClient) async {
+        self.state = .loading
+
+        // Mark all four endpoints user-pending; poll observations for
+        // them get suppressed until the user-initiated dispatches
+        // arrive (race policy 2).
+        state.dispatch(.userInitiatedRefresh(endpoint: .config))
+        state.dispatch(.userInitiatedRefresh(endpoint: .status))
+        state.dispatch(.userInitiatedRefresh(endpoint: .modelInfo))
+        state.dispatch(.userInitiatedRefresh(endpoint: .profiles))
+
+        let epoch = state.currentEpoch
+        do {
+            async let configCall = client.config()
+            async let statusCall = client.status()
+            async let modelCall = client.modelInfo()
+            async let profilesCall = client.profiles()
+            let (config, dashStatus, modelInfo, profilesResp) = try await (
+                configCall, statusCall, modelCall, profilesCall
+            )
+
+            state.dispatch(.configObserved(config, epoch: epoch, source: .userInitiated))
+            state.dispatch(.dashboardStatusObserved(dashStatus, epoch: epoch, source: .userInitiated))
+            state.dispatch(.modelInfoObserved(modelInfo, epoch: epoch, source: .userInitiated))
+            state.dispatch(.profilesObserved(profilesResp.profiles, epoch: epoch, source: .userInitiated))
+
+            self.state = .loaded
+            self.saveState = .ready
+        } catch {
+            let reason: String
+            if let clientErr = error as? HermesDashboardClient.ClientError {
+                reason = String(describing: clientErr)
+            } else {
+                reason = error.localizedDescription
+            }
+            state.dispatch(.userRefreshFailed(endpoint: .config, reason: reason))
+            state.dispatch(.userRefreshFailed(endpoint: .status, reason: reason))
+            state.dispatch(.userRefreshFailed(endpoint: .modelInfo, reason: reason))
+            state.dispatch(.userRefreshFailed(endpoint: .profiles, reason: reason))
+            self.state = .failed(reason)
         }
     }
 

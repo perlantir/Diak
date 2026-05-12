@@ -19,7 +19,9 @@ struct HermesDesktopApp: App {
     //   chat composer asks for one. Phase 1 holds it via `apiServerKey`.
     @StateObject private var supervisor: HermesProcessSupervisor
     @StateObject private var sessionStore: DiakSessionStore
-    @StateObject private var hermesState = HermesState()
+    @StateObject private var hermesState: HermesState
+    @StateObject private var tokenEpochObserver: TokenEpochObserver
+    @StateObject private var pollingCoordinatorHolder: PollingCoordinatorHolder
     @StateObject private var daemon: DaemonStatusViewModel
     @StateObject private var engineViewModel: HermesEngineViewModel
     @StateObject private var onboarding = OnboardingViewModel()
@@ -105,7 +107,48 @@ struct HermesDesktopApp: App {
         let legacyClient: HermesAPIClient = MockHermesAPIClient()
         self.client = legacyClient
 
-        let daemonVM = DaemonStatusViewModel(client: legacyClient)
+        // Phase 2 WU2.2: HermesState is canonical. Construct it
+        // before any view model that observes it. The daemon view
+        // model is the WU2.2 proof-of-pattern — it derives status
+        // from HermesState's dashboard + supervisorHealth slices.
+        let hermesStateInstance = HermesState()
+        _hermesState = StateObject(wrappedValue: hermesStateInstance)
+
+        // Phase 2 WU2.4-D: wire SessionStore → HermesState. Every
+        // session CRUD dispatches a `.diakSession*` action so the
+        // reducer's diakSessions slice tracks the store.
+        store.attach(hermesState: hermesStateInstance)
+
+        // Phase 2 WU2.3-A: token-rotation observer. Bridges
+        // `supervisor.$health` transitions into HermesState's
+        // dispatch — both `.supervisorHealthChanged` (always) and
+        // `.tokenRotated` (when a new `.running` token differs
+        // from the previously-seen one). Activates race policy 1
+        // structurally — without this the reducer's stale-epoch
+        // drop logic never fires.
+        let tokenObserverInstance = TokenEpochObserver(hermesState: hermesStateInstance)
+        _tokenEpochObserver = StateObject(wrappedValue: tokenObserverInstance)
+
+        // Phase 2 WU2.3-D: polling coordinator. Owns eight per-
+        // endpoint async loops at the 2s/10s/60s tiers, pauses
+        // when supervisor leaves `.running`, applies exponential
+        // backoff on transport failures.
+        let coordinator = HermesPollingCoordinator(
+            hermesState: hermesStateInstance,
+            fetcher: HermesPollingCoordinator.liveFetcher(
+                hermesState: hermesStateInstance,
+                client: dashboardInstance
+            )
+        )
+        _pollingCoordinatorHolder = StateObject(
+            wrappedValue: PollingCoordinatorHolder(coordinator)
+        )
+
+        let daemonVM = DaemonStatusViewModel(
+            hermesState: hermesStateInstance,
+            dashboardClient: dashboardInstance,
+            legacyClient: legacyClient
+        )
         let routerInstance = AppRouter()
         _daemon = StateObject(wrappedValue: daemonVM)
         _engineViewModel = StateObject(wrappedValue: HermesEngineViewModel(
@@ -130,6 +173,7 @@ struct HermesDesktopApp: App {
                      client: client,
                      supervisor: supervisor,
                      sessionStore: sessionStore,
+                     hermesState: hermesState,
                      dashboardClient: dashboardClient,
                      apiServerClient: apiServerClient,
                      openQuickPrompt: openQuickPromptWindow)
@@ -137,6 +181,14 @@ struct HermesDesktopApp: App {
             .environmentObject(supervisor)
             .environmentObject(sessionStore)
             .task {
+                // Phase 2 WU2.3-D: begin polling coordinator FIRST
+                // so its supervisor.$health subscription is alive
+                // when the dashboard process boots. Idempotent
+                // start — safe if called more than once.
+                pollingCoordinatorHolder.coordinator.start(
+                    supervisorHealth: supervisor.$health
+                )
+
                 // Start the dashboard once on app launch. If the binary is
                 // missing or the server fails to bind, supervisor.health
                 // surfaces .crashed; the UI shows the offline path.
@@ -147,10 +199,21 @@ struct HermesDesktopApp: App {
                     // do not crash the app.
                 }
             }
+            .onReceive(supervisor.$health) { newHealth in
+                // Phase 2 WU2.2: bridge supervisor → HermesState
+                // for lifecycle transitions. Phase 2 WU2.3-A:
+                // augmented with token-rotation detection. The
+                // observer dispatches both
+                // `.supervisorHealthChanged` (always) and
+                // `.tokenRotated` (on every `.running` transition
+                // with a fresh token).
+                tokenEpochObserver.observe(newHealth)
+            }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
                 // SCOPE.md WU6 acceptance #6: "No orphan Hermes or bridge
                 // processes after Cmd-Q". applicationWillTerminate is
                 // synchronous, so use the sync SIGTERM helper.
+                pollingCoordinatorHolder.coordinator.stop()
                 supervisor.terminateImmediately()
             }
             .onOpenURL { url in
@@ -240,6 +303,7 @@ private struct RootView: View {
     let client: HermesAPIClient
     @ObservedObject var supervisor: HermesProcessSupervisor
     @ObservedObject var sessionStore: DiakSessionStore
+    @ObservedObject var hermesState: HermesState
     let dashboardClient: HermesDashboardClient
     let apiServerClient: HermesAPIServerClient?
     let openQuickPrompt: () -> Void
@@ -254,6 +318,7 @@ private struct RootView: View {
                              compactWindow: compactWindow,
                              supervisor: supervisor,
                              sessionStore: sessionStore,
+                             hermesState: hermesState,
                              dashboardClient: dashboardClient,
                              apiServerClient: apiServerClient,
                              client: client,
