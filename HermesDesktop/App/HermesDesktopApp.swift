@@ -234,8 +234,24 @@ struct HermesDesktopApp: App {
                     compactWindow.toggle()
                 }
                 .keyboardShortcut("0", modifiers: [.command, .option])
+
+                #if DEBUG
+                Divider()
+                Button("Streaming Markdown Harness") {
+                    openWindow(id: HermesDesktopApp.markdownHarnessWindowID)
+                }
+                .keyboardShortcut("m", modifiers: [.command, .option, .shift])
+                #endif
             }
         }
+
+        #if DEBUG
+        Window("Streaming Markdown Harness", id: HermesDesktopApp.markdownHarnessWindowID) {
+            StreamingMarkdownHarnessView()
+        }
+        .windowResizability(.contentMinSize)
+        .defaultPosition(.center)
+        #endif
 
         Window(AppBrand.quickPromptTitle, id: HermesDesktopApp.quickPromptWindowID) {
             QuickPromptView(viewModel: quickPrompt) {
@@ -261,6 +277,9 @@ struct HermesDesktopApp: App {
     }
 
     static let quickPromptWindowID = "hermes-quick-prompt"
+    #if DEBUG
+    static let markdownHarnessWindowID = "diak-debug-markdown-harness"
+    #endif
 
     private func openQuickPromptWindow() {
         quickPrompt.show()

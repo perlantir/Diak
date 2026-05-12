@@ -16,6 +16,21 @@ settings:
     ENABLE_HARDENED_RUNTIME: YES
     SWIFT_TREAT_WARNINGS_AS_ERRORS: NO
 
+# Phase 3 WU3.2: streaming markdown renderer dependencies.
+# Authorized in Docs/Phases/Phase3/SCOPE.md.
+# - swift-markdown: Apple AST library for incremental parsing
+#   (branch: main per Apple's README guidance — tags are toolchain
+#   snapshots, not stable releases).
+# - Highlightr: syntax highlighting for code blocks. Fires on
+#   close-fence only per SCOPE.md performance requirement.
+packages:
+  Markdown:
+    url: https://github.com/swiftlang/swift-markdown.git
+    branch: main
+  Highlightr:
+    url: https://github.com/raspu/Highlightr.git
+    from: 2.3.0
+
 targets:
   HermesDesktop:
     type: application
@@ -26,6 +41,11 @@ targets:
         excludes:
           - "Resources/Info.plist"
           - "Resources/HermesDesktop.entitlements"
+    dependencies:
+      - package: Markdown
+        product: Markdown
+      - package: Highlightr
+        product: Highlightr
     resources:
       - HermesDesktop/Resources/Assets.xcassets
     info:
