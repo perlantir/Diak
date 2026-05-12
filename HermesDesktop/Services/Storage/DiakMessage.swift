@@ -83,5 +83,18 @@ public final class DiakMessage {
         case complete
         /// Run failed; `content` may contain an error message.
         case failed
+        /// Stream ended without `run.completed` — TCP drop, server
+        /// crash, or `run.cancelled` arriving for non-user reasons.
+        /// `content` holds the partial body that was already streamed.
+        /// Added in Phase 3 WU3.3 per the brief's stream-interruption
+        /// handling: "Connection drop mid-stream → persist partial
+        /// message with status .interrupted".
+        case interrupted
+        /// User clicked the stop/cancel button while the stream was
+        /// in flight. Distinct from `.interrupted` (which is involuntary)
+        /// so the UI can render an honest "you stopped this" treatment.
+        /// Added in Phase 3 WU3.3 per the brief's user-cancellation
+        /// handling.
+        case cancelled
     }
 }

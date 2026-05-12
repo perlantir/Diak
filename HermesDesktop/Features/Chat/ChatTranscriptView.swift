@@ -50,6 +50,10 @@ struct ChatTranscriptView: View {
                     ForEach(viewModel.messages) { message in
                         MessageBlock(message: message).id(message.id)
                     }
+                    if let streaming = viewModel.currentStream {
+                        StreamingAssistantMessageView(message: streaming)
+                            .id("__streaming__")
+                    }
                     if case .failed(let reason) = viewModel.phase {
                         ErrorBanner(reason: reason)
                     }
@@ -65,6 +69,12 @@ struct ChatTranscriptView: View {
                 }
             }
             .onChange(of: viewModel.messages.last?.content) { _ in
+                proxy.scrollTo("__bottom__", anchor: .bottom)
+            }
+            .onChange(of: viewModel.currentStream?.id) { _ in
+                proxy.scrollTo("__bottom__", anchor: .bottom)
+            }
+            .onChange(of: viewModel.currentStream?.segments.count) { _ in
                 proxy.scrollTo("__bottom__", anchor: .bottom)
             }
         }

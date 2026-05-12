@@ -174,6 +174,10 @@ public final class DiakSessionStore: ObservableObject {
     // MARK: Message CRUD
 
     /// Append a new message to `session`. Bumps `session.updatedAt`.
+    /// Dispatches `.diakMessageAppended(sessionID:)` on success when
+    /// a `HermesState` is attached (Phase 3 WU3.3; reducer no-op
+    /// today but the hook exists for future cross-window propagation
+    /// once Decision #8's multi-window exclusion is lifted).
     @discardableResult
     public func addMessage(
         to session: DiakSession,
@@ -194,6 +198,7 @@ public final class DiakSessionStore: ObservableObject {
         context.insert(message)
         session.updatedAt = Date()
         try context.save()
+        hermesState?.dispatch(.diakMessageAppended(sessionID: session.id))
         return message
     }
 

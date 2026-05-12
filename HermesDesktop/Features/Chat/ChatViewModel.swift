@@ -1,33 +1,41 @@
 import Foundation
 import SwiftUI
 
-/// Drives a single chat session under Path B (Phase 1):
+/// Drives a single chat session under Path B with Phase 3 streaming.
 ///
-/// - **Inference** goes through `HermesAPIServerClient`
-///   (`POST /v1/chat/completions`). Phase 1 uses non-streaming chat
-///   completions; full SSE token streaming is deferred to Phase 2 once
-///   the API Server's SSE behavior has been verified live and the chat
-///   views are migrated off legacy `HermesMessage`.
+/// **Inference** uses `HermesAPIServerClient.startRun` +
+/// `runEvents(runId:)` for token-by-token streaming through the
+/// `/v1/runs/{id}/events` SSE surface. This replaces the Phase 1 WU6
+/// non-streaming `chatCompletion` call. The choice of `/v1/runs` over
+/// `/v1/chat/completions` follows WU3.1 Finding 1 — the runs surface
+/// carries cleaner Hermes-native event types (`message.delta`,
+/// `tool.started`, `tool.completed`, `run.completed`) and the
+/// `/stop` companion endpoint WU3.5 needs.
 ///
-/// - **Persistence** goes through `DiakSessionStore` (Diak-owned
-///   SwiftData). Both the user's prompt and the assistant's response
-///   are written immediately so the SCOPE.md acceptance "both messages
-///   persist across app restart" holds.
+/// **Per-window fast lane** for streaming. Per Decision #8's streaming
+/// exception, token-level deltas (20–50 Hz) update the in-flight
+/// `StreamingAssistantMessage` directly. Only completion-time
+/// transitions go through `HermesState.dispatch` (via the
+/// `DiakSessionStore.addMessage` plumbing, which dispatches
+/// `.diakMessageAppended` on every persisted message). Multi-window-
+/// live-stream propagation is explicitly out of v1 per Decision #8.
 ///
-/// - **View interface** still publishes `HermesMessage` /
-///   `HermesSession` because the chat views and `MessageBlock`
-///   renderer have not yet been migrated to the `DiakMessage` shape.
-///   The view-model is the boundary that maps Diak-internal state
-///   into the legacy view-shape. This is a one-way projection (writes
-///   land in the store; reads project store data into HermesMessage
-///   values for the view). Phase 2/3 chat work is expected to retire
-///   this projection along with the chat view migration.
+/// **Persistence**: user message persists immediately on send;
+/// assistant message persists once on stream termination with a
+/// status reflecting how the stream ended:
+/// - `.complete`       — `run.completed` event arrived
+/// - `.cancelled`      — user clicked stop / `run.cancelled` event
+/// - `.interrupted`    — stream ended without a terminal event
+///                       (connection drop, server crash, etc.)
+/// - `.failed`         — pre-stream error; no assistant DiakMessage
+///                       is persisted (only the user message). Phase
+///                       transitions to `.failed(reason)`.
 ///
-/// - **Offline mode**: when no `apiServerClient` is supplied (e.g.
-///   `API_SERVER_KEY` not configured, previews, tests), prompts still
-///   persist locally but the assistant turn produces a one-line
-///   "Hermes API Server not configured" placeholder so the UI flow
-///   is exercisable.
+/// **Offline mode**: when no `apiServerClient` is supplied (e.g.
+/// `API_SERVER_KEY` not configured, previews, tests), prompts still
+/// persist locally but the assistant turn produces a one-line
+/// "Hermes API Server not configured" placeholder so the UI flow is
+/// exercisable. Same contract as Phase 1.
 @MainActor
 public final class ChatViewModel: ObservableObject {
     public enum Phase: Equatable {
@@ -43,6 +51,14 @@ public final class ChatViewModel: ObservableObject {
     @Published public private(set) var phase: Phase = .idle
     @Published public var draft: String = ""
 
+    /// Per-window streaming fast lane. Non-nil while an assistant
+    /// message is in flight. Views render this directly via
+    /// `StreamingAssistantMessageView` for token-by-token Markdown
+    /// painting and inline tool-card rendering. Cleared on stream
+    /// termination once the final `DiakMessage` is persisted +
+    /// surfaced.
+    @Published public private(set) var currentStream: StreamingAssistantMessage?
+
     private let sessionStore: DiakSessionStore?
     private let apiServerClient: HermesAPIServerClient?
     private let model: String
@@ -54,7 +70,8 @@ public final class ChatViewModel: ObservableObject {
 
     private var streamTask: Task<Void, Never>?
 
-    /// Phase 1 production initializer.
+    /// Phase 1 production initializer (preserved from Phase 1 WU6;
+    /// argument list unchanged so existing callers continue to compile).
     public init(
         sessionStore: DiakSessionStore?,
         apiServerClient: HermesAPIServerClient?,
@@ -103,17 +120,12 @@ public final class ChatViewModel: ObservableObject {
     /// reads return empty.
     public func load(session: HermesSession) async {
         self.session = session
-        // The legacy session ID is a string; we don't try to look up a
-        // DiakSession by it in Phase 1. Just clear the local list. The
-        // view-shape sessions still come from the dashboard via other
-        // code paths; chat history specifically lives in Diak's store
-        // and is keyed by DiakSession.id (UUID).
         self.messages = []
     }
 
-    /// Submit `draft` as a new user message, send to the API Server,
-    /// persist both turns to the Diak store, and surface the response
-    /// in the visible message list.
+    /// Submit `draft` as a new user message, send to the API Server via
+    /// `/v1/runs` + `/v1/runs/{id}/events`, paint tokens through
+    /// `currentStream`, and persist the final assistant message.
     public func startStreaming() async {
         let prompt = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty else { return }
@@ -170,11 +182,8 @@ public final class ChatViewModel: ObservableObject {
             )
         }
 
-        // 3. Send to API Server (non-streaming).
+        // 3. If no API server is wired, emit the offline placeholder.
         guard let apiServerClient else {
-            // API_SERVER_KEY not configured — emit a placeholder
-            // assistant turn so the user sees the offline path
-            // instead of a silent hang.
             await emitOfflineAssistantReply(
                 session: diakSession,
                 store: sessionStore!
@@ -182,84 +191,240 @@ public final class ChatViewModel: ObservableObject {
             return
         }
 
-        phase = .streaming
+        // 4. Start the run and consume its event stream.
+        let store = sessionStore!
         do {
-            let history = try sessionStore!.messages(for: diakSession.id)
-            let chatMessages = history.compactMap(toChatMessage)
-            let request = ChatCompletionRequest(
-                model: model,
-                messages: chatMessages,
-                temperature: nil,
-                maxTokens: nil
+            let chatMessages = try buildChatMessages(for: diakSession, store: store)
+            let runStartResponse = try await apiServerClient.startRun(
+                RunRequest(model: model, messages: chatMessages)
             )
-            let response = try await apiServerClient.chatCompletion(request)
-            let body = response.choices.first?.message.content ?? ""
-            let assistantMessage = try sessionStore!.addMessage(
-                to: diakSession,
-                role: "assistant",
-                content: body,
-                status: .complete
+            await consumeRunStream(
+                runId: runStartResponse.runId,
+                diakSession: diakSession,
+                store: store,
+                apiServerClient: apiServerClient
             )
-            appendToView(assistantMessage)
-            phase = .completed
+        } catch let clientErr as HermesAPIServerClient.ClientError {
+            phase = .failed(reason(from: clientErr))
         } catch {
-            let reason: String
-            if let clientErr = error as? HermesAPIServerClient.ClientError {
-                switch clientErr {
-                case .authenticationFailed:
-                    reason = "API Server rejected the key. Update API_SERVER_KEY in Settings."
-                case .httpStatus(let code, _):
-                    reason = "API Server returned HTTP \(code)."
-                case .transport(let detail):
-                    reason = "Could not reach API Server: \(detail)"
-                case .decoding(let detail):
-                    reason = "API Server response was unexpected: \(detail)"
-                case .malformedEvent(let detail):
-                    reason = "SSE event malformed: \(detail)"
-                }
-            } else {
-                reason = error.localizedDescription
-            }
+            phase = .failed(error.localizedDescription)
+        }
+    }
+
+    /// User-initiated stop. Cancels the consuming Task; the coordinator
+    /// returns `.cancelled` and persistence runs through the normal
+    /// finalization path with `DiakMessage.Status.cancelled`. The
+    /// server-side `POST /v1/runs/{id}/stop` is WU3.5's responsibility;
+    /// WU3.3 only handles the client-side cancellation.
+    public func stop() {
+        streamTask?.cancel()
+        streamTask = nil
+        // Phase will transition to .completed once consumeRunStream
+        // finalizes; we don't preemptively change it here so the
+        // assistant message keeps painting until the coordinator
+        // returns its `.cancelled` outcome and finalizes persistence.
+    }
+
+    // MARK: - Streaming pipeline
+
+    /// Build the chat-message history this turn should send to
+    /// `/v1/runs`. Reads from the Diak store so the API call sees
+    /// the same persistent history the user sees.
+    private func buildChatMessages(
+        for diakSession: DiakSession,
+        store: DiakSessionStore
+    ) throws -> [ChatMessage] {
+        let history = try store.messages(for: diakSession.id)
+        return history.compactMap(toChatMessage)
+    }
+
+    /// Drive the SSE event consumption to terminal state. Updates
+    /// `currentStream` per-token; on terminal state, persists the
+    /// assistant message + tool calls, surfaces them in the
+    /// `messages` list, and clears `currentStream`.
+    private func consumeRunStream(
+        runId: String,
+        diakSession: DiakSession,
+        store: DiakSessionStore,
+        apiServerClient: HermesAPIServerClient
+    ) async {
+        let assistantID = UUID()
+        let assistantMessage = StreamingAssistantMessage(id: assistantID, runId: runId)
+        currentStream = assistantMessage
+        phase = .streaming
+        let coordinator = RunStreamCoordinator(
+            assistantMessage: assistantMessage,
+            apiServerClient: apiServerClient
+        )
+
+        let task = Task<RunStreamCoordinator.RunOutcome, Never> {
+            await coordinator.consume()
+        }
+        streamTask = Task { _ = await task.value }
+        let outcome = await task.value
+        streamTask = nil
+
+        // Persist + surface based on outcome.
+        switch outcome {
+        case .completed(let text):
+            persistAndSurface(
+                assistantID: assistantID,
+                runId: runId,
+                content: text,
+                toolCalls: assistantMessage.toolCalls,
+                status: .complete,
+                diakSession: diakSession,
+                store: store
+            )
+            currentStream = nil
+            phase = .completed
+
+        case .cancelled(let text):
+            persistAndSurface(
+                assistantID: assistantID,
+                runId: runId,
+                content: text,
+                toolCalls: assistantMessage.toolCalls,
+                status: .cancelled,
+                diakSession: diakSession,
+                store: store
+            )
+            currentStream = nil
+            phase = .completed
+
+        case .interrupted(let text, let reason):
+            persistAndSurface(
+                assistantID: assistantID,
+                runId: runId,
+                content: text,
+                toolCalls: assistantMessage.toolCalls,
+                status: .interrupted,
+                diakSession: diakSession,
+                store: store
+            )
+            currentStream = nil
+            phase = .failed("Stream interrupted: \(reason)")
+
+        case .failed(let reason):
+            // Pre-stream failure: no partial content to persist;
+            // assistant DiakMessage is NOT written. Clear stream.
+            currentStream = nil
             phase = .failed(reason)
         }
     }
 
-    public func stop() {
-        streamTask?.cancel()
-        streamTask = nil
-        if isStreaming { phase = .completed }
+    private func persistAndSurface(
+        assistantID: UUID,
+        runId: String,
+        content: String,
+        toolCalls: [InlineToolCall],
+        status: DiakMessage.Status,
+        diakSession: DiakSession,
+        store: DiakSessionStore
+    ) {
+        let encodedToolCalls = encodeToolCalls(toolCalls)
+        do {
+            let assistantMessage = try store.addMessage(
+                to: diakSession,
+                role: "assistant",
+                content: content,
+                toolCallsJSON: encodedToolCalls,
+                status: status,
+                runId: runId
+            )
+            appendToView(assistantMessage, toolCalls: toolCalls)
+        } catch {
+            // Persistence failure: still surface the assistant content
+            // in the view so the user sees what was streamed; flag the
+            // failure on phase.
+            let fallback = HermesMessage(
+                id: assistantID.uuidString,
+                sessionID: diakSession.id.uuidString,
+                role: .assistant,
+                content: content,
+                createdAt: Date(),
+                isStreaming: false,
+                toolActivities: toolCallActivities(toolCalls)
+            )
+            messages.append(fallback)
+            phase = .failed("Persistence failed: \(error.localizedDescription)")
+        }
     }
 
-    /// Pure helper kept for back-compat with legacy ChatViewModelTests.
-    /// The new Phase 1 path doesn't ingest HermesStreamEvent values;
-    /// this no-op keeps the test compile surface alive until the chat
-    /// view migration retires the legacy types.
-    public func apply(_ event: HermesStreamEvent) {
-        // Legacy SSE replay path — unused in Phase 1's non-streaming
-        // chat completion flow. Phase 2 will reintroduce token-by-token
-        // streaming, at which point this method (or its replacement)
-        // will route real events into the Diak store + view list.
+    private func encodeToolCalls(_ toolCalls: [InlineToolCall]) -> String? {
+        guard !toolCalls.isEmpty else { return nil }
+        let encoder = JSONEncoder()
+        // .secondsSince1970 preserves sub-second precision in Date
+        // round-trip, which matters for durationSeconds fidelity
+        // when a tool call's wall-clock is reloaded from disk.
+        encoder.dateEncodingStrategy = .secondsSince1970
+        do {
+            let data = try encoder.encode(toolCalls)
+            return String(data: data, encoding: .utf8)
+        } catch {
+            return nil
+        }
     }
 
-    // MARK: - Private
+    /// Translate the streaming-side `InlineToolCall` values into the
+    /// view-layer `HermesToolActivity` shape so `MessageBlock`'s
+    /// existing tool-activity slot can render them in the completed
+    /// message. WU3.4's inline-card view is used for the LIVE
+    /// stream; for the persisted message we project onto the
+    /// existing surface so the design stays cohesive.
+    private func toolCallActivities(_ toolCalls: [InlineToolCall]) -> [HermesToolActivity] {
+        toolCalls.map { call in
+            let status: HermesToolStatus
+            switch call.status {
+            case .running:          status = .running
+            case .completed:        status = call.hadError ? .failed : .completed
+            case .interrupted:      status = .skipped
+            case .alreadyExecuted:  status = .completed
+            }
+            return HermesToolActivity(
+                id: call.id.uuidString,
+                name: call.toolName,
+                status: status,
+                summary: call.preview,
+                detail: nil,
+                startedAt: call.startedAt,
+                finishedAt: call.finishedAt
+            )
+        }
+    }
 
-    private func appendToView(_ message: DiakMessage) {
+    private func reason(from clientErr: HermesAPIServerClient.ClientError) -> String {
+        switch clientErr {
+        case .authenticationFailed:
+            return "API Server rejected the key. Update API_SERVER_KEY in Settings."
+        case .httpStatus(let code, _):
+            return "API Server returned HTTP \(code)."
+        case .transport(let detail):
+            return "Could not reach API Server: \(detail)"
+        case .decoding(let detail):
+            return "API Server response was unexpected: \(detail)"
+        case .malformedEvent(let detail):
+            return "SSE event malformed: \(detail)"
+        }
+    }
+
+    // MARK: - View projection
+
+    private func appendToView(_ message: DiakMessage,
+                              toolCalls: [InlineToolCall] = []) {
         let viewMessage = HermesMessage(
             id: message.id.uuidString,
             sessionID: message.session?.id.uuidString ?? "",
             role: HermesRole(rawValue: message.role) ?? .user,
             content: message.content,
             createdAt: message.createdAt,
-            isStreaming: message.status == .streaming,
-            toolActivities: []
+            isStreaming: false,
+            toolActivities: toolCallActivities(toolCalls)
         )
         messages.append(viewMessage)
     }
 
     private func toChatMessage(_ diakMessage: DiakMessage) -> ChatMessage? {
-        // API Server expects role/content. Skip messages whose role
-        // doesn't map to an OpenAI-compatible value (e.g. internal
-        // session_meta rows the dashboard sometimes emits).
         let role = diakMessage.role
         guard ["system", "user", "assistant", "tool"].contains(role) else { return nil }
         return ChatMessage(

@@ -56,6 +56,15 @@ public enum HermesAction: Sendable {
 
     case diakSessionCreated(UUID)
     case diakSessionDeleted(UUID)
+    /// New message appended to a Diak-owned session. Added in Phase 3
+    /// WU3.3 as the dispatch hook for stream-completion. Reducer is
+    /// intentionally a no-op for v1 — Phase 2 SCOPE.md deferred adding
+    /// a message slice, and Decision #8's streaming exception scopes
+    /// multi-window-live-stream out of v1. The action exists so
+    /// future Phase 4/5 work (Diak-as-MCP-server, automation triggers
+    /// off message arrival) can extend the reducer without changing
+    /// the call sites.
+    case diakMessageAppended(sessionID: UUID)
 
     // MARK: - Errors
 
@@ -85,7 +94,8 @@ extension HermesAction {
              .pollError(let e, _, _):
             return e
         case .supervisorHealthChanged, .tokenRotated,
-             .diakSessionCreated, .diakSessionDeleted:
+             .diakSessionCreated, .diakSessionDeleted,
+             .diakMessageAppended:
             return nil
         }
     }

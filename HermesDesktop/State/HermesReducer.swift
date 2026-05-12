@@ -140,6 +140,19 @@ public enum HermesReducer {
                 return state
             }
 
+        case .diakMessageAppended:
+            // Phase 3 WU3.3 dispatch hook. Intentionally no-op: the
+            // reducer doesn't yet model individual messages (Phase 2
+            // SCOPE.md deferred adding a message slice, and per
+            // Decision #8's streaming exception multi-window-live-
+            // stream is out of v1). Returning `state` unchanged means
+            // `HermesState.dispatch` short-circuits via the snapshot-
+            // equality check, so this case has zero observable cost
+            // today. Future Phase 4/5 work can extend the snapshot
+            // and route this action to a real mutation without
+            // changing call sites.
+            return state
+
         // -- Errors --
 
         case let .pollError(endpoint, reason, _):
